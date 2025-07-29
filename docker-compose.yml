@@ -1,0 +1,41 @@
+services:
+  emqx:
+    image: emqx/emqx:latest
+    container_name: emqx
+    ports:
+      - "1883:1883"      # MQTT port
+      - "8083:8083"      # MQTT over WebSocket
+      - "8084:8084"      # MQTT over WebSocket with SSL
+      - "8883:8883"      # MQTT over SSL
+      - "18083:18083"    # EMQX Dashboard
+    environment:
+      - EMQX_NAME=emqx
+      - EMQX_HOST=127.0.0.1
+      - EMQX_DASHBOARD__DEFAULT_USERNAME=admin
+      - EMQX_DASHBOARD__DEFAULT_PASSWORD=public
+    volumes:
+      - ./data/emqx_data:/opt/emqx/data
+      - ./data/emqx_log:/opt/emqx/log
+    networks:
+      - mlp_network
+    restart: unless-stopped
+
+  mongo:
+    image: mongo:latest
+    container_name: mongodb
+    ports:
+      - "27017:27017"
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=admin
+      - MONGO_INITDB_ROOT_PASSWORD=admin
+      - MONGO_INITDB_DATABASE=ast
+    volumes:
+      - ./data/mongo_data:/data/db
+      - ./data/mongo_config:/data/configdb
+    networks:
+      - mlp_network
+    restart: unless-stopped
+
+networks:
+  mlp_network:
+    driver: bridge

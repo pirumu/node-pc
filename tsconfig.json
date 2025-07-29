@@ -1,0 +1,107 @@
+{
+  "compilerOptions": {
+    "module": "commonjs",
+    "declaration": true,
+    "removeComments": true,
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+    "allowSyntheticDefaultImports": true,
+    "target": "ES2023",
+    "sourceMap": true,
+    "outDir": "./dist",
+    "baseUrl": "./",
+    "incremental": true,
+    "skipLibCheck": true,
+    "strictNullChecks": true,
+    "forceConsistentCasingInFileNames": true,
+    "noImplicitAny": true,
+    "strictBindCallApply": true,
+    "noFallthroughCasesInSwitch": true,
+    "paths": {
+      "@adapters": [
+        "libs/adapters/src"
+      ],
+      "@adapters/*": [
+        "libs/adapters/src/*"
+      ],
+      "@cache": [
+        "libs/cache/src"
+      ],
+      "@cache/*": [
+        "libs/cache/src/*"
+      ],
+      "@common": [
+        "libs/common/src"
+      ],
+      "@common/*": [
+        "libs/common/src/*"
+      ],
+      "@config": [
+        "libs/config/src"
+      ],
+      "@config/*": [
+        "libs/config/src/*"
+      ],
+      "@culock": [
+        "libs/control-unit-lock/src"
+      ],
+      "@culock/*": [
+        "libs/control-unit-lock/src/*"
+      ],
+      "@dals": [
+        "libs/dals/src"
+      ],
+      "@dals/*": [
+        "libs/dals/src/*"
+      ],
+      "@entity": [
+        "libs/entity/src"
+      ],
+      "@entity/*": [
+        "libs/entity/src/*"
+      ],
+      "@fingerprint-scanner": [
+        "libs/fingerprint-scanner/src"
+      ],
+      "@fingerprint-scanner/*": [
+        "libs/fingerprint-scanner/src/*"
+      ],
+      "@framework": [
+        "libs/framework/src"
+      ],
+      "@framework/*": [
+        "libs/framework/src/*"
+      ],
+      "@hid": [
+        "libs/hid/src"
+      ],
+      "@hid/*": [
+        "libs/hid/src/*"
+      ],
+      "@loadcells": [
+        "libs/loadcells/src"
+      ],
+      "@loadcells/*": [
+        "libs/loadcells/src/*"
+      ],
+      "@mapper": [
+        "libs/mapper/src"
+      ],
+      "@mapper/*": [
+        "libs/mapper/src/*"
+      ],
+      "@serialport": [
+        "libs/serialport/src"
+      ],
+      "@serialport/*": [
+        "libs/serialport/src/*"
+      ],
+      "@services": [
+        "libs/services/src"
+      ],
+      "@services/*": [
+        "libs/services/src/*"
+      ]
+    }
+  }
+}

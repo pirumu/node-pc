@@ -1,0 +1,5 @@
+export const PUBLISHER_MODULE_OPTIONS = Symbol('PUBLISHER_MODULE_OPTIONS');
+export const MQTT_PUBLISHER = Symbol('MQTT_PUBLISHER');
+export const TCP_PUBLISHER = Symbol('TCP_PUBLISHER');
+export const HTTP_PUBLISHER = Symbol('HTTP_PUBLISHER');
+export const MULTI_PUBLISHER = Symbol('MULTI_PUBLISHER');

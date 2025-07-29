@@ -1,0 +1,175 @@
+{
+  "$schema": "https://json.schemastore.org/nest-cli",
+  "collection": "@nestjs/schematics",
+  "sourceRoot": "apps/inventory/src",
+  "compilerOptions": {
+    "webpack": true,
+    "deleteOutDir": true,
+    "sourceMap": false,
+    "minify": false,
+    "tsConfigPath": "apps/inventory/tsconfig.app.json"
+  },
+  "builder": {
+    "type": "swc",
+    "options": {
+      "swcrcPath": ".swcrc"
+    }
+  },
+  "monorepo": true,
+  "root": "apps/inventory",
+  "projects": {
+    "cache": {
+      "type": "library",
+      "root": "libs/cache",
+      "entryFile": "index",
+      "sourceRoot": "libs/cache/src",
+      "compilerOptions": {
+        "tsConfigPath": "libs/cache/tsconfig.lib.json"
+      }
+    },
+    "cli": {
+      "type": "application",
+      "root": "apps/cli",
+      "entryFile": "main",
+      "sourceRoot": "apps/cli/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/cli/tsconfig.app.json"
+      }
+    },
+    "common": {
+      "type": "library",
+      "root": "libs/common",
+      "entryFile": "index",
+      "sourceRoot": "libs/common/src",
+      "compilerOptions": {
+        "tsConfigPath": "libs/common/tsconfig.lib.json"
+      }
+    },
+    "config": {
+      "type": "library",
+      "root": "libs/config",
+      "entryFile": "index",
+      "sourceRoot": "libs/config/src",
+      "compilerOptions": {
+        "tsConfigPath": "libs/config/tsconfig.lib.json"
+      }
+    },
+    "control-unit-lock": {
+      "type": "library",
+      "root": "libs/control-unit-lock",
+      "entryFile": "index",
+      "sourceRoot": "libs/control-unit-lock/src",
+      "compilerOptions": {
+        "tsConfigPath": "libs/control-unit-lock/tsconfig.lib.json"
+      }
+    },
+    "dals": {
+      "type": "library",
+      "root": "libs/dals",
+      "entryFile": "index",
+      "sourceRoot": "libs/dals/src",
+      "compilerOptions": {
+        "tsConfigPath": "libs/dals/tsconfig.lib.json"
+      }
+    },
+    "entity": {
+      "type": "library",
+      "root": "libs/entity",
+      "entryFile": "index",
+      "sourceRoot": "libs/entity/src",
+      "compilerOptions": {
+        "tsConfigPath": "libs/entity/tsconfig.lib.json"
+      }
+    },
+    "fingerprint-scanner": {
+      "type": "library",
+      "root": "libs/fingerprint-scanner",
+      "entryFile": "index",
+      "sourceRoot": "libs/fingerprint-scanner/src",
+      "compilerOptions": {
+        "tsConfigPath": "libs/fingerprint-scanner/tsconfig.lib.json"
+      }
+    },
+    "framework": {
+      "type": "library",
+      "root": "libs/framework",
+      "entryFile": "index",
+      "sourceRoot": "libs/framework/src",
+      "compilerOptions": {
+        "tsConfigPath": "libs/framework/tsconfig.lib.json"
+      }
+    },
+    "hardware-bridge": {
+      "type": "application",
+      "root": "apps/hardware-bridge",
+      "entryFile": "main",
+      "sourceRoot": "apps/hardware-bridge/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/hardware-bridge/tsconfig.app.json"
+      }
+    },
+    "hid": {
+      "type": "library",
+      "root": "libs/hid",
+      "entryFile": "index",
+      "sourceRoot": "libs/hid/src",
+      "compilerOptions": {
+        "tsConfigPath": "libs/hid/tsconfig.lib.json"
+      }
+    },
+    "inventory": {
+      "type": "application",
+      "root": "apps/inventory",
+      "entryFile": "main",
+      "sourceRoot": "apps/inventory/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/inventory/tsconfig.app.json"
+      }
+    },
+    "loadcells": {
+      "type": "library",
+      "root": "libs/loadcells",
+      "entryFile": "index",
+      "sourceRoot": "libs/loadcells/src",
+      "compilerOptions": {
+        "tsConfigPath": "libs/loadcells/tsconfig.lib.json"
+      }
+    },
+    "mapper": {
+      "type": "library",
+      "root": "libs/mapper",
+      "entryFile": "index",
+      "sourceRoot": "libs/mapper/src",
+      "compilerOptions": {
+        "tsConfigPath": "libs/mapper/tsconfig.lib.json"
+      }
+    },
+    "serialport": {
+      "type": "library",
+      "root": "libs/serialport",
+      "entryFile": "index",
+      "sourceRoot": "libs/serialport/src",
+      "compilerOptions": {
+        "tsConfigPath": "libs/serialport/tsconfig.lib.json"
+      }
+    },
+    "services": {
+      "type": "library",
+      "root": "libs/services",
+      "entryFile": "index",
+      "sourceRoot": "libs/services/src",
+      "compilerOptions": {
+        "tsConfigPath": "libs/services/tsconfig.lib.json"
+      }
+    },
+    "worker": {
+      "type": "application",
+      "root": "apps/worker",
+      "entryFile": "main",
+      "sourceRoot": "apps/worker/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/worker/tsconfig.app.json"
+      }
+    }
+  }
+}

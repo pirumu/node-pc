@@ -1,0 +1,6 @@
+ignoredBuiltDependencies:
+  - '@serialport/bindings-cpp'
+
+onlyBuiltDependencies:
+  - '@nestjs/core'
+  - nestjs-pino

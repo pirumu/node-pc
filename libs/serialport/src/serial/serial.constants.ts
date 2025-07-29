@@ -1,0 +1,1 @@
+export const SERIAL_PORT_MANAGER = Symbol('SERIAL_PORT_MANAGER');
