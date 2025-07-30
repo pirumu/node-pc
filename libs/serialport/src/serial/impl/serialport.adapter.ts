@@ -3,8 +3,9 @@ import { DiscoveryConfig } from '@serialport';
 import { DISCOVERY_CONFIG } from '@serialport/serialport.constants';
 import { Observable, BehaviorSubject, Subject, from, EMPTY, throwError, timer, of, lastValueFrom } from 'rxjs';
 import { map, catchError, takeUntil, switchMap, tap, shareReplay, mergeMap, toArray, finalize, retry } from 'rxjs/operators';
-import { SerialPort, ReadlineParser } from 'serialport';
+import { SerialPort } from 'serialport';
 
+import { AccumulatingParser } from '../parsers';
 import {
   ConnectedPortInfo,
   ConnectionStats,
@@ -120,7 +121,7 @@ export class SerialPortAdapter implements ISerialAdapter, OnModuleDestroy {
     }).pipe(takeUntil(this._destroy$));
   }
 
-  public onData(path: string): Observable<string> {
+  public onData(path: string): Observable<Buffer> {
     const connection = this._connections.get(path);
     if (!connection) {
       return throwError(() => new Error(`Connection ${path} not found`));
@@ -293,7 +294,7 @@ export class SerialPortAdapter implements ISerialAdapter, OnModuleDestroy {
         isConnecting: false,
         reconnectAttempts: 0,
       }),
-      data$: new Subject<string>(),
+      data$: new Subject<Buffer>(),
       error$: new Subject<Error>(),
       destroy$: new Subject<void>(),
       options: defaultOptions,
@@ -364,7 +365,7 @@ export class SerialPortAdapter implements ISerialAdapter, OnModuleDestroy {
         autoOpen: options.autoOpen ?? true,
       });
 
-      const parser = port.pipe(new ReadlineParser({ delimiter: '\r\n' }));
+      const parser = port.pipe(new AccumulatingParser({ maxSize: 10240 }));
 
       connection.port = port;
       connection.parser = parser;
@@ -406,7 +407,7 @@ export class SerialPortAdapter implements ISerialAdapter, OnModuleDestroy {
       };
 
       const dataHandler = (data: Buffer) => {
-        connection.data$.next(data.toString().trim());
+        connection.data$.next(data);
       };
 
       port.on('open', openHandler);

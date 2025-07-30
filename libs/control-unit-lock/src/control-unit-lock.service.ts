@@ -1,12 +1,13 @@
 import { CuResponse } from '@culock/protocols/cu';
 import { ScuResponse } from '@culock/protocols/scu/scu.types';
+import { sleep } from '@framework/time/sleep';
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectSerialManager, ISerialAdapter } from '@serialport/serial';
-import { lastValueFrom } from 'rxjs';
+import { firstValueFrom, lastValueFrom } from 'rxjs';
 
 import { DETECT_CU_PORT_MESSAGE, DETECT_SCU_PORT_MESSAGE } from './control-unit-lock.constants';
 import { CuLockRequest } from './dto';
-import { BaseResponse, IProtocol, LOCK_STATUS, ProtocolFactory, ProtocolType } from './protocols';
+import { BaseResponse, Command, IProtocol, LOCK_STATUS, ProtocolFactory, ProtocolType } from './protocols';
 
 @Injectable()
 export class ControlUnitLockService implements OnModuleInit {
@@ -18,6 +19,16 @@ export class ControlUnitLockService implements OnModuleInit {
 
   public async onModuleInit(): Promise<void> {
     await this._detectPorts();
+    setTimeout(() => {
+      this.execute({
+        protocol: ProtocolType.CU,
+        command: Command.GET_STATUS,
+        deviceId: 0,
+        lockIds: [],
+      }).then((data) => {
+        this._logger.debug('[response]', data);
+      });
+    }, 5000);
   }
 
   public async execute(request: CuLockRequest): Promise<BaseResponse> {
@@ -44,6 +55,8 @@ export class ControlUnitLockService implements OnModuleInit {
       throw new Error(`Port not open: ${request.protocol}`);
     }
 
+    const responsePromise = firstValueFrom(this._serialManager.onData(port));
+
     const msg = protocol.createMessage({
       command: request.command,
       deviceId: request.deviceId,
@@ -51,7 +64,7 @@ export class ControlUnitLockService implements OnModuleInit {
     });
     this._serialManager.write(port, msg);
 
-    const response = await lastValueFrom(this._serialManager.onData(port));
+    const response = await responsePromise;
     return protocol.parseResponse(Buffer.from(response)) as ScuResponse;
   }
 
@@ -67,10 +80,13 @@ export class ControlUnitLockService implements OnModuleInit {
       lockIds: request.lockIds,
     });
 
+    const responsePromise = firstValueFrom(this._serialManager.onData(port));
+
     for (const msg of messages) {
-      this._serialManager.write(port, msg);
+      await lastValueFrom(this._serialManager.write(port, msg));
+      await sleep(250);
     }
-    const response = await lastValueFrom(this._serialManager.onData(port));
+    const response = await responsePromise;
     const result = protocol.parseResponse(Buffer.from(response)) as CuResponse;
     return this._filterStatus(request.lockIds, result);
   }
@@ -110,7 +126,7 @@ export class ControlUnitLockService implements OnModuleInit {
 
     try {
       // Open port
-      const state = await lastValueFrom(this._serialManager.open(portPath, { baudRate: 19200 }));
+      const state = await firstValueFrom(this._serialManager.open(portPath, { baudRate: 19200 }));
 
       if (!state.isOpen) {
         this._logger.error(`Failed to open port: ${portPath}`);
@@ -147,8 +163,9 @@ export class ControlUnitLockService implements OnModuleInit {
 
   private async _checkScuHardware(portPath: string): Promise<boolean> {
     try {
-      this._serialManager.write(portPath, Buffer.from(DETECT_SCU_PORT_MESSAGE));
-      const response = await lastValueFrom(this._serialManager.onData(portPath));
+      const responsePromise = await firstValueFrom(this._serialManager.onData(portPath));
+      await lastValueFrom(this._serialManager.write(portPath, Buffer.from(DETECT_SCU_PORT_MESSAGE)));
+      const response = await responsePromise;
       const buffer = Buffer.isBuffer(response) ? response : Buffer.from(response, 'hex');
       return this._isScuResponse(buffer);
     } catch (error) {
@@ -163,8 +180,9 @@ export class ControlUnitLockService implements OnModuleInit {
 
   private async _checkCuHardware(portPath: string): Promise<boolean> {
     try {
-      this._serialManager.write(portPath, Buffer.from(DETECT_CU_PORT_MESSAGE));
-      const response = await lastValueFrom(this._serialManager.onData(portPath));
+      const responsePromise = await firstValueFrom(this._serialManager.onData(portPath));
+      await lastValueFrom(this._serialManager.write(portPath, Buffer.from(DETECT_CU_PORT_MESSAGE)));
+      const response = await responsePromise;
       const buffer = Buffer.isBuffer(response) ? response : Buffer.from(response, 'hex');
       return this._isCuResponse(buffer);
     } catch (error) {

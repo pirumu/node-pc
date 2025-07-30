@@ -8,7 +8,7 @@ import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nest
 import { ConfigService } from '@nestjs/config';
 import { PortDiscoveryService, PortMonitoringService } from '@serialport';
 import { InjectSerialManager, ISerialAdapter } from '@serialport/serial';
-import { interval, lastValueFrom, Subject } from 'rxjs';
+import { firstValueFrom, interval, lastValueFrom, Subject } from 'rxjs';
 import { map, take, takeUntil, timeout } from 'rxjs/operators';
 
 import { LoadcellMqttRequest } from './dto/request';
@@ -323,7 +323,7 @@ export class LoadcellBridgeService implements OnModuleInit, OnModuleDestroy {
 
     try {
       // Try to open port
-      await lastValueFrom(
+      await firstValueFrom(
         this._serialAdapter.open(portPath, {
           baudRate: 9600,
           dataBits: 8,

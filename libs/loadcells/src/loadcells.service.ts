@@ -406,9 +406,8 @@ export class LoadcellsService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  private _parseRawData(port: string, data: string, comId: number): LoadCellReading | null {
+  private _parseRawData(port: string, buffer: Buffer, comId: number): LoadCellReading | null {
     try {
-      const buffer = Buffer.from(data, 'hex');
       const rawPayload = Array.from(buffer);
 
       // Validate data

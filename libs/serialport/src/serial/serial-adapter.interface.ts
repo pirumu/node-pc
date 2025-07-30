@@ -1,6 +1,7 @@
 import { BehaviorSubject, Observable, of, Subject } from 'rxjs';
 import { map, takeUntil } from 'rxjs/operators';
 import { ReadlineParser, SerialPort } from 'serialport';
+import { AccumulatingParser } from '@serialport/serial/parsers';
 
 export type SerialPortInfo = {
   path: string;
@@ -33,9 +34,9 @@ export type SerialPortState = {
 
 export type SerialConnection = {
   port?: SerialPort;
-  parser?: ReadlineParser;
+  parser?: AccumulatingParser;
   state$: BehaviorSubject<SerialPortState>;
-  data$: Subject<string>;
+  data$: Subject<Buffer>;
   error$: Subject<Error>;
   destroy$: Subject<void>;
   options: SerialOptions;
@@ -74,7 +75,7 @@ export interface ISerialAdapter {
   listPorts(): Observable<SerialPortInfo[]>;
   open(path: string, options: SerialOptions): Observable<SerialPortState>;
   write(path: string, data: string | Buffer): Observable<void>;
-  onData(path: string): Observable<string>;
+  onData(path: string): Observable<Buffer>;
   onError(path: string): Observable<Error>;
   onConnectionState(path: string): Observable<SerialPortState>;
   isOpen(path: string): Observable<boolean>;
