@@ -1,6 +1,6 @@
+import { ApiProperty } from '@nestjs/swagger';
 import { Expose, Transform, Type } from 'class-transformer';
 import { IsEnum, IsNumber, IsOptional } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
 
 export enum CabinetType {
   MAIN = 'main',

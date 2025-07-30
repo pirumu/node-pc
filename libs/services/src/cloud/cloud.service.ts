@@ -1,5 +1,5 @@
-import { Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
 import { IHttpClient, InjectHttpClient } from '@framework/http-client';
+import { Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
 import { CLOUD_PATHS } from '@services/cloud/cloud.constants';
 
 @Injectable()

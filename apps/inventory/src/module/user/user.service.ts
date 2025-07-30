@@ -1,9 +1,9 @@
+import { UserEntity } from '@entity';
 import { QueryCondition, QueryOperator } from '@framework/types';
 import { Inject, Injectable } from '@nestjs/common';
 
 import { GetUsersDto } from './dtos/request';
 import { USER_REPOSITORY_TOKEN, IUserRepository } from './repositories';
-import { UserEntity } from '@entity';
 
 @Injectable()
 export class UserService {

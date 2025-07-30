@@ -24,18 +24,16 @@ export class Application {
       {
         transport: Transport.MQTT,
         options: {
-          ...mqttConfig,
+          ...mqttConfig.consumer,
           resubscribe: true,
           reschedulePings: true,
-          // use v5 to support userProperties
-          protocolVersion: 5,
         },
       },
       { inheritAppConfig: true },
     );
   }
 
-  private static _setupSwagger(app: INestApplication, configService: ConfigService) {
+  private static _setupSwagger(app: INestApplication, configService: ConfigService): void {
     const swaggerConfig = configService.getOrThrow<SwaggerConfig>(CONFIG_KEY.SWAGGER);
     return setupSwagger(app, swaggerConfig);
   }
@@ -43,7 +41,7 @@ export class Application {
   private static async _bootstrap(): Promise<void> {
     const app = await NestFactory.create(HwbModule, {
       bufferLogs: true,
-      abortOnError: false,
+      abortOnError: true,
     });
     app.useLogger(app.get(APP_LOGGER));
 

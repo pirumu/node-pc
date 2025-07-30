@@ -1,3 +1,6 @@
+import * as path from 'node:path';
+import * as process from 'node:process';
+
 import { AppConfig, MongoDBConfig } from '@config/contracts';
 import { CONFIG_KEY } from '@config/core';
 import { HWB_MODELS, HWB_MONGO_REPOSITORIES, MongoDALModule } from '@dals/mongo';
@@ -6,9 +9,11 @@ import { TRACING_ID } from '@framework/constants';
 import { AppLoggerModule } from '@framework/logger';
 import { PublisherModule } from '@framework/publisher';
 import { snowflakeId } from '@framework/snowflake';
+import { HidDeviceModule } from '@hid';
+import { LoadcellsModule } from '@loadcells';
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { SerialportModule } from '@serialport';
+import { SerialportModule, SerialportModuleConfig } from '@serialport';
 import { Request } from 'express';
 import { ClsModule } from 'nestjs-cls';
 
@@ -16,7 +21,7 @@ import { configs } from './config';
 import { FingerprintConfig } from './config/fingerprint.config';
 import { MqttConfig } from './config/mqtt.config';
 import { HARDWARE_MODULES } from './modules';
-import { LoadcellsModule } from '@loadcells';
+import { FingerprintModule } from './modules/fingerprint';
 
 @Module({
   imports: [
@@ -24,6 +29,20 @@ import { LoadcellsModule } from '@loadcells';
       load: [configs],
       isGlobal: true,
       cache: true,
+    }),
+    FingerprintScanModule.forRootAsync({
+      useFactory: (configService: ConfigService) => {
+        const config = configService.getOrThrow<FingerprintConfig>(CONFIG_KEY.FINGERPRINT);
+        return {
+          ...DEFAULT_CONFIG,
+          binaryPath: path.join(process.cwd(), config.binaryPath),
+          devicePort: config.defaultPort,
+          maxCommandAge: 30000, // 30s
+          logLevel: 'debug',
+        };
+      },
+      imports: [ConfigModule],
+      inject: [ConfigService],
     }),
     ClsModule.forRoot({
       global: true,
@@ -78,49 +97,23 @@ import { LoadcellsModule } from '@loadcells';
         const config = configService.getOrThrow<MqttConfig>(CONFIG_KEY.MQTT);
         return {
           mqtt: {
-            options: config,
+            options: config.publisher,
             enabled: true,
           },
-        };
-      },
-      inject: [ConfigService],
-    }),
-    FingerprintScanModule.forRootAsync({
-      useFactory: (configService: ConfigService) => {
-        const config = configService.getOrThrow<FingerprintConfig>(CONFIG_KEY.FINGERPRINT);
-        return {
-          ...DEFAULT_CONFIG,
-          binaryPath: config.binaryPath,
-          devicePort: config.defaultPort,
-          maxCommandAge: 30000, // 30s
-          logLevel: 'debug',
         };
       },
       inject: [ConfigService],
     }),
     SerialportModule.forRootAsync({
       useFactory: (configService: ConfigService) => {
-        return {
-          discovery: {
-            enabled: true,
-            serialOptions: {
-              baudRate: 9600,
-              dataBits: 8,
-              stopBits: 1,
-              parity: 'none',
-              autoOpen: true,
-            },
-          },
-          monitoring: {
-            enabled: true,
-            enableEventLogging: true,
-          },
-        };
+        return configService.getOrThrow<SerialportModuleConfig>(CONFIG_KEY.SERIALPORT);
       },
       inject: [ConfigService],
     }),
+    HidDeviceModule,
     LoadcellsModule,
     ...HARDWARE_MODULES,
+    FingerprintModule,
   ],
   controllers: [],
   providers: [],

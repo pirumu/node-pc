@@ -1,7 +1,7 @@
 import { LeanDocument } from '@dals/mongo/base.repository';
 import { User } from '@dals/mongo/schema';
-import { HydratedDocument } from 'mongoose';
 import { UserEntity } from '@entity';
+import { HydratedDocument } from 'mongoose';
 
 export class UserMapper {
   public static toModel(entity: UserEntity): User {

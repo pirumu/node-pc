@@ -8,6 +8,6 @@ export const getMqttConfig = (): MqttConfig => {
     protocolVersion: 5,
     username: '',
     password: '',
-    clientId: 'mqtt-api-client',
+    clientId: 'mqtt-inventory-client',
   };
 };

@@ -1,6 +1,6 @@
 import { BehaviorSubject, Observable, of, Subject } from 'rxjs';
-import { ReadlineParser, SerialPort } from 'serialport';
 import { map, takeUntil } from 'rxjs/operators';
+import { ReadlineParser, SerialPort } from 'serialport';
 
 export type SerialPortInfo = {
   path: string;

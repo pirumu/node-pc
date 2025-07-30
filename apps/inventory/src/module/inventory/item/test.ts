@@ -1,16 +1,17 @@
 import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { Item } from '../schemas/item.schema';
-import { Device } from '../schemas/device.schema';
-import { ReturnItem } from '../schemas/return-item.schema';
+
+import { PROCESS_ITEM_TYPE } from '../constants';
+import { ProcessItemService } from '../process-item/process-item.service';
+import { Area } from '../schemas/area.schema';
+import { BinItem } from '../schemas/bin-item.schema';
 import { Bin } from '../schemas/bin.schema';
 import { Cabinet } from '../schemas/cabinet.schema';
-import { BinItem } from '../schemas/bin-item.schema';
+import { Device } from '../schemas/device.schema';
+import { Item } from '../schemas/item.schema';
 import { JobCard } from '../schemas/job-card.schema';
-import { Area } from '../schemas/area.schema';
-import { ProcessItemService } from '../process-item/process-item.service';
-import { PROCESS_ITEM_TYPE } from '../constants';
+import { ReturnItem } from '../schemas/return-item.schema';
 
 interface IssueItemDto {
   itemId: string;
@@ -353,7 +354,9 @@ export class ItemService {
         }
 
         const item = itemsMap.get(device.itemId.toString());
-        if (!item) continue;
+        if (!item) {
+          continue;
+        }
 
         const itemData = {
           id: item._id,

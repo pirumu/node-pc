@@ -1,5 +1,5 @@
-import { resolve } from '@config/core';
 import { SwaggerConfig } from '@config/contracts';
+import { resolve } from '@config/core';
 
 export const getSwaggerConfig = (): SwaggerConfig => ({
   enabled: resolve('SWAGGER_ENABLED', Boolean, { default: false }),

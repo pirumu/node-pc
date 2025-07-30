@@ -9,8 +9,9 @@ import {
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 
-import { WS_CHANNELS } from './ws.constants';
 import { getSocketIoConfig } from '../../config/ws-config';
+
+import { WS_CHANNELS } from './ws.constants';
 
 @WebSocketGateway({
   ...getSocketIoConfig(),

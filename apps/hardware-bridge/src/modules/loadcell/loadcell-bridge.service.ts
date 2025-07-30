@@ -1,4 +1,5 @@
-import { WeighCalculatedEvent } from '@common/business/events';
+import { WeightCalculatedEvent } from '@common/business/events';
+import { CONFIG_KEY } from '@config/core';
 import { PublisherService, Transport } from '@framework/publisher';
 import { sleep } from '@framework/time/sleep';
 import { LoadcellsHealthMonitoringService, LoadcellsService } from '@loadcells';
@@ -7,10 +8,11 @@ import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nest
 import { ConfigService } from '@nestjs/config';
 import { PortDiscoveryService, PortMonitoringService } from '@serialport';
 import { InjectSerialManager, ISerialAdapter } from '@serialport/serial';
-import { lastValueFrom, Subject, timer } from 'rxjs';
+import { interval, lastValueFrom, Subject } from 'rxjs';
 import { map, take, takeUntil, timeout } from 'rxjs/operators';
 
 import { LoadcellMqttRequest } from './dto/request';
+import { CHAR_START, LINUX_PORTS, MESSAGE_LENGTH, VERIFY_TIMEOUT } from './loadcell.constants';
 import { ILoadcellRepository, LOADCELL_REPOSITORY_TOKEN } from './repositories';
 
 @Injectable()
@@ -20,11 +22,6 @@ export class LoadcellBridgeService implements OnModuleInit, OnModuleDestroy {
 
   // Map to store COM ID for each port
   private readonly _portComIdMap = new Map<string, number>();
-
-  // Constants for loadcell detection
-  private readonly _charStart = 0x55;
-  private readonly _messageLength = 11;
-  private readonly _verifyTimeout = 2000;
 
   constructor(
     @Inject(LOADCELL_REPOSITORY_TOKEN)
@@ -86,7 +83,7 @@ export class LoadcellBridgeService implements OnModuleInit, OnModuleDestroy {
   public async onBinClosed(_payload: LoadcellMqttRequest): Promise<void> {
     try {
       this._logger.log('Received bin/close, resetting to online devices');
-      this._loadcellsService.resetToOnlineDevices();
+      this._loadcellsService.stopDataPolling();
     } catch (error) {
       this._logger.error('Error handling bin/close:', error);
     }
@@ -173,17 +170,14 @@ export class LoadcellBridgeService implements OnModuleInit, OnModuleDestroy {
     this._loadcellsService.registerGlobalHooks({
       onData: (reading: LoadCellReading) => {
         if (reading.status === 'running') {
-          // Get COM ID from port
-          const _comId = this._portComIdMap.get(reading.path) || 0;
-
           const payload = {
             path: reading.path,
-            deviceId: reading.deviceId, // This already includes COM ID from LoadcellsService
+            deviceId: reading.deviceId,
             weight: reading.weight,
             status: reading.status,
             timestamp: reading.timestamp,
           };
-          const event = new WeighCalculatedEvent({ ...payload, timestamp: payload.timestamp.toISOString() });
+          const event = new WeightCalculatedEvent({ ...payload, timestamp: payload.timestamp.toISOString() });
           this._publisherService
             .publish(Transport.MQTT, event.getChannel(), event.getPayload())
             .then(() => {
@@ -246,19 +240,19 @@ export class LoadcellBridgeService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async _startLoadcells(): Promise<void> {
-    const configuredPorts = this._configService.get<string[]>('serial.ports');
+    const config = this._configService.get<{ defaultPorts: string[] }>(CONFIG_KEY.SERIALPORT);
 
-    if (configuredPorts && configuredPorts.length > 0) {
+    if (config && config.defaultPorts.length > 0) {
       // Use configured ports
-      this._logger.log(`Using configured ports: ${configuredPorts.join(', ')}`);
+      this._logger.log(`Using configured ports: ${config.defaultPorts.join(', ')}`);
 
       // Store COM IDs for each port
-      configuredPorts.forEach((port) => {
+      config.defaultPorts.forEach((port) => {
         const comId = this._extractComId(port);
         this._portComIdMap.set(port, comId);
       });
 
-      await this._loadcellsService.start(configuredPorts);
+      await this._loadcellsService.start(config.defaultPorts);
     } else {
       // Auto-discover loadcell ports
       await this._autoDiscoverLoadcellPorts();
@@ -295,10 +289,10 @@ export class LoadcellBridgeService implements OnModuleInit, OnModuleDestroy {
       // Optionally save to file like old code
       // fs.writeFileSync('usedPort.txt', verifiedPorts.join(','));
     } else {
-      this._logger.warn('No loadcell ports found! Retrying in 5 seconds...');
+      this._logger.warn('No loadcell ports found! Retrying in 30 seconds...');
 
       // Retry after delay
-      timer(5000)
+      interval(30000) // 30s
         .pipe(takeUntil(this._destroy$))
         .subscribe(async () => this._autoDiscoverLoadcellPorts());
     }
@@ -307,11 +301,11 @@ export class LoadcellBridgeService implements OnModuleInit, OnModuleDestroy {
   private async _getAllPossiblePorts(): Promise<string[]> {
     const ports = await lastValueFrom(this._portDiscovery.availablePorts$().pipe(take(1)));
 
-    // Ports with manufacturer
+    // Ports with a manufacturer
     const usbPorts = ports.filter((p) => p.manufacturer).map((p) => p.path);
 
     // Add Linux serial ports
-    const linuxPorts = ['/dev/ttyS0', '/dev/ttyS1', '/dev/ttyS2', '/dev/ttyS3', '/dev/ttyS4', '/dev/ttyS5'];
+    const linuxPorts = LINUX_PORTS;
 
     // Windows COM ports if needed
     const windowsPorts: string[] = [];
@@ -320,7 +314,6 @@ export class LoadcellBridgeService implements OnModuleInit, OnModuleDestroy {
         windowsPorts.push(`COM${i}`);
       }
     }
-
     // Return unique ports
     return [...new Set([...usbPorts, ...linuxPorts, ...windowsPorts])];
   }
@@ -348,7 +341,7 @@ export class LoadcellBridgeService implements OnModuleInit, OnModuleDestroy {
             .onData(portPath)
             .pipe(
               take(10), // Check first 10 messages max
-              timeout(this._verifyTimeout),
+              timeout(VERIFY_TIMEOUT),
               map((data: Buffer | string) => {
                 return Buffer.isBuffer(data) ? data : Buffer.from(data, 'hex');
               }),
@@ -359,7 +352,7 @@ export class LoadcellBridgeService implements OnModuleInit, OnModuleDestroy {
                 this._logger.debug(`Port ${portPath} received data (${messageCount}): ${buffer.toString('hex')}`);
 
                 // Check if valid loadcell response
-                if (buffer.length === this._messageLength && buffer[0] === this._charStart) {
+                if (buffer.length === MESSAGE_LENGTH && buffer[0] === CHAR_START) {
                   this._logger.debug(`Valid loadcell message from ${portPath}`);
                   subscription.unsubscribe();
                   resolve(true);

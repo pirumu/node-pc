@@ -1,6 +1,7 @@
 export enum LOCK_STATUS {
   OPEN = 'OPEN',
   CLOSED = 'CLOSED',
+  UNKNOWN = 'UNKNOWN',
 }
 
 export enum ProtocolType {

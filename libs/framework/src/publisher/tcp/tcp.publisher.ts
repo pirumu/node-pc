@@ -2,13 +2,13 @@ import { TRACING_ID } from '@framework/constants';
 import { AppHttpException, isNetworkError } from '@framework/exception';
 import { Injectable, Logger } from '@nestjs/common';
 import { ClientProxy, ClientProxyFactory, Transport } from '@nestjs/microservices';
+import { ClsServiceManager } from 'nestjs-cls';
 import { delay, lastValueFrom, of, timeout } from 'rxjs';
 import { catchError, retry } from 'rxjs/operators';
 
 import { IPublisher, PublishOptions } from '../publisher.types';
 
 import { TCPPublishOptions } from './tcp.types';
-import { ClsServiceManager } from 'nestjs-cls';
 
 @Injectable()
 export class TCPPublisher implements IPublisher {

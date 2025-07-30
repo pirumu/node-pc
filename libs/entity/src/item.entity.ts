@@ -6,7 +6,7 @@ export class ItemEntity extends BaseEntity {
   name: string;
   partNo: string;
   materialNo: string;
-  itemTypeId?: string;
+  itemTypeId: string;
   type: string;
   image?: string;
   description?: string;

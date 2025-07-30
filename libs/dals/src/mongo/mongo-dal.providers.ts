@@ -1,25 +1,5 @@
 import { ModelDefinition } from '@nestjs/mongoose';
 
-import { AreaModel } from './schema/area.schema';
-import { BinItemModel } from './schema/bin-item.schema';
-import { BinModel } from './schema/bin.schema';
-import { CabinetModel } from './schema/cabinet.schema';
-import { CardModel } from './schema/card.schema';
-import { ConditionModel } from './schema/condition.schema';
-import { DeviceModel } from './schema/device.schema';
-import { FingerprintModel } from './schema/fingerprint.schema';
-import { ItemTypeModel } from './schema/item-type.schema';
-import { ItemModel } from './schema/item.schema';
-import { JobCardModel } from './schema/job-card.schema';
-import { LogModel } from './schema/log.schema';
-import { MetaDataModel } from './schema/meta-data.schema';
-import { PortModel } from './schema/port.schema';
-import { ReturnItemModel } from './schema/return-item.schema';
-import { SiteUserModel } from './schema/site-user.schema';
-import { SiteModel } from './schema/site.schema';
-import { TabletModel } from './schema/tablet.schema';
-import { TransactionModel } from './schema/transaction.schema';
-import { UserModel } from './schema/user.schema';
 import {
   AreaMRepository,
   BinItemMRepository,
@@ -42,6 +22,26 @@ import {
   TransactionMRepository,
   UserMRepository,
 } from './repositories';
+import { AreaModel } from './schema/area.schema';
+import { BinItemModel } from './schema/bin-item.schema';
+import { BinModel } from './schema/bin.schema';
+import { CabinetModel } from './schema/cabinet.schema';
+import { CardModel } from './schema/card.schema';
+import { ConditionModel } from './schema/condition.schema';
+import { DeviceModel } from './schema/device.schema';
+import { FingerprintModel } from './schema/fingerprint.schema';
+import { ItemTypeModel } from './schema/item-type.schema';
+import { ItemModel } from './schema/item.schema';
+import { JobCardModel } from './schema/job-card.schema';
+import { LogModel } from './schema/log.schema';
+import { MetaDataModel } from './schema/meta-data.schema';
+import { PortModel } from './schema/port.schema';
+import { ReturnItemModel } from './schema/return-item.schema';
+import { SiteUserModel } from './schema/site-user.schema';
+import { SiteModel } from './schema/site.schema';
+import { TabletModel } from './schema/tablet.schema';
+import { TransactionModel } from './schema/transaction.schema';
+import { UserModel } from './schema/user.schema';
 
 export const API_MODELS: ModelDefinition[] = [
   AreaModel,
@@ -95,5 +95,5 @@ export const WORKER_MONGO_REPOSITORIES: any[] = [];
 export const CLI_MODELS: ModelDefinition[] = [];
 export const CLI_MONGO_REPOSITORIES: any[] = [];
 
-export const HWB_MODELS: ModelDefinition[] = [DeviceModel];
-export const HWB_MONGO_REPOSITORIES: any[] = [DeviceMRepository];
+export const HWB_MODELS: ModelDefinition[] = [FingerprintModel, DeviceModel];
+export const HWB_MONGO_REPOSITORIES: any[] = [FingerprintMRepository, DeviceMRepository];

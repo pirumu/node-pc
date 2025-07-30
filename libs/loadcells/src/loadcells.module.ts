@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Global, Module } from '@nestjs/common';
 import { SerialportModule } from '@serialport';
 
 import { LoadcellsHealthMonitoringService } from './loadcells-monitoring.service';

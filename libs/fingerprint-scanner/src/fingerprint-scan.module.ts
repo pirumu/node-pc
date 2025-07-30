@@ -26,24 +26,7 @@ export type FingerprintScanAsyncOptions = {
 export class FingerprintScanModule {
   public static forRootAsync(options: FingerprintScanAsyncOptions): DynamicModule {
     return {
-      module: FingerprintScanModule,
-      imports: options.imports || [],
-      providers: [
-        ...this._createAsyncProviders(options),
-        ContextManagerService,
-        HookRegistryService,
-        FingerprintContextService,
-        FingerprintProcessService,
-        FingerprintCommandService,
-        FingerprintResponseService,
-        FingerprintScanService,
-      ],
-      exports: [FingerprintScanService, FingerprintContextService, ContextManagerService, FINGERPRINT_SCAN_CONFIG],
       global: true,
-    };
-  }
-  public static forFeatureAsync(options: FingerprintScanAsyncOptions): DynamicModule {
-    return {
       module: FingerprintScanModule,
       imports: options.imports || [],
       providers: [
@@ -56,7 +39,16 @@ export class FingerprintScanModule {
         FingerprintResponseService,
         FingerprintScanService,
       ],
-      exports: [FingerprintScanService, FingerprintContextService],
+      exports: [
+        FINGERPRINT_SCAN_CONFIG,
+        ContextManagerService,
+        HookRegistryService,
+        FingerprintContextService,
+        FingerprintProcessService,
+        FingerprintCommandService,
+        FingerprintResponseService,
+        FingerprintScanService,
+      ],
     };
   }
 

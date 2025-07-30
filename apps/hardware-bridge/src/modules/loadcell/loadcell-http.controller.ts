@@ -2,7 +2,7 @@ import { Controller, Get, Post } from '@nestjs/common';
 
 import { LoadcellBridgeService } from './loadcell-bridge.service';
 
-@Controller()
+@Controller('loadcell')
 export class LoadcellHttpController {
   constructor(private readonly _loadcellService: LoadcellBridgeService) {}
 

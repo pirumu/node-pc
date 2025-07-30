@@ -1,4 +1,6 @@
-import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
+import { Inject, Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
+import { DiscoveryConfig } from '@serialport';
+import { DISCOVERY_CONFIG } from '@serialport/serialport.constants';
 import { Observable, BehaviorSubject, Subject, from, EMPTY, throwError, timer, of, lastValueFrom } from 'rxjs';
 import { map, catchError, takeUntil, switchMap, tap, shareReplay, mergeMap, toArray, finalize, retry } from 'rxjs/operators';
 import { SerialPort, ReadlineParser } from 'serialport';
@@ -33,10 +35,10 @@ export class SerialPortAdapter implements ISerialAdapter, OnModuleDestroy {
     maxRetries: 3,
   };
 
-  constructor(config: SerialOptions) {
+  constructor(@Inject(DISCOVERY_CONFIG) private readonly _configs: DiscoveryConfig) {
     this._defaultOptions = {
       ...this._defaultOptions,
-      ...config,
+      ...this._configs.serialOptions,
     };
   }
 

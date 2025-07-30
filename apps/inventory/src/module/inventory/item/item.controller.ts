@@ -38,7 +38,7 @@ export class ItemController extends BaseController {
   })
   @Post(ITEM_ROUTES.ISSUE)
   public issueItem(@TabletDeviceId() tabletDeviceId: string, @AuthUser() authUser: AuthUserDto, @Body() body: IssueItemRequest): void {
-    return this._itemService.issueItems(tabletDeviceId, authUser, body);
+    // return this._itemService.issueItems(tabletDeviceId, authUser, body);
   }
 
   @Get(ITEM_ROUTES.RETURN)

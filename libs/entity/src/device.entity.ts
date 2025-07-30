@@ -60,7 +60,7 @@ export class DeviceEntity extends BaseEntity {
   status: string;
   isSync: boolean;
   retryCount: number;
-  isUpdateWeight: number;
+  isUpdateWeight: boolean;
   label: string | null;
   description: DeviceDescriptionEntity;
 
@@ -70,5 +70,9 @@ export class DeviceEntity extends BaseEntity {
     if (data.description) {
       this.description = new DeviceDescriptionEntity(data.description);
     }
+  }
+
+  public isAlive(): boolean {
+    return this.heartbeat > Date.now() - 30 * 1000;
   }
 }

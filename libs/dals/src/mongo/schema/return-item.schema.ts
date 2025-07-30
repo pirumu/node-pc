@@ -2,7 +2,61 @@ import { ModelDefinition, Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Schema as MSchema } from 'mongoose';
 
 import { BaseSchema } from './base.schema';
-import { schemaOptions } from './default.options';
+import { schemaOptions, subSchemaOptions } from './default.options';
+
+@Schema(subSchemaOptions)
+export class Location {
+  @Prop({
+    type: {
+      id: { type: MSchema.Types.String, required: true },
+      name: { type: MSchema.Types.String, required: false },
+      row: { type: MSchema.Types.Number, required: false },
+    },
+    required: true,
+  })
+  bin: {
+    id: string;
+    name: string;
+    row: number;
+  };
+
+  @Prop({ type: MSchema.Types.Number, required: false, default: 0 })
+  requestQty: number;
+
+  @Prop({ type: MSchema.Types.Number, required: false, default: 0 })
+  preQty: number;
+
+  @Prop({ type: MSchema.Types.Number, required: false, default: 0 })
+  quantity: number;
+}
+
+const LocationSchema = SchemaFactory.createForClass(Location);
+
+@Schema(subSchemaOptions)
+export class WorkOrder {
+  @Prop({ type: MSchema.Types.ObjectId, required: true })
+  woId: string;
+
+  @Prop({ type: MSchema.Types.String, required: true })
+  wo: string;
+
+  @Prop({ type: MSchema.Types.ObjectId, required: true })
+  areaId: string;
+
+  @Prop({ type: MSchema.Types.String, required: true })
+  area: string;
+
+  @Prop({ type: MSchema.Types.String, required: true })
+  vehicleId: string;
+
+  @Prop({ type: MSchema.Types.String, required: true })
+  platform: string;
+
+  @Prop({ type: MSchema.Types.Number, required: true })
+  torq: number;
+}
+
+const WorkOrderSchema = SchemaFactory.createForClass(WorkOrder);
 
 @Schema(schemaOptions)
 export class ReturnItem extends BaseSchema {
@@ -19,54 +73,18 @@ export class ReturnItem extends BaseSchema {
   quantity: number;
 
   @Prop({
-    type: [
-      {
-        woId: { type: MSchema.Types.ObjectId, required: true },
-        wo: { type: MSchema.Types.String, required: true },
-        vehicleId: { type: MSchema.Types.String, required: true },
-        platform: { type: MSchema.Types.String, required: true },
-        areaId: { type: MSchema.Types.String, required: true },
-        torq: { type: MSchema.Types.Number, required: true },
-        area: { type: MSchema.Types.String, required: true },
-      },
-    ],
+    type: [WorkOrderSchema],
     required: false,
     default: [],
   })
-  listWo?: Array<{
-    woId: string;
-    wo: string;
-    vehicleId: string;
-    platform: string;
-    areaId: string;
-    torq: number;
-    area: string;
-  }>;
+  workOrders: WorkOrder[];
 
   @Prop({
-    type: [
-      {
-        quantity: { type: MSchema.Types.Number, required: true },
-        bin: {
-          id: { type: MSchema.Types.ObjectId, required: true },
-        },
-        requestQty: { type: MSchema.Types.Number, required: false },
-        preQty: { type: MSchema.Types.Number, required: false },
-      },
-    ],
+    type: [LocationSchema],
     required: false,
     default: [],
   })
-  locations: Array<{
-    bin: {
-      id: string;
-      name: string;
-      row: number;
-    };
-    requestQty: number;
-    preQty: number;
-    quantity: number;
-  }>;
+  locations: Array<Location>;
 }
 
 export const ReturnItemSchema = SchemaFactory.createForClass(ReturnItem);

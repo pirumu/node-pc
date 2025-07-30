@@ -1,5 +1,6 @@
 import { JobCardEntity } from '@entity';
 import { Inject, Injectable } from '@nestjs/common';
+
 import { IJobCardRepository, JOB_CARD_REPOSITORY_TOKEN } from './repositories';
 
 @Injectable()

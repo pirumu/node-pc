@@ -1,10 +1,10 @@
+import { ApiDocs, ControllerDocs } from '@framework/swagger';
 import { Controller, Post, Query } from '@nestjs/common';
 
 import { GetUsersDto } from './dtos/request';
 import { GetUsersResponse } from './dtos/response';
-import { UserService } from './user.service';
 import { USER_ROUTES } from './user.constants';
-import { ApiDocs, ControllerDocs } from '@framework/swagger';
+import { UserService } from './user.service';
 
 @ControllerDocs({
   tag: 'User',

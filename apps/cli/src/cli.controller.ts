@@ -1,6 +1,7 @@
 import { Controller, Get, Logger } from '@nestjs/common';
-import { CliService } from './cli.service';
 import { MessagePattern } from '@nestjs/microservices';
+
+import { CliService } from './cli.service';
 
 @Controller()
 export class CliController {

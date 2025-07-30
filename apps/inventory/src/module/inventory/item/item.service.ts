@@ -31,30 +31,30 @@ export class ItemService {
     return this._repository.getIssueItems({ ...dto, dateThreshold });
   }
 
-  public async issue(currentUser: any, items: IssueItemEntity[]): Promise<any> {
-    const dateThreshold = new Date();
-    dateThreshold.setHours(0, 0, 0, 0);
-
-    const processItemPromises = items.map((item) => this._processSingleItemForIssue(item, currentUser, dateThreshold));
-
-    const result = await Promise.all(processItemPromises);
-
-    // 2. Refactor của hàm `formatData` được tích hợp luôn vào đây
-    const formattedData = await this.formatIssueData(result);
-
-    // 3. Tính tổng số lượng yêu cầu
-    const totalRequestQty = items.reduce((sum, item) => sum + item.quantity, 0);
-
-    // Dữ liệu đã sẵn sàng để gửi đi hoặc xử lý tiếp
-    return {
-      success: true,
-      data: result,
-      formattedData,
-      requestQty: totalRequestQty,
-    };
-  }
-
-  private async _processSingleItemForIssue();
-
-  private async _formatIssueData() {}
+  // public async issue(currentUser: any, items: IssueItemEntity[]): Promise<any> {
+  //   const dateThreshold = new Date();
+  //   dateThreshold.setHours(0, 0, 0, 0);
+  //
+  //   const processItemPromises = items.map((item) => this._processSingleItemForIssue(item, currentUser, dateThreshold));
+  //
+  //   const result = await Promise.all(processItemPromises);
+  //
+  //   // 2. Refactor của hàm `formatData` được tích hợp luôn vào đây
+  //   const formattedData = await this.formatIssueData(result);
+  //
+  //   // 3. Tính tổng số lượng yêu cầu
+  //   const totalRequestQty = items.reduce((sum, item) => sum + item.quantity, 0);
+  //
+  //   // Dữ liệu đã sẵn sàng để gửi đi hoặc xử lý tiếp
+  //   return {
+  //     success: true,
+  //     data: result,
+  //     formattedData,
+  //     requestQty: totalRequestQty,
+  //   };
+  // }
+  //
+  // private async _processSingleItemForIssue();
+  //
+  // private async _formatIssueData() {}
 }

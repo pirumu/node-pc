@@ -1,5 +1,5 @@
 import { LeanDocument } from '@dals/mongo/base.repository';
-import { ReturnItem } from '@dals/mongo/schema/return-item.schema';
+import { Location, ReturnItem } from '@dals/mongo/schema/return-item.schema';
 import { ReturnItemEntity, WorkOrderItem, LocationItem } from '@entity';
 import { HydratedDocument } from 'mongoose';
 
@@ -10,8 +10,15 @@ export class ReturnItemMapper {
     model.userId = entity.userId;
     model.binId = entity.binId;
     model.quantity = entity.quantity;
-    model.listWo = entity.listWo;
-    model.locations = entity.locations;
+    model.workOrders = entity.workOrders;
+    model.locations = entity.locations.map((l) => {
+      const model = new Location();
+      model.bin = l.bin;
+      model.quantity = l.quantity;
+      model.preQty = l.preQty;
+      model.requestQty = l.requestQty;
+      return model;
+    });
     return model;
   }
 
@@ -29,7 +36,7 @@ export class ReturnItemMapper {
       userId: model.userId,
       binId: model.binId,
       quantity: model.quantity,
-      listWo: this._mapWorkOrders(model.listWo),
+      workOrders: this._mapWorkOrders(model.workOrders),
       locations: this._mapLocations(model.locations),
       createdAt: model.createdAt?.toISOString(),
       updatedAt: model.updatedAt?.toISOString(),
@@ -60,18 +67,19 @@ export class ReturnItemMapper {
     }));
   }
 
-  private static _mapLocations(locations?: Array<any>): LocationItem[] {
+  private static _mapLocations(locations?: Location[]): LocationItem[] {
     if (!locations || !locations.length) {
       return [];
     }
-
     return locations.map((location) => ({
-      quantity: location.quantity,
       bin: {
-        id: location.bin.id?.toString(),
+        id: location.bin.id?.toString() || location.bin.id,
+        name: location.bin.name,
+        row: location.bin.row,
       },
       requestQty: location.requestQty,
       preQty: location.preQty,
+      quantity: location.quantity,
     }));
   }
 }

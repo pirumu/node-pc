@@ -1,6 +1,6 @@
+import { IAppEvent } from '@common/interfaces';
 import { InjectMQTTPublisher, IPublisher } from '@framework/publisher';
 import { Injectable } from '@nestjs/common';
-import { IAppEvent } from '@common/interfaces';
 
 @Injectable()
 export class UserPublisherService {

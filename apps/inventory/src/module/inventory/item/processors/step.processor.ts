@@ -2,19 +2,17 @@
 
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import * as mqtt from 'mqtt';
-import axios from 'axios';
+import { sleep } from '@framework/time/sleep';
+import { DeviceEntity, PortEntity } from '@entity';
+import { PublisherService, Transport } from '@framework/publisher';
 
 @Injectable()
 export class MqttService implements OnModuleInit {
   private readonly logger = new Logger(MqttService.name);
   private mqttClient: mqtt.MqttClient;
-  private readonly timeWait = 3000;
-  private readonly processItemType = {
-    RETURN: 'RETURN',
-  };
   private readonly conditionWorkingId = process.env.CONDITION_WORKING_ID || 12;
 
-  constructor() {}
+  constructor(private readonly _publisherService: PublisherService) {}
 
   async onModuleInit() {
     await this.initMqttConnection();
@@ -58,11 +56,11 @@ export class MqttService implements OnModuleInit {
 
   private async processLockOpenSuccess(messageData: any) {
     const currentListDevice = await this.getListDevice({});
-    await this.wait(1000);
+    await sleep(1000);
 
     const currentTime = new Date();
-    const { user, type, data, deviceType, deviceId, lockId, transId } = messageData;
-    const { cabinet, bin, request_items: requestItems, storage_items: storageItems } = data;
+    const { type, data, deviceType, deviceId, lockId, transId } = messageData;
+    const { cabinet, bin, requestItems, storageItems } = data;
     const items = [...requestItems, ...storageItems];
 
     let isNextRequestItem = true;
@@ -70,34 +68,30 @@ export class MqttService implements OnModuleInit {
 
     // Wait for lock to close
     await this.waitForLockClose(deviceType, deviceId, lockId, currentTime);
-    await this.wait(2000);
 
     this.logger.log(`Processing ended at: ${new Date()}`);
 
-    // Get transaction and new device list
     const [transaction, newListDevice] = await Promise.all([
       this.transactionModel.findOne({ id: transId }).exec(),
       this.getListDevice({ binId: bin.id }),
     ]);
 
-    const logData = {
+    const logData: { cabinet: any; bin: any; actualItems: any[] } = {
       cabinet,
       bin,
-      spares: [], // actual items
+      actualItems: [],
     };
-
-    this.logger.log('New device list:', newListDevice);
 
     if (newListDevice.length > 0 && currentListDevice.length > 0) {
       // Process device changes
       const processedData = this.processDeviceChanges(newListDevice, currentListDevice, items, type, isNextRequestItem, damageItems, bin);
 
-      logData.spares = processedData.logItems;
+      logData.actualItems = processedData.logItems;
       isNextRequestItem = processedData.isNextRequestItem;
     }
 
     // Update transaction if there are changes
-    if (logData.spares.length && transaction) {
+    if (logData.actualItems.length && transaction) {
       await transaction.updateOne({
         locationsTemp: [...transaction.locations, logData],
       });
@@ -165,10 +159,11 @@ export class MqttService implements OnModuleInit {
         previousQty: item.preQty,
         currentQty: parseInt(device.qty),
         changedQty,
+        listWO: [],
       };
 
       if (item.listWO) {
-        logItem['listWO'] = item.listWO;
+        logItem.listWO = item.listWO;
       }
 
       if (actualQty !== 0) {
@@ -243,99 +238,52 @@ export class MqttService implements OnModuleInit {
   private async getListDevice(condition: any = {}): Promise<any[]> {
     try {
       // Get all devices with condition
-      const devices = await this.deviceModel.find(condition).sort({ portId: 1, deviceId: 1 }).lean().exec();
+      const devices = (await this.deviceModel.find(condition).sort({ portId: 1, deviceId: 1 }).lean().exec()) as DeviceEntity[];
 
-      if (!devices.length) return [];
-
+      if (!devices.length) {
+        return [];
+      }
       // Get online devices (heartbeat within 30 seconds)
-      const now = new Date().getTime();
-      const onlineDevices = devices.filter((device) => parseInt(device.heartbeat.toString()) > now - 30 * 1000);
+      const onlineDevices = devices.filter((device) => device.isAlive());
 
-      if (!onlineDevices.length) return [];
+      if (!onlineDevices.length) {
+        return [];
+      }
 
       // Get all related data in batch
       const portIds = [...new Set(onlineDevices.map((device) => device.portId))];
-      const deviceIds = onlineDevices.map((device) => device.deviceId);
 
-      const [ports, descriptions] = await Promise.all([
-        this.portModel
-          .find({ _id: { $in: portIds } })
-          .lean()
-          .exec(),
-        this.deviceDescriptionModel
-          .find({ deviceId: { $in: deviceIds } })
-          .lean()
-          .exec(),
-      ]);
+      const ports = (await this.portModel
+        .find({ _id: { $in: portIds } })
+        .lean()
+        .exec()) as PortEntity[];
 
       // Create maps for quick lookup
-      const portMap = new Map(ports.map((port) => [port._id.toString(), port]));
-      const descMap = new Map(descriptions.map((desc) => [desc.deviceId, desc]));
+      const portMap = new Map(ports.map((port) => [port.id, port]));
 
       // Build payload
-      const payload = onlineDevices.map((device) => {
-        const port = portMap.get(device.portId.toString());
-        const description = descMap.get(device.deviceId);
-
+      return onlineDevices.map((device) => {
+        const port = portMap.get(device.portId);
         return {
           hardwarePort: port?.path || '',
-          deviceId: device.deviceId,
-          name: description?.name || '',
-          partNumber: description?.partNumber || '',
-          portId: device.deviceId % 100,
+          deviceId: device.id,
+          deviceNumId: device.deviceNumId,
+          name: device.description?.name || '',
+          partNumber: device.description?.partNumber || '',
+          portId: port?.id || '',
           totalQty: device.calcQuantity,
-          qty: parseInt(device.quantity.toString()) + device.changeQty,
+          qty: device.quantity + device.changeQty,
           status: device.status,
           itemId: device.itemId,
         };
       });
-
-      return payload;
     } catch (error) {
       this.logger.error('Error getting device list:', error);
       return [];
     }
   }
 
-  private async waitForLockClose(deviceType: string, deviceId: string, lockId: string, startTime: Date) {
-    const token = process.env.LONG_TERM_TOKEN;
-    const config = {
-      method: 'post' as const,
-      url: 'http://localhost:3000/api/lock/status',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      data: JSON.stringify({
-        deviceType,
-        deviceId,
-        lockID: [lockId],
-      }),
-    };
-
-    while (new Date().getTime() - startTime.getTime() < 60 * 60 * 1000) {
-      await this.wait(this.timeWait);
-
-      try {
-        const response = await axios(config);
-
-        if (response.status === 200 && response.data.results?.length > 0) {
-          const allClosed = response.data.results.every((res: any) => res.status !== 'Open');
-          if (allClosed) break;
-        }
-      } catch (error) {
-        this.logger.error('Error checking lock status:', error);
-      }
-    }
-  }
-
   private publishMessage(topic: string, data: any) {
-    if (this.mqttClient?.connected) {
-      this.mqttClient.publish(topic, JSON.stringify(data));
-    }
-  }
-
-  private wait(delay: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, delay));
+    return this._publisherService.publish(Transport.MQTT, topic, data);
   }
 }

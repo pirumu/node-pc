@@ -1,5 +1,5 @@
-import { resolve } from '@config/core';
 import { WSConfig } from '@config/contracts';
+import { resolve } from '@config/core';
 
 export const getSocketIoConfig = (): WSConfig => ({
   path: resolve('WS_PATH', String, { require: true }),

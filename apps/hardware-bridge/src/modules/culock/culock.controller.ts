@@ -2,10 +2,14 @@ import { Controller } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
 
 import { CulockService } from './culock.service';
+import { LockMonitoringService } from './lock-tracking.service';
 
 @Controller()
 export class CulockController {
-  constructor(private readonly _culockService: CulockService) {}
+  constructor(
+    private readonly _culockService: CulockService,
+    private readonly _lockMonitoringService: LockMonitoringService,
+  ) {}
 
   @MessagePattern('cu/open')
   public async open(@Payload() cuOpenRequest: any) {
@@ -19,6 +23,6 @@ export class CulockController {
 
   @MessagePattern('lock/track')
   public async track(@Payload() cuOpenRequest: any) {
-    return this._culockService.status(cuOpenRequest);
+    return this._lockMonitoringService.track(cuOpenRequest);
   }
 }

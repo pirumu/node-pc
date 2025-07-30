@@ -16,7 +16,7 @@ export class Item extends BaseSchema {
   materialNo: string;
 
   @Prop({ type: MSchema.Types.ObjectId, ref: 'ItemType', required: true })
-  itemTypeId: MSchema.Types.ObjectId;
+  itemTypeId: string;
 
   @Prop({ type: MSchema.Types.String, required: true })
   type: string;

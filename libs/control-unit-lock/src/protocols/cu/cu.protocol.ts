@@ -74,6 +74,7 @@ export class CuProtocol implements IProtocol<CuResponse> {
         deviceId: 0,
         isSuccess: false,
         raw: data?.toString('hex') || 'null',
+        lockStatuses: {},
       };
     }
 
@@ -95,12 +96,11 @@ export class CuProtocol implements IProtocol<CuResponse> {
       deviceId,
       isSuccess,
       raw: data.toString('hex'),
+      lockStatuses: {},
     };
 
     // Parse lock statuses
     if (isSuccess) {
-      result.lockStatuses = {};
-
       // For GET_STATUS response
       if (bytes.length > 6) {
         const dataLength = bytes[4];

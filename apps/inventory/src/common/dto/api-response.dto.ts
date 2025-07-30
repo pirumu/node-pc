@@ -1,5 +1,5 @@
-import { ApiProperty } from '@nestjs/swagger';
 import { Properties } from '@framework/types';
+import { ApiProperty } from '@nestjs/swagger';
 
 export class LegacyApiResponseDto<T = any> {
   @ApiProperty()

@@ -69,7 +69,7 @@ export class HidService implements OnModuleDestroy {
   public error$(): Observable<Error> {
     return new Observable<Error>((subscriber) => {
       if (!this._hidDevice) {
-        subscriber.error(new Error('Device not connected'));
+        subscriber.error(new Error('HidDevice not connected'));
         return;
       }
       fromEvent(this._hidDevice, 'error')
@@ -153,12 +153,15 @@ export class HidService implements OnModuleDestroy {
       this._reconnectStatus$.next('connected');
 
       // Setup error handling
-      this.error$().subscribe({
-        error: (err) => {
-          this._logger.error('HidService: Device error detected, attempting to reconnect...', err);
-          this._reconnect();
-        },
-      });
+      this.error$()
+        .pipe(
+          catchError((err) => {
+            this._logger.error('HidService: Device error detected, attempting to reconnect...', err);
+            this._reconnect();
+            return new Observable<Error>(); // Return an empty observable to complete the stream
+          }),
+        )
+        .subscribe();
     } catch (error) {
       this._logger.error('HidService: Failed to connect to device:', error);
       this._hidDevice = null;

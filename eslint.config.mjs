@@ -115,7 +115,7 @@ export default defineConfig([
           selector: 'variable',
           types: ['boolean'],
           format: ['PascalCase'],
-          prefix: ['is', 'should', 'has', 'can', 'did', 'will'],
+          prefix: ['is', 'should', 'has', 'can', 'did', 'will', 'was'],
         },
         {
           selector: 'interface',

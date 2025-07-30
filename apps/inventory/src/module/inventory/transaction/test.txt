@@ -1,0 +1,512 @@
+// ========== 1. MQTT Service (mqtt/mqtt.service.ts) ==========
+import { Injectable, OnModuleInit, OnModuleDestroy, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import * as mqtt from 'mqtt';
+import { MqttClient } from 'mqtt';
+import { EventEmitter } from 'events';
+
+@Injectable()
+export class MqttService implements OnModuleInit, OnModuleDestroy {
+  private client: MqttClient;
+  private readonly logger = new Logger(MqttService.name);
+  private readonly eventEmitter = new EventEmitter();
+  private readonly subscriptions = new Map<string, Function[]>();
+
+  constructor(private configService: ConfigService) {}
+
+  async onModuleInit() {
+    await this.connect();
+  }
+
+  async onModuleDestroy() {
+    await this.disconnect();
+  }
+
+  private async connect(): Promise<void> {
+    const mqttUrl = this.configService.get<string>('MQTT_URL', 'mqtt://localhost:1883');
+    const options = {
+      rejectUnauthorized: false,
+      connectTimeout: 5000,
+      reconnectPeriod: 5000,
+      clientId: `nestjs-${process.pid}-${Date.now()}`
+    };
+
+    return new Promise((resolve, reject) => {
+      this.client = mqtt.connect(mqttUrl, options);
+
+      this.client.on('connect', () => {
+        this.logger.log('MQTT connected');
+        this.setupGlobalSubscriptions();
+        resolve();
+      });
+
+      this.client.on('error', (error) => {
+        this.logger.error('MQTT error:', error);
+        reject(error);
+      });
+
+      this.client.on('message', (topic, message) => {
+        this.handleMessage(topic, message);
+      });
+
+      this.client.on('reconnect', () => {
+        this.logger.log('MQTT reconnecting...');
+      });
+
+      this.client.on('close', () => {
+        this.logger.log('MQTT connection closed');
+      });
+    });
+  }
+
+  private setupGlobalSubscriptions(): void {
+    const globalTopics = [
+      'lock/openSuccess',
+      'lock/openFail',
+      'bin/openFail',
+      'process-item/error',
+      'process-item/status',
+      'bin/open',
+      'bin/close'
+    ];
+
+    globalTopics.forEach(topic => {
+      this.client.subscribe(topic, (err) => {
+        if (err) {
+          this.logger.error(`Failed to subscribe to ${topic}:`, err);
+        } else {
+          this.logger.log(`Subscribed to ${topic}`);
+        }
+      });
+    });
+  }
+
+  private handleMessage(topic: string, message: Buffer): void {
+    try {
+      const data = JSON.parse(message.toString());
+      this.logger.debug(`Received message on ${topic}:`, data);
+
+      // Emit to internal event emitter
+      this.eventEmitter.emit(topic, data);
+
+      // Call registered handlers
+      const handlers = this.subscriptions.get(topic) || [];
+      handlers.forEach(handler => handler(data));
+    } catch (error) {
+      this.logger.error(`Error handling message on ${topic}:`, error);
+    }
+  }
+
+  publish(topic: string, data: any): void {
+    if (!this.client || !this.client.connected) {
+      this.logger.warn(`Cannot publish to ${topic}, MQTT not connected`);
+      return;
+    }
+
+    const message = typeof data === 'string' ? data : JSON.stringify(data);
+    this.client.publish(topic, message, (err) => {
+      if (err) {
+        this.logger.error(`Error publishing to ${topic}:`, err);
+      } else {
+        this.logger.debug(`Published to ${topic}:`, data);
+      }
+    });
+  }
+
+  subscribe(topic: string, handler: (data: any) => void): void {
+    if (!this.subscriptions.has(topic)) {
+      this.subscriptions.set(topic, []);
+
+      // Subscribe to MQTT topic if not already subscribed
+      this.client.subscribe(topic, (err) => {
+        if (err) {
+          this.logger.error(`Failed to subscribe to ${topic}:`, err);
+        }
+      });
+    }
+
+    this.subscriptions.get(topic)!.push(handler);
+  }
+
+  unsubscribe(topic: string, handler?: (data: any) => void): void {
+    if (!handler) {
+      // Remove all handlers and unsubscribe from topic
+      this.subscriptions.delete(topic);
+      this.client.unsubscribe(topic);
+    } else {
+      // Remove specific handler
+      const handlers = this.subscriptions.get(topic);
+      if (handlers) {
+        const index = handlers.indexOf(handler);
+        if (index > -1) {
+          handlers.splice(index, 1);
+        }
+
+        // If no handlers left, unsubscribe from topic
+        if (handlers.length === 0) {
+          this.subscriptions.delete(topic);
+          this.client.unsubscribe(topic);
+        }
+      }
+    }
+  }
+
+  private async disconnect(): Promise<void> {
+    return new Promise((resolve) => {
+      if (this.client) {
+        this.client.end(false, {}, () => {
+          this.logger.log('MQTT disconnected');
+          resolve();
+        });
+      } else {
+        resolve();
+      }
+    });
+  }
+}
+
+// ========== 2. WebSocket Gateway (websocket/process-item.gateway.ts) ==========
+import {
+  WebSocketGateway,
+  WebSocketServer,
+  SubscribeMessage,
+  MessageBody,
+  ConnectedSocket,
+  OnGatewayInit,
+  OnGatewayConnection,
+  OnGatewayDisconnect,
+} from '@nestjs/websockets';
+import { Logger } from '@nestjs/common';
+import { Server, Socket } from 'socket.io';
+import { StateManagerService } from '../process-item/state-manager.service';
+import { MqttService } from '../mqtt/mqtt.service';
+
+interface ClientState {
+  jobId?: string;
+  userId?: string;
+  subscriptions: Set<string>;
+}
+
+@WebSocketGateway({
+  cors: {
+    origin: '*',
+  },
+  namespace: 'process-item'
+})
+export class ProcessItemGateway implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect {
+  @WebSocketServer()
+  server: Server;
+
+  private logger = new Logger(ProcessItemGateway.name);
+  private clients = new Map<string, ClientState>();
+
+  constructor(
+    private stateManager: StateManagerService,
+    private mqttService: MqttService
+  ) {}
+
+  afterInit(server: Server) {
+    this.logger.log('WebSocket Gateway initialized');
+    this.setupMqttListeners();
+  }
+
+  handleConnection(client: Socket) {
+    this.logger.log(`Client connected: ${client.id}`);
+    this.clients.set(client.id, {
+      subscriptions: new Set()
+    });
+  }
+
+  handleDisconnect(client: Socket) {
+    this.logger.log(`Client disconnected: ${client.id}`);
+    this.clients.delete(client.id);
+  }
+
+  private setupMqttListeners() {
+    // Listen to MQTT process-item state changes
+    this.mqttService.subscribe('process-item/state', (data) => {
+      this.broadcastStateUpdate(data);
+    });
+
+    // Listen to specific events
+    this.mqttService.subscribe('lock/openSuccess', (data) => {
+      this.broadcastEvent('lockOpenSuccess', data);
+    });
+
+    this.mqttService.subscribe('lock/openFail', (data) => {
+      this.broadcastEvent('lockOpenFail', data);
+    });
+
+    this.mqttService.subscribe('bin/openFail', (data) => {
+      this.broadcastEvent('binOpenFail', data);
+    });
+  }
+
+  @SubscribeMessage('subscribeJob')
+  handleSubscribeJob(
+    @MessageBody() data: { jobId: string },
+    @ConnectedSocket() client: Socket
+  ) {
+    const clientState = this.clients.get(client.id);
+    if (clientState) {
+      clientState.jobId = data.jobId;
+      clientState.subscriptions.add(data.jobId);
+
+      // Send current state
+      const machine = this.stateManager.getStateMachine(data.jobId);
+      if (machine) {
+        const context = machine.getContext();
+        client.emit('stateUpdate', {
+          jobId: data.jobId,
+          state: machine.getState(),
+          flags: {
+            isProcessingItem: context.isProcessingItem,
+            isCloseWarningPopup: context.isCloseWarningPopup,
+            isNextRequestItem: context.isNextRequestItem
+          },
+          progress: {
+            current: context.currentItemIndex,
+            total: context.totalItems
+          }
+        });
+      }
+    }
+
+    return { success: true };
+  }
+
+  @SubscribeMessage('unsubscribeJob')
+  handleUnsubscribeJob(
+    @MessageBody() data: { jobId: string },
+    @ConnectedSocket() client: Socket
+  ) {
+    const clientState = this.clients.get(client.id);
+    if (clientState) {
+      clientState.subscriptions.delete(data.jobId);
+    }
+    return { success: true };
+  }
+
+  @SubscribeMessage('updateFlag')
+  handleUpdateFlag(
+    @MessageBody() data: {
+      jobId: string,
+      flag: 'isCloseWarningPopup' | 'isNextRequestItem',
+      value: boolean
+    },
+    @ConnectedSocket() client: Socket
+  ) {
+    // Update flag in state machine
+    const machine = this.stateManager.getStateMachine(data.jobId);
+    if (machine) {
+      const context = machine.getContext();
+      context[data.flag] = data.value;
+
+      // Publish to MQTT
+      this.mqttService.publish(`job/${data.jobId}/process-item/status`, {
+        [data.flag]: data.value,
+        isProcessingItem: context.isProcessingItem
+      });
+
+      // Broadcast to all subscribed clients
+      this.broadcastToJob(data.jobId, 'flagUpdated', {
+        flag: data.flag,
+        value: data.value
+      });
+    }
+
+    return { success: true };
+  }
+
+  private broadcastStateUpdate(data: any) {
+    const { jobId, ...stateData } = data;
+    this.broadcastToJob(jobId, 'stateUpdate', {
+      jobId,
+      ...stateData
+    });
+  }
+
+  private broadcastEvent(event: string, data: any) {
+    if (data.jobId) {
+      this.broadcastToJob(data.jobId, event, data);
+    } else {
+      // Broadcast to all clients
+      this.server.emit(event, data);
+    }
+  }
+
+  private broadcastToJob(jobId: string, event: string, data: any) {
+    this.clients.forEach((clientState, clientId) => {
+      if (clientState.subscriptions.has(jobId)) {
+        const client = this.server.sockets.sockets.get(clientId);
+        if (client) {
+          client.emit(event, data);
+        }
+      }
+    });
+  }
+}
+
+// ========== 3. WebSocket Module (websocket/websocket.module.ts) ==========
+import { Module } from '@nestjs/common';
+import { ProcessItemGateway } from './process-item.gateway';
+import { StateManagerService } from '../process-item/state-manager.service';
+import { MqttModule } from '../mqtt/mqtt.module';
+
+@Module({
+  imports: [MqttModule],
+  providers: [ProcessItemGateway, StateManagerService],
+  exports: [ProcessItemGateway]
+})
+export class WebSocketModule {}
+
+// ========== 4. Client Example (example/client.ts) ==========
+// Example client code for consuming the WebSocket API
+import { io, Socket } from 'socket.io-client';
+
+class ProcessItemClient {
+  private socket: Socket;
+  private jobId: string;
+
+  constructor(url: string = 'http://localhost:3000') {
+    this.socket = io(`${url}/process-item`, {
+      reconnection: true,
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000,
+    });
+
+    this.setupEventHandlers();
+  }
+
+  private setupEventHandlers() {
+    this.socket.on('connect', () => {
+      console.log('Connected to WebSocket server');
+    });
+
+    this.socket.on('disconnect', () => {
+      console.log('Disconnected from WebSocket server');
+    });
+
+    this.socket.on('stateUpdate', (data) => {
+      console.log('State update:', data);
+      this.handleStateUpdate(data);
+    });
+
+    this.socket.on('lockOpenSuccess', (data) => {
+      console.log('Lock opened successfully:', data);
+    });
+
+    this.socket.on('lockOpenFail', (data) => {
+      console.log('Lock open failed:', data);
+      this.handleLockOpenFail(data);
+    });
+
+    this.socket.on('binOpenFail', (data) => {
+      console.log('Bin open failed:', data);
+    });
+
+    this.socket.on('flagUpdated', (data) => {
+      console.log('Flag updated:', data);
+    });
+  }
+
+  subscribeToJob(jobId: string) {
+    this.jobId = jobId;
+    this.socket.emit('subscribeJob', { jobId }, (response) => {
+      console.log('Subscribed to job:', response);
+    });
+  }
+
+  unsubscribeFromJob(jobId: string) {
+    this.socket.emit('unsubscribeJob', { jobId }, (response) => {
+      console.log('Unsubscribed from job:', response);
+    });
+  }
+
+  updateFlag(flag: 'isCloseWarningPopup' | 'isNextRequestItem', value: boolean) {
+    if (!this.jobId) {
+      console.error('No job ID set');
+      return;
+    }
+
+    this.socket.emit('updateFlag', {
+      jobId: this.jobId,
+      flag,
+      value
+    }, (response) => {
+      console.log('Flag updated:', response);
+    });
+  }
+
+  private handleStateUpdate(data: any) {
+    // Update UI based on state
+    const { state, flags, progress } = data;
+
+    // Update progress bar
+    if (progress) {
+      const percentage = (progress.current / progress.total) * 100;
+      console.log(`Progress: ${percentage.toFixed(1)}%`);
+    }
+
+    // Update UI flags
+    if (flags) {
+      console.log('Flags:', flags);
+      // Update UI elements based on flags
+      if (flags.isProcessingItem) {
+        // Show processing indicator
+      }
+      if (!flags.isCloseWarningPopup) {
+        // Show warning popup
+      }
+    }
+  }
+
+  private handleLockOpenFail(data: any) {
+    // Show retry dialog
+    const retry = confirm('Lock open failed. Do you want to retry?');
+    if (retry) {
+      // User can manually retry or skip
+      this.updateFlag('isNextRequestItem', true);
+    }
+  }
+
+  disconnect() {
+    this.socket.disconnect();
+  }
+}
+
+// Usage example
+const client = new ProcessItemClient();
+client.subscribeToJob('job-123');
+
+// User interactions
+// When user closes warning popup
+client.updateFlag('isCloseWarningPopup', true);
+
+// When user wants to continue to next item
+client.updateFlag('isNextRequestItem', true);
+
+// ========== 5. Configuration (config/bull.config.ts) ==========
+import { registerAs } from '@nestjs/config';
+
+export default registerAs('bull', () => ({
+  redis: {
+    host: process.env.REDIS_HOST || 'localhost',
+    port: parseInt(process.env.REDIS_PORT || '6379', 10),
+    password: process.env.REDIS_PASSWORD,
+  },
+  defaultJobOptions: {
+    attempts: 3,
+    backoff: {
+      type: 'exponential',
+      delay: 5000,
+    },
+    removeOnComplete: false,
+    removeOnFail: false,
+  },
+}));
+
+// ========== 6. Main App Module Update (app.module.ts) ==========
+import { Module } from '@nestjs/common';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { BullModule

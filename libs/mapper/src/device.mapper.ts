@@ -100,7 +100,7 @@ export class DeviceMapper {
       retryCount: model.retryCount,
       isUpdateWeight: model.isUpdateWeight,
       label: model.label,
-      description: model.description ? this._toDescriptionEntity(model.description) : undefined,
+      description: model.description ? this._toDescriptionEntity(model.description) : {},
       createdAt: model.createdAt?.toISOString(),
       updatedAt: model.updatedAt?.toISOString(),
     });

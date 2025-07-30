@@ -13,17 +13,18 @@ export type WorkOrderItem = {
 };
 
 export type LocationItem = {
-  cabinet: { id: string; name: string };
+  cabinet?: { id: string; name: string };
   bin: { id: string; name: string; row: number };
   preQty: number;
   requestQty: number;
+  quantity: number;
 };
 
 export class ReturnItemEntity extends BaseEntity {
   itemId: string;
   userId: string;
   quantity: number;
-  listWo: WorkOrderItem[];
+  workOrders: WorkOrderItem[];
   locations: LocationItem[];
   binId: string;
 

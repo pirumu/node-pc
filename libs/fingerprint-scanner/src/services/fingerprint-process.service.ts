@@ -63,7 +63,8 @@ export class FingerprintProcessService implements OnModuleDestroy {
     try {
       this._logger.log('Starting fingerprint process...');
 
-      const binaryPath = path.resolve(this._config.binaryPath);
+      const binaryPath = this._config.binaryPath;
+      this._logger.log('Binary path', binaryPath);
       const args = [this._config.devicePort];
 
       if (this._processObservable$) {

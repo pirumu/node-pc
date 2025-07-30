@@ -1,9 +1,9 @@
 import { AreaMRepository } from '@dals/mongo/repositories';
-
-import { IAreaRepository } from '../area.repository';
 import { AreaEntity } from '@entity';
 import { AreaMapper } from '@mapper';
 import { Injectable } from '@nestjs/common';
+
+import { IAreaRepository } from '../area.repository';
 
 @Injectable()
 export class AreaImplRepository implements IAreaRepository {

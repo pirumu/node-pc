@@ -1,5 +1,5 @@
-import { resolve } from '@config/core';
 import { AppConfig } from '@config/contracts';
+import { resolve } from '@config/core';
 
 export const getAppConfig = (): AppConfig => ({
   name: resolve('APP_NAME', String, { default: 'Gedong AST API' }),

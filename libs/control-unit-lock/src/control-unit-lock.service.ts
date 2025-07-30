@@ -1,53 +1,218 @@
 import { CuResponse } from '@culock/protocols/cu';
 import { ScuResponse } from '@culock/protocols/scu/scu.types';
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectSerialManager, ISerialAdapter } from '@serialport/serial';
 import { lastValueFrom } from 'rxjs';
 
+import { DETECT_CU_PORT_MESSAGE, DETECT_SCU_PORT_MESSAGE } from './control-unit-lock.constants';
 import { CuLockRequest } from './dto';
-import { BaseResponse, IProtocol, ProtocolFactory, ProtocolType } from './protocols';
+import { BaseResponse, IProtocol, LOCK_STATUS, ProtocolFactory, ProtocolType } from './protocols';
 
 @Injectable()
-export class ControlUnitLockService {
+export class ControlUnitLockService implements OnModuleInit {
+  private readonly _logger: Logger = new Logger(ControlUnitLockService.name);
+  private readonly _controlUnitLockPorts: string[] = [];
+  private readonly _subControlUnitPorts: string[] = [];
+
   constructor(@InjectSerialManager() private readonly _serialManager: ISerialAdapter) {}
 
+  public async onModuleInit(): Promise<void> {
+    await this._detectPorts();
+  }
+
   public async execute(request: CuLockRequest): Promise<BaseResponse> {
+    if (!this._canProcessRequest(request)) {
+      throw new Error(`No port available for protocol: ${request.protocol}`);
+    }
     const protocol = ProtocolFactory.createProtocol(request.protocol);
 
     if (this._isMultipleRequest(request)) {
       return this._handleMultipleRequest(request, protocol);
     }
-
     return this._handleSingleRequest(request, protocol);
   }
 
+  private _canProcessRequest(request: CuLockRequest): boolean {
+    if (request.protocol === ProtocolType.CU) {
+      return this._controlUnitLockPorts.length > 0;
+    }
+    return this._subControlUnitPorts.length > 0;
+  }
   private async _handleSingleRequest(request: CuLockRequest, protocol: IProtocol<BaseResponse>): Promise<ScuResponse> {
+    const port = this._subControlUnitPorts[0];
+    if (!(await this._isPortOpen(port))) {
+      throw new Error(`Port not open: ${request.protocol}`);
+    }
+
     const msg = protocol.createMessage({
       command: request.command,
       deviceId: request.deviceId,
       lockId: 0,
     });
-    this._serialManager.write(request.path, msg);
+    this._serialManager.write(port, msg);
 
-    const response = await lastValueFrom(this._serialManager.onData(request.path));
-    return protocol.parseResponse(Buffer.from(response));
+    const response = await lastValueFrom(this._serialManager.onData(port));
+    return protocol.parseResponse(Buffer.from(response)) as ScuResponse;
   }
 
   private async _handleMultipleRequest(request: CuLockRequest, protocol: IProtocol<BaseResponse>): Promise<CuResponse> {
-    const msgs = protocol.createMessages({
+    const port = this._controlUnitLockPorts[0];
+    if (!(await this._isPortOpen(port))) {
+      throw new Error(`Port not open: ${request.protocol}`);
+    }
+
+    const messages = protocol.createMessages({
       command: request.command,
       deviceId: request.deviceId,
       lockIds: request.lockIds,
     });
 
-    for (const msg of msgs) {
-      this._serialManager.write(request.path, msg);
+    for (const msg of messages) {
+      this._serialManager.write(port, msg);
     }
-    const response = await lastValueFrom(this._serialManager.onData(request.path));
-    return protocol.parseResponse(Buffer.from(response));
+    const response = await lastValueFrom(this._serialManager.onData(port));
+    const result = protocol.parseResponse(Buffer.from(response)) as CuResponse;
+    return this._filterStatus(request.lockIds, result);
   }
 
   private _isMultipleRequest(request: CuLockRequest): boolean {
     return request.protocol === ProtocolType.CU;
+  }
+
+  private async _detectPorts(): Promise<void> {
+    this._logger.log(`Starting detect port for culock`);
+    try {
+      const availablePorts = await lastValueFrom(this._serialManager.listPorts());
+      this._logger.debug(`Found ${availablePorts.length} available ports`, availablePorts);
+      if (!availablePorts || availablePorts.length === 0) {
+        this._logger.warn('No port found for culock. Skipping');
+        return;
+      }
+      for (const portInfo of availablePorts) {
+        await this._scanSinglePort(portInfo.path);
+      }
+      this._logger.log('Scan completed:', {
+        scu: this._controlUnitLockPorts.length,
+        cu: this._subControlUnitPorts.length,
+      });
+    } catch (error) {
+      this._logger.error('Error during port scanning:', {
+        message: error.message,
+        name: error.name,
+        stack: error.stack,
+      });
+      throw error;
+    }
+  }
+
+  private async _scanSinglePort(portPath: string): Promise<void> {
+    this._logger.log(`Scanning port: ${portPath}`);
+
+    try {
+      // Open port
+      const state = await lastValueFrom(this._serialManager.open(portPath, { baudRate: 19200 }));
+
+      if (!state.isOpen) {
+        this._logger.error(`Failed to open port: ${portPath}`);
+        return;
+      }
+      const isCuHardware = await this._checkCuHardware(portPath);
+
+      if (isCuHardware) {
+        this._logger.log(`Found CU hardware on: ${portPath}`);
+      } else {
+        const isScuHardware = await this._checkScuHardware(portPath);
+        if (isScuHardware) {
+          this._logger.log(`Found SCU hardware on: ${portPath}`);
+        }
+      }
+      this._addPort(portPath, isCuHardware ? ProtocolType.CU : ProtocolType.CU);
+    } catch (error) {
+      this._logger.error(`Error scanning port ${portPath}:`, {
+        message: error.message,
+        name: error.name,
+        stack: error.stack,
+      });
+      try {
+        await lastValueFrom(this._serialManager.close(portPath));
+      } catch (closeError) {
+        this._logger.warn(`Failed to close port ${portPath}:`, {
+          message: closeError.message,
+          name: closeError.name,
+          stack: closeError.stack,
+        });
+      }
+    }
+  }
+
+  private async _checkScuHardware(portPath: string): Promise<boolean> {
+    try {
+      this._serialManager.write(portPath, Buffer.from(DETECT_SCU_PORT_MESSAGE));
+      const response = await lastValueFrom(this._serialManager.onData(portPath));
+      const buffer = Buffer.isBuffer(response) ? response : Buffer.from(response, 'hex');
+      return this._isScuResponse(buffer);
+    } catch (error) {
+      this._logger.error(`SCU check error on ${portPath}:`, {
+        message: error.message,
+        name: error.name,
+        stack: error.stack,
+      });
+      return false;
+    }
+  }
+
+  private async _checkCuHardware(portPath: string): Promise<boolean> {
+    try {
+      this._serialManager.write(portPath, Buffer.from(DETECT_CU_PORT_MESSAGE));
+      const response = await lastValueFrom(this._serialManager.onData(portPath));
+      const buffer = Buffer.isBuffer(response) ? response : Buffer.from(response, 'hex');
+      return this._isCuResponse(buffer);
+    } catch (error) {
+      this._logger.error(`CU check error on ${portPath}:`, {
+        message: error.message,
+        name: error.name,
+        stack: error.stack,
+      });
+      return false;
+    }
+  }
+
+  private _isScuResponse(data: Buffer): boolean {
+    return data.length >= 3 && data[0] === 0xf5 && data[2] === 0x70;
+  }
+
+  private _isCuResponse(data: Buffer): boolean {
+    return data.length >= 4 && data[0] === 0x02 && data[3] === 0x75;
+  }
+
+  private _addPort(portPath: string, type: ProtocolType): void {
+    switch (type) {
+      case ProtocolType.SCU:
+        if (!this._subControlUnitPorts.includes(portPath)) {
+          this._subControlUnitPorts.push(portPath);
+        }
+        break;
+      case ProtocolType.CU:
+        if (!this._controlUnitLockPorts.includes(portPath)) {
+          this._controlUnitLockPorts.push(portPath);
+        }
+        break;
+    }
+  }
+
+  private async _isPortOpen(portPath: string): Promise<boolean> {
+    return lastValueFrom(this._serialManager.isOpen(portPath));
+  }
+
+  private _filterStatus(lockIds: number[], result: CuResponse): CuResponse {
+    if (lockIds.length === 0) {
+      return result;
+    }
+    const status = {} as { [lockId: number]: LOCK_STATUS };
+    for (const lockId of lockIds) {
+      status[lockId] = result.lockStatuses[lockId];
+    }
+    result.lockStatuses = status;
+    return result;
   }
 }

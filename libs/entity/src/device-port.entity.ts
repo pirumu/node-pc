@@ -1,6 +1,7 @@
+import { Properties } from '@framework/types';
+
 import { DeviceEntity } from './device.entity';
 import { PortEntity } from './port.entity';
-import { Properties } from '@framework/types';
 
 export class DevicePortEntity extends DeviceEntity {
   port?: PortEntity;

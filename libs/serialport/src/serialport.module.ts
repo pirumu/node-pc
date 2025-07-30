@@ -1,6 +1,5 @@
-import { DynamicModule, Global, Module, Provider } from '@nestjs/common';
+import { DynamicModule, Module, Provider } from '@nestjs/common';
 
-import { ISerialAdapter } from './serial';
 import { SerialPortAdapter } from './serial/impl';
 import { SERIAL_PORT_MANAGER } from './serial/serial.constants';
 import { DISCOVERY_CONFIG, MONITORING_CONFIG, SERIALPORT_MODULE_CONFIG } from './serialport.constants';
@@ -19,7 +18,6 @@ export type SerialportModuleAsyncOptions = {
   useExisting?: any;
 };
 
-@Global()
 @Module({})
 export class SerialportModule {
   public static forRootAsync(options: SerialportModuleAsyncOptions): DynamicModule {
@@ -28,6 +26,7 @@ export class SerialportModule {
     const monitoringConfigProvider = this._createMonitoringConfigProvider();
 
     return {
+      global: true,
       module: SerialportModule,
       providers: [
         configProvider,
@@ -35,27 +34,12 @@ export class SerialportModule {
         monitoringConfigProvider,
         {
           provide: SERIAL_PORT_MANAGER,
-          useFactory: (discoveryConfig: DiscoveryConfig) => {
-            return new SerialPortAdapter(discoveryConfig.serialOptions);
-          },
-          inject: [DISCOVERY_CONFIG],
+          useClass: SerialPortAdapter,
         },
-        {
-          provide: PortDiscoveryService,
-          useFactory: (discoveryConfig: DiscoveryConfig, serialAdapter: ISerialAdapter) => {
-            return new PortDiscoveryService(discoveryConfig, serialAdapter);
-          },
-          inject: [DISCOVERY_CONFIG, SERIAL_PORT_MANAGER],
-        },
-        {
-          provide: PortMonitoringService,
-          useFactory: (serialAdapter: ISerialAdapter, portDiscovery: PortDiscoveryService) => {
-            return new PortMonitoringService(serialAdapter, portDiscovery);
-          },
-          inject: [SERIAL_PORT_MANAGER, PortDiscoveryService],
-        },
+        PortDiscoveryService,
+        PortMonitoringService,
       ],
-      exports: [SERIAL_PORT_MANAGER, PortDiscoveryService, PortMonitoringService, SerialPortAdapter],
+      exports: [PortDiscoveryService, PortMonitoringService, SERIAL_PORT_MANAGER],
     };
   }
 

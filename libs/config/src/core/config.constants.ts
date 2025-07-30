@@ -8,4 +8,5 @@ export enum CONFIG_KEY {
   FINGERPRINT = 'fingerprint',
   HID = 'hid',
   LOADCELL_MONITORING = 'loadCellMonitoring',
+  SERIALPORT = 'serialport',
 }

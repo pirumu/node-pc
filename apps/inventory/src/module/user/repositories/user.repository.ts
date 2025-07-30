@@ -1,5 +1,5 @@
-import { QueryCondition } from '@framework/types';
 import { UserEntity } from '@entity';
+import { QueryCondition } from '@framework/types';
 
 export interface IUserRepository {
   findById(userId: string): Promise<UserEntity | null>;

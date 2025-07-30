@@ -11,6 +11,7 @@ import {
   DeleteResult,
   AnyBulkWriteOperation,
 } from 'mongoose';
+
 import { SoftDeleteDocument, SoftDeleteModel } from './plugins/soft-delete';
 
 export type LeanDocument<T> = T & {

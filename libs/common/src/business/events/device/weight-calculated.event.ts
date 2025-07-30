@@ -2,14 +2,14 @@ import { EVENT_TYPE } from '@common/constants';
 import { IAppEvent } from '@common/interfaces';
 import { Properties } from '@framework/types';
 
-export class WeighCalculatedEvent implements IAppEvent {
+export class WeightCalculatedEvent implements IAppEvent {
   public readonly path: string;
   public readonly deviceId: number;
   public readonly weight: number;
   public readonly status: string;
   public readonly timestamp: string;
 
-  constructor(props: Properties<WeighCalculatedEvent>) {
+  constructor(props: Properties<WeightCalculatedEvent>) {
     Object.assign(this, props);
   }
 

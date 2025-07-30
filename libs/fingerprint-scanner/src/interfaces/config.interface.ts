@@ -20,6 +20,6 @@ export const DEFAULT_CONFIG: IFingerprintScanConfig = {
   logLevel: 'error',
   autoRestart: true,
   autoRetry: true,
-  cleanupInterval: 5 * 60 * 1000, // 5 minutes
-  maxCommandAge: 60 * 1000, // 1 minute
+  cleanupInterval: 60 * 1000, // 1m
+  maxCommandAge: 30000, // 30s
 };

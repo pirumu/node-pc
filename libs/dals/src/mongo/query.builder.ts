@@ -7,8 +7,7 @@ import {
   QueryOperator,
   QueryRequest,
 } from '@framework/types';
-import { QueryOptions } from 'mongoose';
-import { PipelineStage } from 'mongoose';
+import { QueryOptions, PipelineStage } from 'mongoose';
 
 const OPERATOR_MAP: Record<QueryOperator, string> = {
   [QueryOperator.EQUAL]: '$eq',

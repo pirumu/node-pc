@@ -5,7 +5,7 @@ import { MessagePattern, Payload } from '@nestjs/microservices';
 import { LoadcellMqttRequest } from './dto/request';
 import { LoadcellBridgeService } from './loadcell-bridge.service';
 
-@Controller()
+@Controller('loadcell-mqtt')
 export class LoadcellMqttController {
   private readonly _logger = new Logger(LoadcellMqttController.name);
 

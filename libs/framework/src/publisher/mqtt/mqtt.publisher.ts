@@ -1,10 +1,10 @@
+import { TRACING_ID } from '@framework/constants';
 import { MQTTPublishOptions } from '@framework/publisher/mqtt/mqtt.types';
 import { Logger } from '@nestjs/common';
 import { ClientProxy, ClientProxyFactory, MqttRecordBuilder, Transport } from '@nestjs/microservices';
+import { ClsServiceManager } from 'nestjs-cls';
 
 import { IPublisher } from '../publisher.types';
-import { TRACING_ID } from '@framework/constants';
-import { ClsServiceManager } from 'nestjs-cls';
 
 export class MQTTPublisher implements IPublisher {
   private readonly _logger = new Logger(MQTTPublisher.name);

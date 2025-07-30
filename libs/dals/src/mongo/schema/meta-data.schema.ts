@@ -1,5 +1,6 @@
 import { ModelDefinition, Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Schema as MSchema } from 'mongoose';
+
 // d
 import { BaseSchema } from './base.schema';
 import { schemaOptions } from './default.options';

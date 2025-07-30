@@ -116,6 +116,7 @@ export class ScuProtocol implements IProtocol<ScuResponse> {
         deviceId: 0,
         isSuccess: false,
         raw: data ? data.toString('hex') : 'null',
+        lockStatus: LOCK_STATUS.UNKNOWN,
       };
     }
 
@@ -136,7 +137,7 @@ export class ScuProtocol implements IProtocol<ScuResponse> {
       isValid,
       deviceId,
       isSuccess,
-      lockStatus: isSuccess ? lockStatus : undefined,
+      lockStatus: isSuccess ? lockStatus : LOCK_STATUS.UNKNOWN,
       raw: data.toString('hex'),
     };
   }

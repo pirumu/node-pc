@@ -28,10 +28,6 @@ export class FingerprintScanService implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   public async onModuleInit(): Promise<void> {
-    await this._processService.startProcess();
-    this._setupResponseProcessing();
-    this._startPeriodicCleanup();
-
     this._logger.log('Fingerprint scan service ready');
   }
 
@@ -53,6 +49,10 @@ export class FingerprintScanService implements OnModuleInit, OnModuleDestroy {
 
   public getProcessStatus$(): Observable<ProcessStatus> {
     return this._processService.getProcessStatus$();
+  }
+
+  public async startProcess(): Promise<boolean> {
+    return this._processService.startProcess();
   }
 
   public async restartProcess(): Promise<boolean> {

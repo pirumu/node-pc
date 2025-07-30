@@ -1,7 +1,6 @@
 import { AppConfig } from '@config/contracts';
 import { CONFIG_KEY } from '@config/core';
 import { API_MODELS, API_MONGO_REPOSITORIES, MongoDALModule } from '@dals/mongo';
-// import { DEFAULT_CONFIG, FingerprintScanModule } from '@fingerprint-scanner';
 import { TRACING_ID } from '@framework/constants';
 import { AppLoggerModule } from '@framework/logger';
 import { PublisherModule } from '@framework/publisher';

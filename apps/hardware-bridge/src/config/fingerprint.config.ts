@@ -22,7 +22,7 @@ export const getFingerprintConfig = (): FingerprintConfig => {
     binaryPath: resolve(
       'FINGERPRINT_BINARY_PATH',
       (value) => {
-        return path.join(process.cwd(), String(value));
+        return String(value);
       },
       { require: process.env.FINGERPRINT_AUTH_ENABLED === 'true' },
     ),

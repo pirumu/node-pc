@@ -12,6 +12,4 @@ export class CulockService {
   public async status(request: any) {
     return this._controlUnitLockService.execute(request);
   }
-
-  public async track(request: any) {}
 }

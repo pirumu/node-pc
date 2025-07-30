@@ -5,7 +5,7 @@ import { IContextualResponse, FINGERPRINT_CMD, FingerprintScanService, Fingerpri
 import { Inject, Injectable, InternalServerErrorException, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { lastValueFrom, timeout } from 'rxjs';
 
-import { IFingerprintRepository } from './repositories';
+import { FINGERPRINT_REPOSITORY_TOKEN, IFingerprintRepository } from './repositories';
 
 @Injectable()
 export class FingerprintService implements OnModuleInit, OnModuleDestroy {
@@ -14,20 +14,20 @@ export class FingerprintService implements OnModuleInit, OnModuleDestroy {
   private readonly _logger = new Logger(FingerprintService.name);
   private _fingerprintContext: FingerprintContextInstance;
   constructor(
-    @Inject() private readonly _repository: IFingerprintRepository,
-    private readonly _fingerprintScanService: FingerprintScanService,
+    @Inject(FingerprintScanService) private readonly _fingerprintScanService: FingerprintScanService,
+    @Inject(FINGERPRINT_REPOSITORY_TOKEN) private readonly _repository: IFingerprintRepository,
   ) {}
 
   public onModuleInit(): void {
-    this._fingerprintScanService.getProcessStatus$().subscribe({
-      next: (r) => {
-        this._logger.log('Fingerprint Scanner Status', r);
-      },
-      error: (err) => this._logger.error('Fingerprint Scanner Error', err),
-      complete: () => {
-        this._logger.log('Fingerprint Scanner Complete');
-      },
-    });
+    // this._fingerprintScanService.getProcessStatus$().subscribe({
+    //   next: (r) => {
+    //     this._logger.log('Fingerprint Scanner Status', r);
+    //   },
+    //   error: (err) => this._logger.error('Fingerprint Scanner Error', err),
+    //   complete: () => {
+    //     this._logger.log('Fingerprint Scanner Complete');
+    //   },
+    // });
 
     this._fingerprintContext = this._fingerprintScanService.createContext({
       name: FingerprintService.name,
@@ -79,6 +79,7 @@ export class FingerprintService implements OnModuleInit, OnModuleDestroy {
 
   private async _executeVerification(): Promise<IContextualResponse> {
     try {
+      this._fingerprintScanService.restartProcess();
       const sendResult = await this._fingerprintContext.sendCommandWithRetry(FINGERPRINT_CMD.VERIFY);
 
       this._logger.log('Sending verification command result', sendResult);

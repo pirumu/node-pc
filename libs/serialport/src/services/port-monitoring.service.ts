@@ -2,7 +2,7 @@ import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/commo
 import { Observable, BehaviorSubject, Subject, timer, EMPTY, forkJoin } from 'rxjs';
 import { map, distinctUntilChanged, takeUntil, tap, catchError, debounceTime, switchMap, filter } from 'rxjs/operators';
 
-import { ConnectionStats, ISerialAdapter, PortStatus } from '../serial';
+import { ConnectionStats, InjectSerialManager, ISerialAdapter, PortStatus } from '../serial';
 
 import { PortDiscoveryService } from './port-discovery.service';
 
@@ -34,7 +34,7 @@ export type MonitoringConfig = {
 
 @Injectable()
 export class PortMonitoringService implements OnModuleInit, OnModuleDestroy {
-  private readonly _logger = new Logger(PortMonitoringService.name);
+  private readonly _logger = new Logger('SerialPortMonitoringService');
   private readonly _destroy$ = new Subject<void>();
 
   // State management
@@ -57,8 +57,8 @@ export class PortMonitoringService implements OnModuleInit, OnModuleDestroy {
   private _config = { ...this._defaultConfig };
 
   constructor(
-    private readonly _serialAdapter: ISerialAdapter,
     private readonly _portDiscovery: PortDiscoveryService,
+    @InjectSerialManager() private readonly _serialAdapter: ISerialAdapter,
   ) {}
 
   public onModuleInit(): void {

@@ -1,10 +1,10 @@
 import { Provider } from '@nestjs/common';
 
+import { DevicePublisherService } from './device-publisher.service';
 import { DeviceController } from './device.controller';
 import { DeviceService } from './device.service';
 import { DEVICE_REPOSITORY_TOKEN } from './repositories';
 import { DeviceImplRepository } from './repositories/impls';
-import { DevicePublisherService } from './device-publisher.service';
 
 export const CONTROLLERS = [DeviceController];
 export const SERVICES_PROVIDERS = [DeviceService, DevicePublisherService];

@@ -1,5 +1,6 @@
-import { BaseEntity } from './base.entity';
 import { Properties } from '@framework/types';
+
+import { BaseEntity } from './base.entity';
 
 export type TabletSettings = {};
 

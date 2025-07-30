@@ -1,8 +1,9 @@
-import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit, OnModuleDestroy, Inject } from '@nestjs/common';
 import { Observable, BehaviorSubject, Subject, timer, EMPTY, from } from 'rxjs';
 import { map, switchMap, distinctUntilChanged, takeUntil, tap, catchError, debounceTime } from 'rxjs/operators';
 
-import { ISerialAdapter, SerialOptions, SerialPortInfo, SerialPortState } from '../serial';
+import { InjectSerialManager, ISerialAdapter, SerialOptions, SerialPortInfo, SerialPortState } from '../serial';
+import { DISCOVERY_CONFIG } from '@serialport/serialport.constants';
 
 export type DiscoveryConfig = {
   enabled: boolean;
@@ -48,8 +49,8 @@ export class PortDiscoveryService implements OnModuleInit, OnModuleDestroy {
   private readonly _connectedPorts$ = new BehaviorSubject<Map<string, ConnectedPort>>(new Map());
 
   constructor(
-    private readonly _configs: DiscoveryConfig,
-    private readonly _serialAdapter: ISerialAdapter,
+    @Inject(DISCOVERY_CONFIG) private readonly _configs: DiscoveryConfig,
+    @InjectSerialManager() private readonly _serialAdapter: ISerialAdapter,
   ) {
     this._configs = { ...defaultConfig, ...this._configs };
   }

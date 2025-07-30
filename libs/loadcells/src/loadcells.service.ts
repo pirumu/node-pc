@@ -1,5 +1,5 @@
 import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
-import { ISerialAdapter } from '@serialport/serial';
+import { InjectSerialManager, ISerialAdapter } from '@serialport/serial';
 import { Observable, Subject, BehaviorSubject, timer, EMPTY, from, forkJoin } from 'rxjs';
 import { map, takeUntil, tap, catchError, switchMap, filter, retry, mergeMap } from 'rxjs/operators';
 
@@ -52,7 +52,7 @@ export class LoadcellsService implements OnModuleInit, OnModuleDestroy {
 
   private readonly _messageAddresses: number[];
 
-  constructor(private readonly _serialAdapter: ISerialAdapter) {
+  constructor(@InjectSerialManager() private readonly _serialAdapter: ISerialAdapter) {
     this._messageAddresses = this._allMessages.map((msg) => parseInt(this._getBufferContent(msg.data).slice(0, 2), 16));
     this._currentMessages$.next([...this._allMessages]);
   }
@@ -538,9 +538,9 @@ export class LoadcellsService implements OnModuleInit, OnModuleDestroy {
 
   private _createInitialStats(): LoadCellStats {
     return {
-      totalMessages: this._allMessages.length,
+      totalMessages: this._allMessages?.length || 0,
       onlineDevices: [],
-      activeMessages: this._allMessages.length,
+      activeMessages: this._allMessages?.length || 0,
       readingsCount: 0,
       errorsCount: 0,
     };

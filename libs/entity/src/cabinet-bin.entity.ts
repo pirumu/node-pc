@@ -1,6 +1,7 @@
-import { CabinetEntity } from './cabinet.entity';
 import { BinEntity } from '@entity/bin.entity';
 import { Properties } from '@framework/types';
+
+import { CabinetEntity } from './cabinet.entity';
 
 export class CabinetBinEntity extends CabinetEntity {
   bins: BinEntity[];

@@ -17,11 +17,10 @@ export class CardScanService implements OnModuleInit {
   ) {}
 
   public async onModuleInit(): Promise<void> {
-    this._initializeDeviceScanning();
-    this._subscribeToHidData();
+    await this._initializeDeviceScanning();
   }
 
-  private _initializeDeviceScanning(): void {
+  private async _initializeDeviceScanning(): Promise<void> {
     const hidDeviceConfig = this._configService.getOrThrow<HidDeviceConfig>(CONFIG_KEY.HID);
     this._hidService.setConfig(hidDeviceConfig);
 
@@ -29,10 +28,21 @@ export class CardScanService implements OnModuleInit {
     this._hidService.connect();
 
     // Monitor connection status
-    this._hidService.reconnectStatus$.subscribe(async (status) => {
-      const isConnected = status === 'connected';
-      const event = new CardDeviceConnectedEvent({ isConnected });
-      return this._publisherService.publish(Transport.MQTT, event.getChannel(), event.getPayload());
+    this._hidService.reconnectStatus$.subscribe({
+      next: async (status) => {
+        const isConnected = status === 'connected';
+        const event = new CardDeviceConnectedEvent({ isConnected });
+        await this._publisherService.publish(Transport.MQTT, event.getChannel(), event.getPayload());
+        if (isConnected) {
+          this._subscribeToHidData(); // Subscribe only when connected
+        }
+      },
+      error: (error) => {
+        this._logger.error('Received error', error);
+      },
+      complete: () => {
+        this._logger.log('Received complete');
+      },
     });
   }
 
@@ -41,7 +51,7 @@ export class CardScanService implements OnModuleInit {
       next: async (cardNumber) => {
         this._logger.log(`Card scanned: ${cardNumber}`);
         const event = new CardScanEvent({ cardNumber });
-        return this._publisherService.publish(Transport.MQTT, event.getChannel(), event.getPayload());
+        await this._publisherService.publish(Transport.MQTT, event.getChannel(), event.getPayload());
       },
       error: (error) => {
         this._logger.error('HID data stream error:', error);
