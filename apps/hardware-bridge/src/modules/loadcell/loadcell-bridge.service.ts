@@ -8,7 +8,7 @@ import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nest
 import { ConfigService } from '@nestjs/config';
 import { PortDiscoveryService, PortMonitoringService } from '@serialport';
 import { InjectSerialManager, ISerialAdapter } from '@serialport/serial';
-import { firstValueFrom, interval, lastValueFrom, Subject } from 'rxjs';
+import { firstValueFrom, from, interval, lastValueFrom, Subject } from 'rxjs';
 import { map, take, takeUntil, timeout } from 'rxjs/operators';
 
 import { LoadcellMqttRequest } from './dto/request';
@@ -137,7 +137,7 @@ export class LoadcellBridgeService implements OnModuleInit, OnModuleDestroy {
     const ports = await this._portDiscovery.refreshDiscover().toPromise();
     return {
       available: ports,
-      connected: this._portMonitoring.getCurrentPortStatus()?.connectedPorts || [],
+      connected: this._portMonitoring.getCurrentPortStatus()?.isOpen || [],
       verified: Array.from(this._portComIdMap.keys()),
     };
   }
@@ -317,22 +317,19 @@ export class LoadcellBridgeService implements OnModuleInit, OnModuleDestroy {
     this._logger.debug(`Testing port ${portPath} for loadcell...`);
 
     try {
-      await firstValueFrom(
-        this._serialAdapter.open(portPath, {
-          baudRate: 9600,
-          dataBits: 8,
-          stopBits: 1,
-          parity: 'none',
-        }),
-      );
+      await this._serialAdapter.open(portPath, {
+        baudRate: 9600,
+        dataBits: 8,
+        stopBits: 1,
+        parity: 'none',
+      });
 
       // Create promise to wait for valid response
       const verifyPromise = async (): Promise<boolean> =>
         new Promise<boolean>((resolve) => {
           let messageCount = 0;
 
-          const subscription = this._serialAdapter
-            .onData(portPath)
+          const subscription = from(this._serialAdapter.onData(portPath))
             .pipe(
               take(10), // Check first 10 messages max
               timeout(VERIFY_TIMEOUT),
@@ -373,7 +370,7 @@ export class LoadcellBridgeService implements OnModuleInit, OnModuleDestroy {
       const isLoadcellPort = await verifyPromise();
 
       // Close port after test
-      await lastValueFrom(this._serialAdapter.close(portPath));
+      await this._serialAdapter.close(portPath);
 
       return isLoadcellPort;
     } catch (error) {
@@ -391,7 +388,7 @@ export class LoadcellBridgeService implements OnModuleInit, OnModuleDestroy {
     ];
 
     for (const message of testMessages) {
-      await lastValueFrom(this._serialAdapter.write(port, message));
+      await this._serialAdapter.write(port, message);
       await sleep(100); // Wait 100ms between messages
     }
   }

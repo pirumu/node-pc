@@ -113,6 +113,12 @@ export class SerialportModule {
           discoveryRefreshInterval: 5000,
           maxIdleTime: 60000,
           enableEventLogging: true,
+          enablePerformanceTracking: false,
+          alertThresholds: {
+            maxFailedPorts: 0,
+            maxConnectingTime: 0,
+            minHealthScore: 0,
+          },
         };
 
         return {
