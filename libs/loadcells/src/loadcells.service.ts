@@ -81,7 +81,7 @@ export class LoadcellsService implements OnModuleInit, OnModuleDestroy {
   // Data stream callbacks for Promise-based adapter
   private _dataStreamCallbacks = new Map<string, (data: Buffer) => void>();
 
-  // NEW: Track callback unsubscribe functions
+  // Track callback unsubscribe functions
   private _callbackUnsubscribers = new Map<string, (() => void)[]>();
 
   private _portStates = new Map<string, 'connecting' | 'connected' | 'disconnecting' | 'disconnected'>();
@@ -180,7 +180,6 @@ export class LoadcellsService implements OnModuleInit, OnModuleDestroy {
       });
     });
 
-    // NEW: Connect to ports (this will open them)
     await this._connectToPorts();
     this._scheduleDiscoveryTimeout();
     this._startConnectionHealthMonitoring();
@@ -687,7 +686,7 @@ export class LoadcellsService implements OnModuleInit, OnModuleDestroy {
   private _extractComId(portPath: string): number {
     // Extract COM ID from port path (e.g., COM11 -> 11, /dev/ttyUSB0 -> 0)
     const comMatch = portPath.match(/COM(\d+)/i);
-    const ttyMatch = portPath.match(/ttyUSB(\d+)/);
+    const ttyMatch = portPath.match(/ttyS(\d+)/);
 
     if (comMatch) {
       return parseInt(comMatch[1]);
