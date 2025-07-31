@@ -95,20 +95,6 @@ export class SerialPortAdapter implements ISerialAdapter, OnModuleDestroy {
     }
   }
 
-  private _createParser(port: SerialPort, config: ParserConfig): any {
-    switch (config.type) {
-      case 'readline':
-        return port.pipe(new ReadlineParser(config.options || { delimiter: '\r\n' }));
-      case 'bytelength':
-        return port.pipe(new ByteLengthParser({ length: config.options?.length || 8 }));
-      case 'delimiter':
-        return port.pipe(new DelimiterParser({ delimiter: config.options?.delimiter || '\n' }));
-      case 'raw':
-      default:
-        return port;
-    }
-  }
-
   private _createBufferStrategy(source$: Observable<Buffer>, strategy: BufferStrategy): Observable<Buffer> {
     switch (strategy.type) {
       case 'none':
@@ -321,11 +307,8 @@ export class SerialPortAdapter implements ISerialAdapter, OnModuleDestroy {
       });
 
       try {
-        const handler = new SerialPortHandler(path, options, this._logger, this._createParser.bind(this));
-
-        connection.port = handler.port;
-        connection.parser = handler.parser;
-
+        const handler = new SerialPortHandler(path, options, this._logger);
+        connection.handler = handler;
         handler.rawData$.pipe(takeUntil(connection.destroy$)).subscribe({
           next: (data) => connection.rawData$.next(data),
           error: (err) => connection.error$.next(err),
@@ -366,11 +349,11 @@ export class SerialPortAdapter implements ISerialAdapter, OnModuleDestroy {
   }
   public write(path: string, data: string | Buffer): Observable<{ status: boolean }> {
     const connection = this._connections.get(path);
-    if (!connection?.port?.isOpen) {
+    if (!connection?.handler?.port?.isOpen) {
       return throwError(() => new Error(`Port ${path} is not open or does not exist.`));
     }
     return new Observable((subscriber) => {
-      connection.port!.write(data, (err) => {
+      connection.handler!.port.write(data, (err) => {
         if (err) {
           this._logger.error(`Write error on ${path}:`, err);
           connection.error$.next(err);
@@ -420,8 +403,8 @@ export class SerialPortAdapter implements ISerialAdapter, OnModuleDestroy {
       connection.destroy$.next();
       connection.destroy$.complete();
 
-      if (connection.port && connection.port.isOpen) {
-        connection.port.close((err) => {
+      if (connection.handler?.port && connection.handler.port?.isOpen) {
+        connection.handler.port.close((err) => {
           if (err) {
             this._logger.error(`Error closing port ${path}:`, err);
             subscriber.error(err);

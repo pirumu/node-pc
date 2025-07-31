@@ -1,9 +1,9 @@
 import { Logger } from '@nestjs/common';
 import { EMPTY, exhaustMap, Observable, Subject, throwError, timer } from 'rxjs';
-import { catchError, retry } from 'rxjs/operators';
-import { SerialPort, SerialPortOpenOptions } from 'serialport';
+import { buffer, catchError, filter, map, retry, scan } from 'rxjs/operators';
+import { ByteLengthParser, DelimiterParser, ReadlineParser, SerialPort, SerialPortOpenOptions } from 'serialport';
 
-import { ParserConfig, SerialOptions, SerialPortState } from '../serial-adapter.interface';
+import { BufferStrategy, ParserConfig, SerialOptions, SerialPortState } from '../serial-adapter.interface';
 
 /**
  * @internal
@@ -87,7 +87,6 @@ export class SerialPortHandler {
     path: string,
     options: SerialOptions,
     private readonly _logger: Logger,
-    private readonly _createParser: (port: SerialPort, config: ParserConfig) => any,
   ) {
     const portOptions: SerialPortOpenOptions<any> = {
       path,
@@ -99,11 +98,27 @@ export class SerialPortHandler {
     };
 
     this.port = new SerialPort(portOptions);
-    this.parser = this._createParser(this.port, options.parser || { type: 'raw' });
+    this.parser = this._createParser(options.parser || { type: 'raw' });
+    if (this.parser === null) {
+      this.parser = this.port;
+    }
     this.rawData$ = new Subject<Buffer>();
     this.error$ = new Subject<Error>();
 
     this._setupListeners(options);
+  }
+
+  private _createParser(config: ParserConfig): any {
+    switch (config.type) {
+      case 'readline':
+        return this.port.pipe(new ReadlineParser(config.options || { delimiter: '\r\n' }));
+      case 'bytelength':
+        return this.port.pipe(new ByteLengthParser({ length: config.options?.length || 8 }));
+      case 'delimiter':
+        return this.port.pipe(new DelimiterParser({ delimiter: config.options?.delimiter || '\n' }));
+      case 'raw':
+        return null;
+    }
   }
 
   private _setupListeners(options: SerialOptions): void {

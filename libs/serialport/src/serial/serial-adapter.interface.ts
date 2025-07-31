@@ -1,5 +1,6 @@
 import { BehaviorSubject, Observable, Subject } from 'rxjs';
 import { SerialPort } from 'serialport';
+import { SerialPortHandler } from '@serialport/serial/impl/serial-port.helper';
 
 export type SerialPortInfo = {
   path: string;
@@ -55,8 +56,7 @@ export type SerialOptions = {
 
 export type SerialConnection = {
   path: string;
-  port?: SerialPort;
-  parser?: any;
+  handler?: SerialPortHandler;
   state$: BehaviorSubject<SerialPortState>;
   data$: Subject<Buffer>;
   rawData$: Subject<Buffer>;
