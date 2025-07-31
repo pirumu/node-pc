@@ -66,60 +66,56 @@ export class CuProtocol implements IProtocol<CuResponse> {
    * | 0x02   | 0x00-0xFF | 0x00   | 0x75      | 0x06      | 6 bytes (48 locks)| 0xXX    |
    * +--------+-----------+--------+-----------+-----------+-------------------+---------+
    */
-  public parseResponse(data: Buffer): CuResponse {
+  public parseResponse(deviceId: number, lockIds: number[], data: Buffer): CuResponse {
+    if (lockIds.length === 0) {
+      lockIds = DEFAULT_LOCK_IDS;
+    }
     // Basic validation
     if (!data || data.length < 6) {
       return {
-        isValid: false,
-        deviceId: 0,
+        deviceId: deviceId,
         isSuccess: false,
-        raw: data?.toString('hex') || 'null',
         lockStatuses: {},
       };
     }
 
     const bytes = Array.from(data);
 
-    // Verify checksum
-    const messageWithoutChecksum = bytes.slice(0, -1);
-    const lastByte = calculateChecksum(messageWithoutChecksum);
-    const isValidChecksum = lastByte === bytes[bytes.length - 1];
-
-    // Validate header
-    const isValid = bytes[0] === CU_MESSAGE_STRUCTURE.HEADER && isValidChecksum;
-    const deviceId = bytes[1];
+    // Validate response structure - matching JS logic
+    const header = bytes[0];
+    const nonValidateDeviceId = bytes[1];
     const statusByte = bytes[3];
-    const isSuccess = statusByte === CuResponseStatus.SUCCESS;
+
+    // Check if response is valid: header = 0x02, deviceId matches, status = 0x75
+    const isValidResponse = header === CU_MESSAGE_STRUCTURE.HEADER && statusByte === 0x75;
+    const isDeviceIdMatch = deviceId === nonValidateDeviceId;
+    const isSuccess = isValidResponse && isDeviceIdMatch;
 
     const result: CuResponse = {
-      isValid,
       deviceId,
       isSuccess,
-      raw: data.toString('hex'),
       lockStatuses: {},
     };
 
-    // Parse lock statuses
     if (isSuccess) {
-      // For GET_STATUS response
+      // For GET_STATUS response (variable length > 6)
       if (bytes.length > 6) {
-        const dataLength = bytes[4];
-        const statusData = bytes.slice(5, 5 + dataLength);
+        for (const lockId of lockIds) {
+          const byteIndex = Math.floor((lockId - 1) / 8);
+          const bitIndex = (lockId - 1) % 8;
+          const dataByte = bytes[4 + byteIndex];
 
-        for (let byteIndex = 0; byteIndex < statusData.length; byteIndex++) {
-          const byte = statusData[byteIndex];
-          for (let bit = 0; bit < 8; bit++) {
-            const lockId = byteIndex * 8 + bit + 1; // Convert to 1-based index
-            const isClosed = (byte >> bit) & 0x01;
-            result.lockStatuses[lockId] = isClosed ? LOCK_STATUS.CLOSED : LOCK_STATUS.OPEN;
+          if (dataByte !== undefined) {
+            const statusBit = (dataByte >> bitIndex) & 0x01;
+            result.lockStatuses[lockId] = statusBit === 1 ? LOCK_STATUS.CLOSED : LOCK_STATUS.OPEN;
           }
         }
       }
-      // For OPEN_LOCK response
+      // For OPEN_LOCK response (exactly 6 bytes)
       else if (bytes.length === 6) {
-        const lockId = bytes[2] + 1; // Convert to 1-based index
+        const lockId = bytes[2] + 1; // Convert back to 1-based index
         result.lockStatuses = {
-          [lockId]: LOCK_STATUS.OPEN, // Successful open means lock is now open
+          [lockId]: LOCK_STATUS.OPEN, // Successful open command response
         };
       }
     }

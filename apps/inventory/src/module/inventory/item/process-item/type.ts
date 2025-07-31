@@ -1,31 +1,31 @@
 export type User = {
   id: string;
-  user_cloud_id: string;
-  userLogin: string;
-  userRole: string;
+  cloudId: string;
+  loginId: string;
+  role: string;
 };
 
 export type BinData = {
   id: number;
-  cu_id: string;
-  lock_id: string;
-  is_failed: boolean;
-  is_locked: number;
-  count_failed: number;
+  cuId: number;
+  lockId: number;
+  isFailed: boolean;
+  isLocked: number;
+  countFailed: number;
   name: string;
   row: string;
 };
 
 export type Cabinet = {
-  id: number;
+  id: string;
   name: string;
 };
 
 export type ItemSpare = {
   id: string;
-  type: string;
-  changed_qty: number;
-  listWO?: any[];
+  action: 'issue' | 'return';
+  changedQty: number;
+  workOrders?: any[];
 };
 
 export type ItemData = {
@@ -35,23 +35,22 @@ export type ItemData = {
 };
 
 export type ProcessItemJobData = {
-  token: string;
-  type: 'issue' | 'return';
+  action: 'issue' | 'return';
   user: User;
   data: ItemData[];
-  request_qty: number;
-  uniqueId: string;
+  requestQty: number;
+  tabletId: string;
 };
 
 export type MqttMessage = {
-  deviceType: string;
-  deviceId: string;
-  lockId: string;
+  transactionId: number;
+  protocol: string;
+  deviceId: number;
+  lockId: number;
   user: User;
   type: string;
   data: ItemData;
-  transId: number;
-  is_final: boolean;
+  isFinal: boolean;
 };
 
 export type TabletSetting = {

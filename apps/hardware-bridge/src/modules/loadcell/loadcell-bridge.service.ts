@@ -278,20 +278,15 @@ export class LoadcellBridgeService implements OnModuleInit, OnModuleDestroy {
         verifiedPorts.push(port);
         const comId = this._extractComId(port);
         this._portComIdMap.set(port, comId);
-        this._logger.log(`✅ Verified loadcell on ${port} (COM ID: ${comId})`);
+        this._logger.log(`Verified loadcell on ${port} (COM ID: ${comId})`);
       }
     }
 
     if (verifiedPorts.length > 0) {
       this._logger.log(`Starting monitoring on ${verifiedPorts.length} verified ports`);
       await this._loadcellsService.start(verifiedPorts);
-
-      // Optionally save to file like old code
-      // fs.writeFileSync('usedPort.txt', verifiedPorts.join(','));
     } else {
       this._logger.warn('No loadcell ports found! Retrying in 30 seconds...');
-
-      // Retry after delay
       interval(30000) // 30s
         .pipe(takeUntil(this._destroy$))
         .subscribe(async () => this._autoDiscoverLoadcellPorts());
@@ -322,7 +317,6 @@ export class LoadcellBridgeService implements OnModuleInit, OnModuleDestroy {
     this._logger.debug(`Testing port ${portPath} for loadcell...`);
 
     try {
-      // Try to open port
       await firstValueFrom(
         this._serialAdapter.open(portPath, {
           baudRate: 9600,

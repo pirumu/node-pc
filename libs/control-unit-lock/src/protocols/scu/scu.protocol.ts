@@ -108,37 +108,30 @@ export class ScuProtocol implements IProtocol<ScuResponse> {
    *   - 0 = Open
    *   - 1 = Closed
    */
-  public parseResponse(data: Buffer): ScuResponse {
+  public parseResponse(deviceId: number, lockIds: number[], data: Buffer): ScuResponse {
     // Ensure we have 8 bytes
     if (!data || data.length < 8) {
       return {
-        isValid: false,
         deviceId: 0,
         isSuccess: false,
-        raw: data ? data.toString('hex') : 'null',
         lockStatus: LOCK_STATUS.UNKNOWN,
       };
     }
 
-    // Check header byte
-    const isValid = data[0] === SCU_MESSAGE_STRUCTURE.HEADER;
-
     // Extract device ID
-    const deviceId = data[1];
+    const extractDeviceId = data[1];
 
     // Check success status
-    const isSuccess = data[3] === ScuResponseStatus.SUCCESS;
+    const isSuccess = extractDeviceId === deviceId && data[3] === ScuResponseStatus.SUCCESS;
 
     // Extract lock status from bit 0 of byte 7
     const lockStatusBit = data[7] & 0x01;
     const lockStatus = lockStatusBit ? LOCK_STATUS.CLOSED : LOCK_STATUS.OPEN;
 
     return {
-      isValid,
       deviceId,
       isSuccess,
       lockStatus: isSuccess ? lockStatus : LOCK_STATUS.UNKNOWN,
-      raw: data.toString('hex'),
     };
   }
 

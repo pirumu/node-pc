@@ -1,6 +1,6 @@
-import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
-import { Observable, BehaviorSubject, Subject, timer, EMPTY, forkJoin } from 'rxjs';
-import { map, distinctUntilChanged, takeUntil, tap, catchError, debounceTime, switchMap, filter } from 'rxjs/operators';
+import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { BehaviorSubject, EMPTY, forkJoin, Observable, Subject, timer } from 'rxjs';
+import { catchError, debounceTime, distinctUntilChanged, filter, map, switchMap, takeUntil, tap } from 'rxjs/operators';
 
 import { ConnectionStats, InjectSerialManager, ISerialAdapter, PortStatus } from '../serial';
 
@@ -205,14 +205,13 @@ export class PortMonitoringService implements OnModuleInit, OnModuleDestroy {
       connected: this._serialAdapter.getConnectedPortsInfo(),
     }).pipe(
       map(({ available, connected }) => {
-        const status: PortStatus = {
+        return {
           availablePorts: available,
           connectedPorts: connected,
           totalAvailable: available.length,
           totalConnected: connected.length,
           unconnectedPorts: available.filter((port) => !connected.some((conn) => conn.path === port.path)),
         };
-        return status;
       }),
       catchError((error) => {
         this._logger.error('Failed to refresh port status:', error);

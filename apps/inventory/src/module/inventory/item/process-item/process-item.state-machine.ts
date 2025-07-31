@@ -1,7 +1,8 @@
+import { Logger } from '@nestjs/common';
+
 import { ProcessEvent, ProcessState } from '../item.constants';
 
 import { ProcessContext } from './type';
-import { Logger } from '@nestjs/common';
 
 export class ProcessItemStateMachine {
   private readonly _logger = new Logger(ProcessItemStateMachine.name);

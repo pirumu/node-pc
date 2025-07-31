@@ -1,7 +1,5 @@
-import { BehaviorSubject, Observable, of, Subject } from 'rxjs';
-import { map, takeUntil } from 'rxjs/operators';
-import { ReadlineParser, SerialPort } from 'serialport';
-import { AccumulatingParser } from '@serialport/serial/parsers';
+import { BehaviorSubject, Observable, Subject } from 'rxjs';
+import { SerialPort } from 'serialport';
 
 export type SerialPortInfo = {
   path: string;
@@ -11,32 +9,58 @@ export type SerialPortInfo = {
   productId?: string;
 };
 
-export type SerialOptions = {
-  baudRate: number;
-  dataBits?: 5 | 6 | 7 | 8;
-  stopBits?: 1 | 2;
-  parity?: 'none' | 'even' | 'odd';
-  flowControl?: boolean;
-  autoOpen?: boolean;
-  reconnectInterval?: number; // ms
-  maxReconnectAttempts?: number;
-  retryDelay?: number; // ms
-  maxRetries?: number;
-};
-
 export type SerialPortState = {
   path: string;
   isOpen: boolean;
   isConnecting: boolean;
   reconnectAttempts: number;
-  lastError?: Error;
+  lastError?: string;
+};
+
+export type ParserOptions = {
+  delimiter?: string | Buffer;
+  includeDelimiter?: boolean;
+  encoding?: 'ascii' | 'utf8' | 'utf16le' | 'ucs2' | 'base64' | 'binary' | 'hex';
+  length?: number;
+};
+
+export type ParserConfig = {
+  type: 'readline' | 'bytelength' | 'delimiter' | 'raw';
+  options?: ParserOptions;
+};
+
+export type BufferStrategy = {
+  type: 'none' | 'time' | 'size' | 'delimiter' | 'combined';
+  timeMs?: number;
+  size?: number;
+  delimiter?: Buffer;
+  maxBufferSize?: number;
+};
+
+export type SerialOptions = {
+  baudRate: number;
+  dataBits?: 8 | 7 | 6 | 5;
+  stopBits?: 1 | 2;
+  parity?: 'none' | 'even' | 'mark' | 'odd' | 'space';
+  autoOpen?: boolean;
+  parser?: ParserConfig;
+  bufferStrategy?: BufferStrategy;
+  reconnectStrategy?: 'retry' | 'interval' | 'exponential';
+  maxReconnectAttempts?: number;
+  retryDelay?: number;
+  validateData?: (data: Buffer) => boolean;
+  headerByte?: number;
+  flushOnError?: boolean;
 };
 
 export type SerialConnection = {
+  path: string;
   port?: SerialPort;
-  parser?: AccumulatingParser;
+  parser?: any;
   state$: BehaviorSubject<SerialPortState>;
   data$: Subject<Buffer>;
+  rawData$: Subject<Buffer>;
+  bufferedData$: Observable<Buffer>;
   error$: Subject<Error>;
   destroy$: Subject<void>;
   options: SerialOptions;
@@ -56,14 +80,6 @@ export type ConnectionSummary = {
   options: SerialOptions;
 };
 
-export type PortStatus = {
-  availablePorts: SerialPortInfo[];
-  connectedPorts: ConnectedPortInfo[];
-  totalAvailable: number;
-  totalConnected: number;
-  unconnectedPorts: SerialPortInfo[];
-};
-
 export type ConnectionStats = {
   totalConnections: number;
   openConnections: number;
@@ -71,17 +87,24 @@ export type ConnectionStats = {
   failedPorts: number;
 };
 
+export type PortStatus = {
+  availablePorts: SerialPortInfo[];
+  connectedPorts: SerialPortInfo[];
+  totalAvailable: number;
+  totalConnected: number;
+  unconnectedPorts: SerialPortInfo[];
+};
+
 export interface ISerialAdapter {
   listPorts(): Observable<SerialPortInfo[]>;
   open(path: string, options: SerialOptions): Observable<SerialPortState>;
-  write(path: string, data: string | Buffer): Observable<void>;
+  close(path: string): Observable<void>;
+  write(path: string, data: string | Buffer): Observable<{ status: boolean }>;
   onData(path: string): Observable<Buffer>;
   onError(path: string): Observable<Error>;
   onConnectionState(path: string): Observable<SerialPortState>;
   isOpen(path: string): Observable<boolean>;
-  close(path: string): Observable<void>;
   dispose(): Observable<void>;
-
   getConnectedPorts(): string[];
   getConnectedPortsInfo(): Observable<ConnectedPortInfo[]>;
   isPortConnected(path: string): boolean;

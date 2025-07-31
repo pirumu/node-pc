@@ -15,15 +15,13 @@ export type MessagesOptions = {
 };
 
 export type BaseResponse = {
-  isValid: boolean;
   deviceId: number;
   isSuccess: boolean;
-  raw: string;
 };
 
 export interface IProtocol<R> {
   createMessage(options: MessageOptions): Buffer;
   createMessages(options: MessagesOptions): Buffer[];
-  parseResponse(data: Buffer): R;
+  parseResponse(deviceId: number, lockIds: number[], data: Buffer): R;
   getProtocolType(): ProtocolType;
 }

@@ -1,445 +1,496 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { InjectQueue } from '@nestjs/bull';
-import { Queue, Job } from 'bull';
-import { MqttService } from '../mqtt/mqtt.service';
-import { StateManagerService } from './state-manager.service';
-import { ProcessItemStateMachine, ProcessState, ProcessEvent } from './process-item.state-machine';
-import { TransactionService } from '../transaction/transaction.service';
-import { BinService } from '../bin/bin.service';
-import { DeviceService } from '../device/device.service';
-import axios from 'axios';
-import * as https from 'https';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { Job, Queue } from 'bullmq';
+
+import { PROCESS_ITEM_TYPE, ProcessEvent, ProcessState } from '../item.constants';
+
+import { ProcessItemStateMachine } from './process-item.state-machine';
+import { BinData, ItemData, ItemSpare, LocationData, MqttMessage, ProcessItemJobData, User } from './type';
+import { MqttClient } from 'mqtt';
+import { BinEntity, DeviceEntity } from '@entity';
+import { sleep } from '@framework/time/sleep';
 
 @Injectable()
-export class ProcessItemService {
-  private readonly logger = new Logger(ProcessItemService.name);
+export class ProcessItemService implements OnModuleInit, OnModuleDestroy {
+  private readonly _logger = new Logger(ProcessItemService.name);
+  private _mqttClients = new Map<string, MqttClient>();
+  private _stateMachines = new Map<string, ProcessItemStateMachine>();
 
-  constructor(
-    @InjectQueue('process-item') private processQueue: Queue,
-    private readonly mqttService: MqttService,
-    private readonly stateManager: StateManagerService,
-    private readonly wsGateway: WebSocketGateway,
-    private readonly transactionService: TransactionService,
-    private readonly binService: BinService,
-    private readonly deviceService: DeviceService,
-  ) {}
+  constructor(@InjectQueue('process-item') private _processQueue: Queue) {}
 
-  async createJob(data: ProcessItemJobData): Promise<Job> {
-    const job = await this.processQueue.add(data, {
+  public onModuleInit(): void {}
+
+  public onModuleDestroy(): void {
+    for (const [jobId, client] of this._mqttClients) {
+      client.end();
+    }
+  }
+
+  public async createProcessJob(data: ProcessItemJobData): Promise<Job> {
+    return this._processQueue.add('xxx', data, {
       attempts: 3,
       backoff: {
         type: 'exponential',
         delay: 5000,
       },
     });
-
-    this.logger.log(`Created job ${job.id} for ${data.type} process`);
-    return job;
   }
 
-  async processItems(job: Job<ProcessItemJobData>): Promise<void> {
-    const { data } = job;
-    const stateMachine = new ProcessItemStateMachine(job.id.toString(), data.data.length);
+  public async processItems(jobId: string, data: ProcessItemJobData): Promise<void> {
+    const { action, user, data: items, requestQty, tabletId } = data;
+    const deviceType = 'CU';
+    const processName = `serial-user/${action}/${user.id}`;
 
-    // Register state machine
-    this.stateManager.registerStateMachine(job.id.toString(), stateMachine);
+    // Initialize state machine
+    const stateMachine = new ProcessItemStateMachine(items.length);
+    this._stateMachines.set(jobId, stateMachine);
 
-    // Setup event listeners
-    this.setupStateMachineListeners(stateMachine);
+    // Start state machine
+    stateMachine.transition(ProcessEvent.START);
 
     try {
-      // Start processing
-      stateMachine.transition(ProcessEvent.START);
+      // Connect MQTT
+      const mqttClient = await this.connectMqtt(jobId, stateMachine);
+      this._mqttClients.set(jobId, mqttClient);
 
-      // Connect MQTT and setup handlers
-      await this.setupMqttHandlers(stateMachine, data);
       stateMachine.transition(ProcessEvent.MQTT_CONNECTED);
 
       // Create transaction
-      const transaction = await this.transactionService.createTransaction(data);
+      const tablet = await Tablet.findOne({ where: { uniqueId } });
+      const transaction = await Transaction.create({
+        name: '',
+        type: type,
+        request_qty: parseInt(request_qty.toString()),
+        cluster_id: tablet.setting.clusterId,
+        user: {
+          id: user.user_cloud_id,
+          userLogin: user.userLogin,
+          userRole: user.userRole,
+        },
+        locations: [],
+        locations_temp: [],
+        status: 'process',
+        is_sync: 0,
+      });
+
       stateMachine.transition(ProcessEvent.MQTT_CONNECTED, { transactionId: transaction.id });
 
       // Process each item
-      while (stateMachine.getContext().currentItemIndex < data.data.length) {
-        const state = stateMachine.getState();
+      while (stateMachine.getContext().currentItemIndex < items.length) {
+        const context = stateMachine.getContext();
+        const item = items[context.currentItemIndex];
 
-        if (state === ProcessState.ERROR || state === ProcessState.COMPLETED) {
+        this._logger.log(`Processing item ${context.currentItemIndex + 1}/${items.length}`);
+
+        // Check if we should process this item
+        if (stateMachine.getState() === ProcessState.READY || stateMachine.getState() === ProcessState.PROCESSING_NEXT) {
+          stateMachine.transition(ProcessEvent.PROCESS_ITEM, {
+            currentItem: item,
+            currentBin: item.bin,
+          });
+
+          await this.processItem(
+            stateMachine,
+            mqttClient,
+            deviceType,
+            user,
+            item,
+            transaction.id,
+            context.currentItemIndex === items.length - 1,
+          );
+        }
+
+        // Wait for state machine to be ready for next item
+        await this.waitForState(stateMachine, [ProcessState.PROCESSING_NEXT, ProcessState.READY, ProcessState.COMPLETED]);
+
+        if (stateMachine.getState() === ProcessState.COMPLETED) {
           break;
         }
-
-        if (state === ProcessState.CONNECTED) {
-          await this.processNextItem(stateMachine, data, transaction.id);
-        } else {
-          // Wait for state to change
-          await this.wait(100);
-        }
       }
 
-      // Complete transaction if all items processed
-      if (stateMachine.getContext().currentItemIndex >= data.data.length) {
-        stateMachine.transition(ProcessEvent.ALL_ITEMS_PROCESSED);
-        await this.transactionService.completeTransaction(transaction.id);
-      }
+      // Update transaction status
+      await transaction.update({
+        name: 'trans#' + transaction.id,
+        status: 'done',
+      });
+
+      // Cleanup process
+      await this._deleteProcess(processName, mqttClient);
     } catch (error) {
-      this.logger.error(`Error processing job ${job.id}:`, error);
+      this._logger.error('Error processing items:', error);
       stateMachine.transition(ProcessEvent.ERROR_OCCURRED, { error });
       throw error;
     } finally {
       // Cleanup
-      this.cleanupStateMachine(job.id.toString());
+      this._stateMachines.delete(jobId);
+      const client = this._mqttClients.get(jobId);
+      if (client) {
+        client.end();
+        this._mqttClients.delete(jobId);
+      }
     }
   }
 
-  private setupStateMachineListeners(stateMachine: ProcessItemStateMachine): void {
-    // Listen to state changes
-    stateMachine.on('stateChange', (event) => {
-      this.handleStateChange(event);
-    });
+  private async connectMqtt(jobId: string, stateMachine: ProcessItemStateMachine): Promise<MqttClient> {
+    const opts = {
+      rejectUnauthorized: false,
+      connectTimeout: 5000,
+    };
 
-    // Listen to flag updates
-    stateMachine.on('flagUpdate', (event) => {
-      this.handleFlagUpdate(event);
-    });
-  }
+    return new Promise((resolve, reject) => {
+      const mqttClient = mqtt.connect('mqtt://localhost:1883', opts);
 
-  private handleStateChange(event: StateChangeEvent): void {
-    // Publish to MQTT
-    this.mqttService.publish('process-item/state', {
-      jobId: event.jobId,
-      state: event.currentState,
-      previousState: event.previousState,
-      flags: {
-        isProcessingItem: event.context.isProcessingItem,
-        isCloseWarningPopup: event.context.isCloseWarningPopup,
-        isNextRequestItem: event.context.isNextRequestItem,
-      },
-      progress: {
-        current: event.context.currentItemIndex,
-        total: event.context.totalItems,
-      },
-      timestamp: event.timestamp,
-    });
+      mqttClient.on('connect', () => {
+        console.log('connect mqtt done');
 
-    // Emit via WebSocket
-    this.wsGateway.broadcastStateUpdate({
-      jobId: event.jobId,
-      state: event.currentState,
-      flags: {
-        isProcessingItem: event.context.isProcessingItem,
-        isCloseWarningPopup: event.context.isCloseWarningPopup,
-        isNextRequestItem: event.context.isNextRequestItem,
-      },
-      progress: {
-        current: event.context.currentItemIndex,
-        total: event.context.totalItems,
-      },
-    });
-  }
+        // Subscribe to topics
+        const topics = ['lock/openSuccess', 'lock/openFail', 'bin/openFail', 'process-item/error', 'process-item/status'];
 
-  private handleFlagUpdate(event: FlagUpdateEvent): void {
-    // Publish specific flag update to MQTT
-    this.mqttService.publish(`process-item/flag/${event.flag}`, {
-      jobId: event.jobId,
-      flag: event.flag,
-      value: event.value,
-      timestamp: event.timestamp,
-    });
+        topics.forEach((topic) => {
+          mqttClient.subscribe(topic, (err) => {
+            if (!err) {
+              console.log(`subscribe ${topic} done!`);
+            }
+          });
+        });
 
-    // Also publish to job-specific topic
-    this.mqttService.publish(`job/${event.jobId}/process-item/status`, {
-      [event.flag]: event.value,
-      timestamp: event.timestamp,
+        resolve(mqttClient);
+      });
+
+      mqttClient.on('error', (error) => {
+        reject(error);
+      });
+
+      // Setup message handlers
+      mqttClient.on('message', async (topic: string, message: any) => {
+        switch (topic) {
+          case 'bin/openFail':
+            await this._handleBinOpenFail(JSON.parse(message.toString()), mqttClient);
+            break;
+
+          case 'process-item/error':
+            const errorData = JSON.parse(message.toString());
+            stateMachine.updateFromMqttError(errorData);
+            break;
+
+          case 'process-item/status':
+            const statusData = JSON.parse(message.toString());
+            stateMachine.updateFromMqttStatus(statusData);
+            break;
+        }
+      });
     });
   }
 
-  private async setupMqttHandlers(stateMachine: ProcessItemStateMachine, jobData: ProcessItemJobData): Promise<void> {
-    const jobId = stateMachine.getContext().jobId;
+  private async processItem(
+    stateMachine: ProcessItemStateMachine,
+    mqttClient: MqttClient,
+    token: string,
+    deviceType: string,
+    user: User,
+    item: ItemData,
+    transactionId: number,
+    isFinal: boolean,
+  ): Promise<void> {
+    const bin = new BinEntity({} as any); //await Bin.findOne({ where: { id: item.bin.id } });
 
-    // Subscribe to job-specific topics
-    this.mqttService.subscribe(`job/${jobId}/bin/openFail`, async (data) => {
-      await this.handleBinOpenFail(stateMachine, data);
-    });
-
-    this.mqttService.subscribe(`job/${jobId}/process-item/error`, (data) => {
-      if (data.isCloseWarningPopup !== undefined) {
-        stateMachine.updateFlag('isCloseWarningPopup', data.isCloseWarningPopup);
-      }
-      if (data.isNextRequestItem !== undefined) {
-        stateMachine.updateFlag('isNextRequestItem', data.isNextRequestItem);
-      }
-    });
-
-    this.mqttService.subscribe(`job/${jobId}/process-item/status`, (data) => {
-      const state = stateMachine.getState();
-
-      // Handle user actions based on flags
-      if (data.isCloseWarningPopup !== undefined) {
-        stateMachine.updateFlag('isCloseWarningPopup', data.isCloseWarningPopup);
-      }
-
-      if (data.isNextRequestItem !== undefined) {
-        stateMachine.updateFlag('isNextRequestItem', data.isNextRequestItem);
-      }
-
-      // Handle user completion
-      if (!data.isProcessingItem && (state === ProcessState.BIN_OPENED || state === ProcessState.WAITING_USER_ACTION)) {
-        stateMachine.transition(ProcessEvent.USER_ACTION_COMPLETE);
-      }
-    });
-
-    // Subscribe to lock events
-    this.mqttService.subscribe('lock/openSuccess', (data) => {
-      if (data.transId === stateMachine.getContext().transactionId) {
-        this.logger.log(`Lock opened successfully for job ${jobId}`);
-      }
-    });
-
-    this.mqttService.subscribe('lock/openFail', (data) => {
-      if (data.transId === stateMachine.getContext().transactionId) {
-        this.logger.warn(`Lock open failed for job ${jobId}`);
-      }
-    });
-  }
-
-  private async processNextItem(stateMachine: ProcessItemStateMachine, jobData: ProcessItemJobData, transactionId: number): Promise<void> {
-    const context = stateMachine.getContext();
-    const item = jobData.data[context.currentItemIndex];
-
-    this.logger.log(`Processing item ${context.currentItemIndex + 1}/${context.totalItems}`);
-
-    stateMachine.transition(ProcessEvent.NEXT_ITEM);
-
-    const bin = await this.binService.findById(item.bin.id);
-
-    if (bin.is_failed) {
-      this.logger.warn(`Bin ${bin.id} is failed, skipping`);
-      stateMachine.transition(ProcessEvent.BIN_OPEN_FAIL, {
-        currentItemIndex: context.currentItemIndex + 1,
+    if (bin.isFailed) {
+      stateMachine.transition(ProcessEvent.SKIP_ITEM, {
+        currentItemIndex: stateMachine.getContext().currentItemIndex + 1,
       });
       return;
     }
-
     // Update device zero weight
-    await this.deviceService.updateZeroWeight(bin.id);
+    const device = new DeviceEntity({} as any); //await Device.findOne({ where: { binId: bin.id } });
+    // await device.update({ zeroWeight: device.weight });
 
-    // Open bin
-    const success = await this.openBin(stateMachine, jobData, item, bin, transactionId);
-
-    if (success) {
-      // Wait for user action
-      await this.waitForUserAction(stateMachine);
-
-      // Close bin and update
-      await this.closeBinAndUpdate(stateMachine, jobData, item, bin, transactionId);
-    }
-  }
-
-  private async openBin(
-    stateMachine: ProcessItemStateMachine,
-    jobData: ProcessItemJobData,
-    item: ItemData,
-    bin: BinData,
-    transactionId: number,
-  ): Promise<boolean> {
-    const context = stateMachine.getContext();
     const mqttData: MqttMessage = {
-      deviceType: 'CU',
-      deviceId: bin.cu_id,
-      lockId: bin.lock_id,
-      user: jobData.user,
-      type: jobData.type,
+      protocol: deviceType,
+      deviceId: bin.cuId,
+      lockId: bin.lockId,
+      user,
+      type: stateMachine.getContext().currentItem!.bin.id === item.bin.id ? 'issue' : 'return',
       data: item,
-      transId: transactionId,
-      is_final: context.currentItemIndex === jobData.data.length - 1,
-      jobId: context.jobId,
+      transactionId,
+      isFinal: isFinal,
     };
 
-    // Publish bin open event
-    this.mqttService.publish('bin/open', mqttData);
+    this._logger.log('mqttData processItemByRequest', mqttData);
+
+    // Trigger loadcells calculate
+    mqttClient.publish('bin/open', JSON.stringify(mqttData));
     await this.wait(1500);
 
-    // Call lock API
-    try {
-      const response = await this.callLockApi(jobData.token, bin);
+    // Open lock
+    const isLockOpened = await this.openLock(token, deviceType, bin);
 
-      if (!response.data.results.length) {
-        return await this.handleLockFailure(stateMachine, bin, item);
-      }
-
-      // Success
-      await this.binService.updateBinStatus(bin.id, { is_locked: 0, count_failed: 0 });
-      this.mqttService.publish('lock/openSuccess', mqttData);
-      stateMachine.transition(ProcessEvent.BIN_OPEN_SUCCESS, { currentBin: bin });
-
-      return true;
-    } catch (error) {
-      this.logger.error('Error opening lock:', error);
-      stateMachine.transition(ProcessEvent.ERROR_OCCURRED, { error });
-      return false;
-    }
-  }
-
-  private async handleLockFailure(stateMachine: ProcessItemStateMachine, bin: BinData, item: ItemData): Promise<boolean> {
-    const updatedBin = await this.binService.incrementFailCount(bin.id);
-
-    if (updatedBin.is_failed || updatedBin.count_failed >= 3) {
-      this.logger.warn(`Bin ${bin.id} exceeded failure limit, skipping`);
-      stateMachine.transition(ProcessEvent.BIN_OPEN_FAIL, {
-        currentItemIndex: stateMachine.getContext().currentItemIndex + 1,
-      });
-      return false;
+    if (!isLockOpened) {
+      await this.handleLockOpenFailure(stateMachine, mqttClient, bin, item);
+      return;
     }
 
-    // Emit failure event
-    const context = stateMachine.getContext();
-    this.mqttService.publish('lock/openFail', {
-      ...item,
-      jobId: context.jobId,
-      transId: context.transactionId,
-    });
+    // Lock opened successfully
+    bin.isLocked = false;
+    bin.countFailed = 0;
+    // await bin.save();
 
-    // Wait for user decision
-    stateMachine.updateFlag('isCloseWarningPopup', false);
+    mqttClient.publish('lock/openSuccess', JSON.stringify(mqttData));
+    stateMachine.transition(ProcessEvent.LOCK_OPEN_SUCCESS);
 
-    // Wait for user to close warning or skip
-    const startTime = Date.now();
-    const timeout = 60000; // 1 minute timeout
+    // Wait for user action
+    await this._waitForUserAction(stateMachine);
 
-    while (Date.now() - startTime < timeout) {
-      const updatedBin = await this.binService.findById(bin.id);
-      const context = stateMachine.getContext();
+    // Update status lock
+    bin.isLocked = true;
+    // await bin.save();
 
-      if (updatedBin.is_locked === 0) {
-        // Lock was opened manually
-        stateMachine.transition(ProcessEvent.BIN_OPEN_SUCCESS, { currentBin: bin });
-        return true;
-      }
-
-      if (updatedBin.is_failed || updatedBin.count_failed >= 3 || !context.shouldContinue) {
-        // Skip this bin
-        stateMachine.transition(ProcessEvent.BIN_OPEN_FAIL, {
-          currentItemIndex: context.currentItemIndex + 1,
-        });
-        return false;
-      }
-
-      await this.wait(1000);
-    }
-
-    // Timeout - skip
-    stateMachine.transition(ProcessEvent.BIN_OPEN_FAIL, {
-      currentItemIndex: stateMachine.getContext().currentItemIndex + 1,
-    });
-    return false;
-  }
-
-  private async waitForUserAction(stateMachine: ProcessItemStateMachine): Promise<void> {
-    stateMachine.waitForUserAction();
-
-    // Wait until user completes action
-    while (stateMachine.getState() === ProcessState.BIN_OPENED || stateMachine.getState() === ProcessState.WAITING_USER_ACTION) {
-      await this.wait(100);
-    }
-  }
-
-  private async closeBinAndUpdate(
-    stateMachine: ProcessItemStateMachine,
-    jobData: ProcessItemJobData,
-    item: ItemData,
-    bin: BinData,
-    transactionId: number,
-  ): Promise<void> {
-    // Update bin status
-    await this.binService.updateBinStatus(bin.id, { is_locked: 1 });
-
-    // Emit close event
-    const context = stateMachine.getContext();
-    this.mqttService.publish('bin/close', {
-      binId: bin.id,
-      transId: transactionId,
-      jobId: context.jobId,
-    });
+    // Close bin
+    mqttClient.publish('bin/close', JSON.stringify(mqttData));
 
     stateMachine.transition(ProcessEvent.BIN_CLOSED);
 
-    // Wait for warning popup if needed
-    while (!context.warningPopupClosed) {
+    // Wait for warning popup to close
+    await this.waitForWarningPopup(stateMachine);
+
+    // Update transaction and process return items
+    if (stateMachine.getContext().isNextRequestItem) {
+      await this.updateTransactionAndReturnItems(
+        transactionId,
+        user,
+        bin,
+        item,
+        stateMachine.getContext().currentItem!.bin.id === item.bin.id ? 'issue' : 'return',
+      );
+
+      stateMachine.transition(ProcessEvent.TRANSACTION_UPDATED, {
+        currentItemIndex: stateMachine.getContext().currentItemIndex + 1,
+      });
+    }
+  }
+
+  private async openLock(token: string, deviceType: string, bin: BinData): Promise<boolean> {}
+
+  private async handleLockOpenFailure(
+    stateMachine: ProcessItemStateMachine,
+    mqttClient: MqttClient,
+    bin: BinData,
+    item: ItemData,
+  ): Promise<void> {
+    bin.countFailed = (bin.countFailed || 0) + 1;
+    await bin.save();
+
+    let isSkip = false;
+    if (bin.isFailed || bin.countFailed >= 3) {
+      isSkip = true;
+    } else {
+      // Send mqtt openLockFail
+      mqttClient.publish('lock/openFail', JSON.stringify(item));
+    }
+
+    while (!isSkip) {
+      const updatedBin = await Bin.findOne({ where: { id: item.bin.id } });
+      if (updatedBin.is_locked === 0) {
+        break;
+      }
+      if (updatedBin.is_failed || updatedBin.count_failed >= 3) {
+        isSkip = true;
+      }
+      await sleep(1000);
+    }
+    if (isSkip) {
+      stateMachine.transition(ProcessEvent.SKIP_ITEM, {
+        currentItemIndex: stateMachine.getContext().currentItemIndex + 1,
+      });
+    } else {
+      stateMachine.transition(ProcessEvent.LOCK_OPEN_SUCCESS);
+    }
+  }
+
+  private async _handleBinOpenFail(dataBin: { binId: number }, mqttClient: MqttClient): Promise<void> {
+    const bin = await Bin.findOne({ where: { id: dataBin.binId } });
+    if (!bin.is_failed) {
+      // Find item in current context - would need to pass this through
+      // For now, just log
+      console.log('Bin open failed:', dataBin.binId);
+    }
+  }
+
+  private async _waitForUserAction(stateMachine: ProcessItemStateMachine): Promise<void> {
+    this._logger.log(`isProcessingItem=${stateMachine.getContext().isProcessingItem}. Wait for next action from user.....`);
+    while (stateMachine.getContext().isProcessingItem) {
+      await sleep(1000);
+    }
+  }
+
+  private async waitForWarningPopup(stateMachine: ProcessItemStateMachine): Promise<void> {
+    console.log('isCloseWarningPopup', stateMachine.getContext().isCloseWarningPopup);
+    while (!stateMachine.getContext().isCloseWarningPopup) {
+      await this.wait(1000);
+    }
+  }
+
+  private async waitForState(stateMachine: ProcessItemStateMachine, targetStates: ProcessState[]): Promise<void> {
+    while (!targetStates.includes(stateMachine.getState())) {
       await this.wait(100);
     }
+  }
 
+  private async updateTransactionAndReturnItems(
+    transactionId: number,
+    user: User,
+    bin: BinData,
+    item: ItemData,
+    type: 'issue' | 'return',
+  ): Promise<void> {
     // Update transaction
-    await this.transactionService.updateLocations(transactionId);
-
-    // Update return items based on type
-    if (jobData.type === 'issue') {
-      await this.transactionService.updateReturnItemsForIssue(transactionId, jobData.user.id, bin.id);
-    } else {
-      await this.transactionService.updateReturnItemsForReturn(transactionId, jobData.user.id, bin.id);
-    }
-
-    stateMachine.transition(ProcessEvent.TRANSACTION_UPDATED, {
-      currentItemIndex: context.currentItemIndex + 1,
+    const transaction = await Transaction.findOne({ where: { id: transactionId } });
+    await transaction.update({
+      locations: transaction.locations_temp,
+      locations_temp: [],
     });
-  }
 
-  private cleanupStateMachine(jobId: string): void {
-    const machine = this.stateManager.getStateMachine(jobId);
-    if (machine) {
-      // Unsubscribe from MQTT topics
-      this.mqttService.unsubscribe(`job/${jobId}/bin/openFail`);
-      this.mqttService.unsubscribe(`job/${jobId}/process-item/error`);
-      this.mqttService.unsubscribe(`job/${jobId}/process-item/status`);
+    // Check to upsert returnItems
+    if (type === PROCESS_ITEM_TYPE.ISSUE) {
+      const itemTypeReplenish = (await ItemType.findAll({ where: { is_return: 0 } })).map((item: any) => item.type);
 
-      // Remove from state manager
-      this.stateManager.removeStateMachine(jobId);
+      // Item consumable isn't written in return_items table
+      for (const location of transaction.locations) {
+        if (location.bin.id === bin.id) {
+          for (const spare of location.spares) {
+            const actualQty = Math.abs(spare.changed_qty);
+            if (!itemTypeReplenish.includes(spare.type) && actualQty !== 0) {
+              await this._upsertReturnItem(user, bin, location, spare, actualQty);
+            }
+          }
+        }
+      }
+    } else if (type === PROCESS_ITEM_TYPE.RETURN) {
+      for (const location of transaction.locations) {
+        if (location.bin.id === bin.id) {
+          for (const spare of location.spares) {
+            const actualQty = Math.abs(spare.changed_qty);
+            const getReturnItemByUser = await ReturnItem.findOne({
+              where: {
+                userId: user.id,
+                itemId: spare.id,
+              },
+            });
+
+            if (getReturnItemByUser) {
+              getReturnItemByUser.locations = getReturnItemByUser.locations.map((item: any) => {
+                if (item.bin.id === bin.id) {
+                  item.quantity -= actualQty;
+                }
+                return item;
+              });
+              getReturnItemByUser.quantity -= actualQty;
+              await getReturnItemByUser.save();
+
+              if (getReturnItemByUser.quantity <= 0) {
+                await getReturnItemByUser.destroy();
+              }
+            }
+          }
+        }
+      }
     }
   }
 
-  private async callLockApi(token: string, bin: BinData): Promise<any> {
-    const httpsAgent = new https.Agent({ rejectUnauthorized: false });
-    return axios({
-      method: 'post',
-      url: process.env.LOCK_API_URL || 'http://localhost:3000/api/lock/open',
-      httpsAgent,
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      data: {
-        deviceType: 'CU',
-        deviceId: bin.cu_id,
-        lockID: [bin.lock_id],
+  private async _upsertReturnItem(user: User, bin: BinData, location: LocationData, item: ItemSpare, actualQty: number): Promise<void> {
+    const getReturnItemByUser = await ReturnItem.findOne({
+      where: {
+        userId: user.id,
+        itemId: item.id,
+        binId: bin.id,
       },
     });
-  }
 
-  private wait(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
-  }
+    console.log('getReturnItemByUser', JSON.stringify(getReturnItemByUser));
 
-  private async handleBinOpenFail(stateMachine: ProcessItemStateMachine, data: any): Promise<void> {
-    this.logger.warn(`Bin open failed for job ${stateMachine.getContext().jobId}:`, data);
-
-    // Check if we should retry or skip
-    const context = stateMachine.getContext();
-    if (context.retryCount < context.maxRetries) {
-      stateMachine.transition(ProcessEvent.RETRY, {
-        retryCount: context.retryCount + 1,
+    if (getReturnItemByUser) {
+      let locations = [];
+      const checkExistLocation = getReturnItemByUser.locations.find((loc: any) => {
+        return loc.bin.id === bin.id;
       });
+
+      console.log('checkExistLocation', checkExistLocation, bin.id);
+
+      if (checkExistLocation) {
+        locations = getReturnItemByUser.locations.map((loc: any) => {
+          if (loc.bin.id === bin.id) {
+            loc.quantity += actualQty;
+          }
+          return loc;
+        });
+      } else {
+        locations = [
+          ...getReturnItemByUser.locations,
+          {
+            cabinet: {
+              id: location.cabinet.id,
+              name: location.cabinet.name,
+            },
+            bin: {
+              id: location.bin.id,
+              name: location.bin.name,
+              row: location.bin.row,
+            },
+            quantity: actualQty,
+          },
+        ];
+      }
+
+      if (getReturnItemByUser.listWo && item.listWO) {
+        const listWo = [...getReturnItemByUser.listWo, ...item.listWO];
+        getReturnItemByUser.listWo = await this._formatListWo(listWo);
+      }
+
+      getReturnItemByUser.locations = locations;
+      getReturnItemByUser.quantity += actualQty;
+      await getReturnItemByUser.save();
     } else {
-      stateMachine.transition(ProcessEvent.BIN_OPEN_FAIL, {
-        currentItemIndex: context.currentItemIndex + 1,
+      const locations = [
+        {
+          cabinet: {
+            id: location.cabinet.id,
+            name: location.cabinet.name,
+          },
+          bin: {
+            id: location.bin.id,
+            name: location.bin.name,
+            row: location.bin.row,
+          },
+          quantity: actualQty,
+        },
+      ];
+
+      this._logger.log('data create returnItem', locations, actualQty);
+      await ReturnItem.create({
+        userId: user.id,
+        itemId: item.id,
+        workOrders: item.workOrders,
+        locations,
+        quantity: actualQty,
+        binId: bin.id,
       });
     }
   }
 
-  // Public method for WebSocket to update flags
-  updateJobFlag(jobId: string, flag: 'isCloseWarningPopup' | 'isNextRequestItem', value: boolean): boolean {
-    const machine = this.stateManager.getStateMachine(jobId);
-    if (machine) {
-      machine.updateFlag(flag, value);
-      return true;
-    }
-    return false;
+  private async _formatListWo(listWo: any[]): Promise<any[]> {
+    const mergedObject: Record<string, any> = {};
+    listWo.forEach((obj) => {
+      const keys = [obj.wo, obj.area];
+      const key = keys.join('_');
+
+      if (!mergedObject[key]) {
+        mergedObject[key] = {};
+      }
+      Object.assign(mergedObject[key], obj);
+    });
+    return Object.values(mergedObject);
+  }
+
+  private async _deleteProcess(processName: string, mqttClient: MqttClient): Promise<void> {
+    mqttClient.publish('processItem/success', JSON.stringify({}));
   }
 }

@@ -43,7 +43,6 @@ export class LoadcellsService implements OnModuleInit, OnModuleDestroy {
 
   // Internal state
   private _connectedPorts: string[] = [];
-  private _comId = 0;
   private _discoveryPhase = true;
   private _readingsCount = 0;
   private _errorsCount = 0;
@@ -208,40 +207,6 @@ export class LoadcellsService implements OnModuleInit, OnModuleDestroy {
           },
         });
     }
-    // const primaryPort = this._connectedPorts[0];
-    // this._comId = this._extractComId(primaryPort);
-    //
-    // this._logger.log(`Using primary port: ${primaryPort}, COM ID: ${this._comId}`);
-    //
-    // this._serialAdapter
-    //   .onData(primaryPort)
-    //   .pipe(
-    //     takeUntil(this._destroy$),
-    //     map((data) => this._parseRawData(primaryPort, data)),
-    //     filter(Boolean),
-    //     tap((reading) => this._processReading(reading)),
-    //   )
-    //   .subscribe({
-    //     next: (reading) => {
-    //       this._callDataHooks(reading);
-    //       this._updateStats();
-    //     },
-    //     error: (error) => {
-    //       this._logger.error(`Data stream error for ${primaryPort}:`, error);
-    //       this._callErrorHooks(error, `Data stream for ${primaryPort}`);
-    //     },
-    //   });
-    //
-    // this._serialAdapter
-    //   .onError(primaryPort)
-    //   .pipe(takeUntil(this._destroy$))
-    //   .subscribe({
-    //     next: (error) => {
-    //       this._errorsCount++;
-    //       this._callErrorHooks(error, `Serial port ${primaryPort}`);
-    //       this._updateStats();
-    //     },
-    //   });
   }
 
   private _extractComId(portPath: string): number {
@@ -303,27 +268,6 @@ export class LoadcellsService implements OnModuleInit, OnModuleDestroy {
     );
   }
 
-  /**
-   * @deprecated
-   */
-  private _sendMessageToPrimary(message: LoadCellDevice): Observable<void> {
-    if (this._connectedPorts.length === 0) {
-      return EMPTY;
-    }
-
-    const buffer = this._bufferFromBufferString(message.data);
-    const port = this._connectedPorts[0]; // Use primary port
-
-    return this._serialAdapter.write(port, buffer).pipe(
-      tap(() => {
-        if (this._config.logLevel > 0) {
-          this._logger.debug(`Sent message ${message.no} to ${port}`);
-        }
-      }),
-      retry(2),
-    );
-  }
-
   private _sendMessage(message: LoadCellDevice): Observable<void> {
     if (this._connectedPorts.length === 0) {
       return EMPTY;
@@ -348,62 +292,6 @@ export class LoadcellsService implements OnModuleInit, OnModuleDestroy {
 
     // Send to all ports in parallel
     return forkJoin(sendOperations).pipe(map(() => void 0));
-  }
-
-  private _parseRawDataSingle(port: string, data: string): LoadCellReading | null {
-    try {
-      const buffer = Buffer.from(data, 'hex');
-      const rawPayload = Array.from(buffer);
-
-      // Validate data
-      if (!this._validateRawData(rawPayload)) {
-        return null;
-      }
-
-      const rawDeviceId = rawPayload[1];
-
-      // Handle special case for device ID 1
-      if (rawDeviceId === 1) {
-        rawPayload[2] = 0x3d;
-      }
-
-      // CRC validation
-      const crcData = rawPayload.slice(1);
-      if (this._crc16Validation(crcData) !== 0) {
-        this._logger.warn(`CRC validation failed for device ${rawDeviceId}`);
-        this._errorsCount++;
-
-        return {
-          path: port,
-          deviceId: this._comId * 100 + rawDeviceId,
-          rawDeviceId,
-          weight: 0,
-          status: 'error',
-          timestamp: new Date(),
-          rawData: rawPayload,
-        };
-      }
-
-      // Calculate weight value (32-bit little endian)
-      const value = (rawPayload[8] << 24) | (rawPayload[7] << 16) | (rawPayload[6] << 8) | rawPayload[5];
-
-      this._readingsCount++;
-
-      return {
-        path: port,
-        deviceId: this._comId * 100 + rawDeviceId,
-        rawDeviceId,
-        weight: value / this._config.precision,
-        status: 'running',
-        timestamp: new Date(),
-        rawData: rawPayload,
-      };
-    } catch (error) {
-      this._logger.error('Failed to parse raw data:', error);
-      this._errorsCount++;
-      this._callErrorHooks(error as Error, 'Data parsing');
-      return null;
-    }
   }
 
   private _parseRawData(port: string, buffer: Buffer, comId: number): LoadCellReading | null {

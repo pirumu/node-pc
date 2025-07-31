@@ -40,7 +40,7 @@ export class Application {
 
   private static async _bootstrap(): Promise<void> {
     const app = await NestFactory.create(HwbModule, {
-      bufferLogs: true,
+      bufferLogs: false,
       abortOnError: true,
     });
     app.useLogger(app.get(APP_LOGGER));

@@ -3,7 +3,7 @@ import { Observable, BehaviorSubject, Subject, timer, EMPTY, from } from 'rxjs';
 import { map, switchMap, distinctUntilChanged, takeUntil, tap, catchError, debounceTime } from 'rxjs/operators';
 
 import { InjectSerialManager, ISerialAdapter, SerialOptions, SerialPortInfo, SerialPortState } from '../serial';
-import { DISCOVERY_CONFIG } from '@serialport/serialport.constants';
+import { DISCOVERY_CONFIG } from '../serialport.constants';
 
 export type DiscoveryConfig = {
   enabled: boolean;
