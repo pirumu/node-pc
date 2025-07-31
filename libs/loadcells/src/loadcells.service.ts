@@ -1,6 +1,6 @@
 import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { InjectSerialManager, ISerialAdapter } from '@serialport/serial';
-import { Observable, Subject, BehaviorSubject, timer, EMPTY, from, forkJoin, of, interval } from 'rxjs';
+import { Observable, Subject, BehaviorSubject, timer, EMPTY, from, forkJoin, of, interval, timeout } from 'rxjs';
 import { map, takeUntil, tap, catchError, switchMap, filter, retry, mergeMap, distinctUntilChanged, debounceTime } from 'rxjs/operators';
 
 import { ALL_MESSAGES } from './loadcells.contants';
@@ -83,6 +83,10 @@ export class LoadcellsService implements OnModuleInit, OnModuleDestroy {
 
   // NEW: Track callback unsubscribe functions
   private _callbackUnsubscribers = new Map<string, (() => void)[]>();
+
+  private _portStates = new Map<string, 'connecting' | 'connected' | 'disconnecting' | 'disconnected'>();
+  private _reconnectAttempts = new Map<string, number>();
+  private readonly _maxReconnectAttempts = 3;
 
   constructor(@InjectSerialManager() private readonly _serialAdapter: ISerialAdapter) {
     this._messageAddresses = this._allMessages.map((msg) => parseInt(this._getBufferContent(msg.data).slice(0, 2), 16));
@@ -290,23 +294,71 @@ export class LoadcellsService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  // NEW: Connect to single port
   private async _connectToSinglePort(port: string): Promise<void> {
+    // Prevent concurrent connection attempts
+    if (this._portStates.get(port) === 'connecting') {
+      this._logger.warn(`Port ${port} already connecting, skipping`);
+      return;
+    }
+
+    this._portStates.set(port, 'connecting');
     this._logger.log(`Connecting to port: ${port}`);
 
     try {
-      // 1. OPEN PORT FIRST
+      // 1. ENSURE PORT IS CLOSED FIRST (important!)
+      try {
+        const currentState = await this._serialAdapter.getConnectionState(port);
+        if (currentState.isOpen) {
+          this._logger.log(`Port ${port} already open, closing first`);
+          await this._serialAdapter.close(port);
+          // Wait a bit for port to fully close
+          await new Promise((resolve) => setTimeout(resolve, 500));
+        }
+      } catch (error) {
+        // Ignore close errors for already closed ports
+        this._logger.debug(`Port ${port} close check error (likely already closed):`, error.message);
+      }
+
+      // 2. OPEN PORT with validation
       const state = await this._serialAdapter.open(port, this._config.serialOptions);
 
       if (!state.isOpen) {
         throw new Error(`Failed to open port ${port}: ${state.lastError || 'Unknown error'}`);
       }
 
-      this._logger.log(`Port ${port} opened successfully`);
+      // 3. WAIT for port to stabilize before setting up callbacks
+      await new Promise((resolve) => setTimeout(resolve, 200));
 
-      // 2. Setup data callback AFTER port is opened
-      const comId = this._extractComId(port);
-      const dataCallback = (data: Buffer) => {
+      // 4. VERIFY port is still open after stabilization
+      const verifyState = await this._serialAdapter.getConnectionState(port);
+      if (!verifyState.isOpen) {
+        throw new Error(`Port ${port} closed unexpectedly after opening`);
+      }
+
+      this._logger.log(`Port ${port} opened and verified successfully`);
+
+      // 5. Setup callbacks ONLY after port is stable
+      await this._setupPortCallbacks(port);
+
+      // 6. Start monitoring ONLY after everything is setup
+      this._startPortMonitoring(port);
+
+      this._portStates.set(port, 'connected');
+      this._reconnectAttempts.set(port, 0); // Reset reconnect attempts
+      this._logger.log(`Port ${port} setup completed successfully`);
+    } catch (error) {
+      this._portStates.set(port, 'disconnected');
+      this._logger.error(`Failed to connect to port ${port}:`, error);
+      throw error;
+    }
+  }
+
+  private async _setupPortCallbacks(port: string): Promise<void> {
+    const comId = this._extractComId(port);
+
+    // Data callback
+    const dataCallback = (data: Buffer) => {
+      try {
         const reading = this._parseRawData(port, data, comId);
         if (reading) {
           this._processReading(reading);
@@ -314,54 +366,78 @@ export class LoadcellsService implements OnModuleInit, OnModuleDestroy {
           this._updateStats();
           this._updatePortStats(port, false);
         }
-      };
+      } catch (error) {
+        this._logger.error(`Data callback error for ${port}:`, error);
+        this._updatePortStats(port, true);
+      }
+    };
 
-      // Store callback reference
-      this._dataStreamCallbacks.set(port, dataCallback);
+    // Error callback
+    const errorCallback = (error: Error) => {
+      this._logger.error(`Serial error on ${port}:`, error);
+      this._errorsCount++;
+      this._updatePortStats(port, true);
+      this._callErrorHooks(error, `Serial port ${port}`);
+      this._updateStats();
 
-      // Register data stream callback - returns unsubscribe function
+      // Handle critical errors that might require reconnection
+      if (this._isCriticalError(error)) {
+        this._handleCriticalPortError(port, error);
+      }
+    };
+
+    // Store callbacks
+    this._dataStreamCallbacks.set(port, dataCallback);
+
+    try {
+      // Setup data stream
       const unsubscribeData = this._serialAdapter.onDataStream(port, dataCallback);
 
-      // 3. Setup error callback if adapter supports it
+      // Setup error stream if available
       let unsubscribeError: () => void = () => {};
       if (typeof this._serialAdapter.onErrorStream === 'function') {
-        const errorCallback = (error: Error) => {
-          this._errorsCount++;
-          this._updatePortStats(port, true);
-          this._callErrorHooks(error, `Serial port ${port}`);
-          this._updateStats();
-        };
-
         unsubscribeError = this._serialAdapter.onErrorStream(port, errorCallback);
-      } else {
-        // Fallback to Promise-based error handling
-        from(this._serialAdapter.onError(port))
-          .pipe(takeUntil(this._destroy$), retry({ count: 3, delay: 1000 }))
-          .subscribe({
-            next: (error) => {
-              this._errorsCount++;
-              this._updatePortStats(port, true);
-              this._callErrorHooks(error, `Serial port ${port}`);
-              this._updateStats();
-            },
-            error: (streamError) => {
-              this._logger.error(`Error stream failed for ${port}:`, streamError);
-            },
-          });
       }
 
-      // Store unsubscribe functions for cleanup
+      // Store unsubscribe functions
       const unsubscribers = [unsubscribeData, unsubscribeError].filter(Boolean);
       this._callbackUnsubscribers.set(port, unsubscribers);
 
-      // 4. Start monitoring connection
-      this._monitorPortConnection(port);
-
-      this._logger.log(`Port ${port} setup completed with ${unsubscribers.length} callbacks`);
+      this._logger.debug(`Callbacks setup for ${port} with ${unsubscribers.length} handlers`);
     } catch (error) {
-      this._logger.error(`Failed to connect to port ${port}:`, error);
-      throw error; // Re-throw to be handled by Promise.allSettled
+      this._logger.error(`Failed to setup callbacks for ${port}:`, error);
+      throw error;
     }
+  }
+
+  private _startPortMonitoring(port: string): void {
+    // Monitor every 15 seconds instead of 5 (less aggressive)
+    interval(15000)
+      .pipe(
+        takeUntil(this._destroy$),
+        filter(() => this._isRunning$.value && this._portStates.get(port) === 'connected'),
+        switchMap(() =>
+          from(this._serialAdapter.isPortConnected(port)).pipe(
+            timeout(5000), // Add timeout to prevent hanging
+            catchError((error) => {
+              this._logger.debug(`Connection check failed for ${port}:`, error);
+              return of(false); // Assume disconnected on error
+            }),
+          ),
+        ),
+        distinctUntilChanged(),
+        tap((isConnected) => {
+          if (!isConnected && this._portStates.get(port) === 'connected') {
+            this._logger.warn(`Port ${port} disconnected unexpectedly`);
+            this._handlePortDisconnection(port);
+          }
+        }),
+      )
+      .subscribe({
+        error: (error) => {
+          this._logger.error(`Connection monitoring failed for ${port}:`, error);
+        },
+      });
   }
 
   // NEW: Disconnect from all ports
@@ -395,29 +471,81 @@ export class LoadcellsService implements OnModuleInit, OnModuleDestroy {
 
   // NEW: Disconnect from single port
   private async _disconnectFromSinglePort(port: string): Promise<void> {
+    if (this._portStates.get(port) === 'disconnecting') {
+      this._logger.warn(`Port ${port} already disconnecting`);
+      return;
+    }
+
+    this._portStates.set(port, 'disconnecting');
+
     try {
-      // 1. Unsubscribe callbacks first
+      this._logger.debug(`Starting disconnection for ${port}`);
+
+      // 1. Stop monitoring first (prevent interference)
+      // (monitoring will stop due to state change to 'disconnecting')
+
+      // 2. Unsubscribe callbacks with error handling
       const unsubscribers = this._callbackUnsubscribers.get(port);
-      if (unsubscribers) {
-        unsubscribers.forEach((unsub) => {
-          try {
-            unsub();
-          } catch (error) {
-            this._logger.debug(`Error unsubscribing callback for ${port}:`, error);
-          }
-        });
+      if (unsubscribers && unsubscribers.length > 0) {
+        this._logger.debug(`Unsubscribing ${unsubscribers.length} callbacks for ${port}`);
+
+        await Promise.allSettled(
+          unsubscribers.map(async (unsub: () => void | Promise<void>) => {
+            try {
+              // Some unsubscribe functions might be async
+              const result = unsub();
+              if (result instanceof Promise) {
+                await result;
+              }
+            } catch (error) {
+              this._logger.debug(`Callback unsubscribe error for ${port}:`, error);
+            }
+          }),
+        );
+
         this._callbackUnsubscribers.delete(port);
       }
 
-      // 2. Close port
-      await this._serialAdapter.close(port);
+      // 3. Wait a bit for callbacks to fully cleanup
+      await new Promise((resolve) => setTimeout(resolve, 100));
 
-      // 3. Clean up references
+      // 4. Close port with retry logic
+      let closeAttempts = 0;
+      const maxCloseAttempts = 3;
+
+      while (closeAttempts < maxCloseAttempts) {
+        try {
+          await this._serialAdapter.close(port);
+
+          // Verify port is closed
+          const state = await this._serialAdapter.getConnectionState(port);
+          if (!state.isOpen) {
+            break; // Successfully closed
+          }
+
+          closeAttempts++;
+          if (closeAttempts < maxCloseAttempts) {
+            this._logger.debug(`Port ${port} still open after close attempt ${closeAttempts}, retrying...`);
+            await new Promise((resolve) => setTimeout(resolve, 200));
+          }
+        } catch (error) {
+          closeAttempts++;
+          if (closeAttempts >= maxCloseAttempts) {
+            this._logger.warn(`Failed to close ${port} after ${maxCloseAttempts} attempts:`, error);
+            break; // Give up, but continue cleanup
+          }
+          await new Promise((resolve) => setTimeout(resolve, 200));
+        }
+      }
+
+      // 5. Clean up references
       this._dataStreamCallbacks.delete(port);
+      this._portStates.set(port, 'disconnected');
 
       this._logger.debug(`Port ${port} disconnected and cleaned up`);
     } catch (error) {
-      this._logger.error(`Error disconnecting from ${port}:`, error);
+      this._logger.error(`Error during disconnection of ${port}:`, error);
+      this._portStates.set(port, 'disconnected'); // Set state anyway
       throw error;
     }
   }
@@ -509,63 +637,6 @@ export class LoadcellsService implements OnModuleInit, OnModuleDestroy {
           this._logger.error('Connection health monitoring error:', error);
         },
       });
-  }
-
-  private _updateConnectionHealth(): Observable<void> {
-    const healthChecks = this._connectedPorts.map((port) =>
-      from(this._serialAdapter.getConnectionState(port)).pipe(
-        map((state) => {
-          const portStats = this._portStats.get(port);
-          const issues: string[] = [];
-
-          if (!state.isOpen) {
-            issues.push('Port not connected');
-          }
-
-          if (state.lastError) {
-            issues.push(`Last error: ${state.lastError}`);
-          }
-
-          if (portStats && portStats.errors > 10) {
-            issues.push(`High error count: ${portStats.errors}`);
-          }
-
-          const now = Date.now();
-          const connectionDuration = this._startTime ? now - this._startTime : 0;
-
-          if (portStats && now - portStats.lastMessage.getTime() > 30000) {
-            issues.push('No recent messages (>30s)');
-          }
-
-          return {
-            port,
-            isHealthy: issues.length === 0 && state.isOpen,
-            issues,
-            connectionDuration,
-          } as LoadCellConnectionHealth;
-        }),
-        catchError((error) => {
-          this._logger.debug(`Failed to get health for ${port}:`, error.message);
-          return of({
-            port,
-            isHealthy: false,
-            issues: [`Health check failed: ${error.message}`],
-            connectionDuration: 0,
-          } as LoadCellConnectionHealth);
-        }),
-      ),
-    );
-
-    return forkJoin(healthChecks).pipe(
-      tap((healthArray) => {
-        this._connectionHealth$.next(healthArray);
-      }),
-      map(() => void 0),
-      catchError((error) => {
-        this._logger.error('Failed to update connection health:', error);
-        return of(void 0);
-      }),
-    );
   }
 
   private _updatePortStats(port: string, isError: boolean): void {
@@ -967,5 +1038,129 @@ export class LoadcellsService implements OnModuleInit, OnModuleDestroy {
     }
 
     return crc;
+  }
+
+  private _isCriticalError(error: Error): boolean {
+    const criticalMessages = [
+      'ENOENT', // Device not found
+      'EACCES', // Permission denied
+      'EBUSY', // Device busy
+      'device disconnected',
+      'port not open',
+    ];
+
+    return criticalMessages.some((msg) => error.message.toLowerCase().includes(msg.toLowerCase()));
+  }
+
+  // 7. NEW: Handle port disconnection with smart reconnection
+  private async _handlePortDisconnection(port: string): Promise<void> {
+    this._portStates.set(port, 'disconnected');
+    this._updatePortStats(port, true);
+
+    const reconnectCount = this._reconnectAttempts.get(port) || 0;
+
+    if (reconnectCount < this._maxReconnectAttempts) {
+      this._reconnectAttempts.set(port, reconnectCount + 1);
+      this._logger.log(`Attempting to reconnect to ${port} (attempt ${reconnectCount + 1}/${this._maxReconnectAttempts})`);
+
+      // Wait before reconnecting (exponential backoff)
+      const backoffDelay = Math.min(1000 * Math.pow(2, reconnectCount), 10000);
+      await new Promise((resolve) => setTimeout(resolve, backoffDelay));
+
+      try {
+        await this._connectToSinglePort(port);
+      } catch (error) {
+        this._logger.error(`Reconnection failed for ${port}:`, error);
+
+        if (reconnectCount + 1 >= this._maxReconnectAttempts) {
+          this._logger.error(`Max reconnection attempts reached for ${port}, giving up`);
+          this._callErrorHooks(new Error(`Port ${port} permanently disconnected`), 'Connection lost');
+        }
+      }
+    }
+  }
+
+  // 8. NEW: Handle critical errors that might need immediate action
+  private async _handleCriticalPortError(port: string, error: Error): Promise<void> {
+    this._logger.warn(`Critical error on ${port}, attempting recovery:`, error.message);
+
+    try {
+      // Force disconnect and reconnect
+      await this._disconnectFromSinglePort(port);
+      await new Promise((resolve) => setTimeout(resolve, 1000)); // Wait 1 second
+      await this._connectToSinglePort(port);
+    } catch (recoveryError) {
+      this._logger.error(`Recovery failed for ${port}:`, recoveryError);
+    }
+  }
+
+  // 9. IMPROVED: Better health monitoring
+  private _updateConnectionHealth(): Observable<void> {
+    const healthChecks = this._connectedPorts.map((port) =>
+      from(this._serialAdapter.getConnectionState(port)).pipe(
+        timeout(3000), // Add timeout to prevent hanging
+        map((state) => {
+          const portStats = this._portStats.get(port);
+          const portState = this._portStates.get(port);
+          const issues: string[] = [];
+
+          // Check connection state
+          if (!state.isOpen) {
+            issues.push('Port not connected');
+          }
+
+          // Check internal state
+          if (portState !== 'connected') {
+            issues.push(`Port state: ${portState}`);
+          }
+
+          // Check for errors
+          if (state.lastError) {
+            issues.push(`Last error: ${state.lastError}`);
+          }
+
+          // Check error rate
+          if (portStats && portStats.errors > 10) {
+            issues.push(`High error count: ${portStats.errors}`);
+          }
+
+          // Check for recent activity
+          const now = Date.now();
+          const connectionDuration = this._startTime ? now - this._startTime : 0;
+
+          if (portStats && now - portStats.lastMessage.getTime() > 60000) {
+            // 1 minute instead of 30 seconds
+            issues.push('No recent messages (>1min)');
+          }
+
+          return {
+            port,
+            isHealthy: issues.length === 0 && state.isOpen && portState === 'connected',
+            issues,
+            connectionDuration,
+          } as LoadCellConnectionHealth;
+        }),
+        catchError((error) => {
+          this._logger.debug(`Health check failed for ${port}:`, error.message);
+          return of({
+            port,
+            isHealthy: false,
+            issues: [`Health check failed: ${error.message}`],
+            connectionDuration: 0,
+          } as LoadCellConnectionHealth);
+        }),
+      ),
+    );
+
+    return forkJoin(healthChecks).pipe(
+      tap((healthArray) => {
+        this._connectionHealth$.next(healthArray);
+      }),
+      map(() => void 0),
+      catchError((error) => {
+        this._logger.error('Failed to update connection health:', error);
+        return of(void 0);
+      }),
+    );
   }
 }
