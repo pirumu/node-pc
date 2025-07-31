@@ -36,6 +36,10 @@ export class SerialPortAdapter implements ISerialAdapter, OnModuleDestroy {
   private _isDestroyed = false;
   private readonly _defaultOptions: SerialOptions = DEFAULT_OPTIONS;
 
+  // Persistent callback registries - SEPARATE from connections
+  private readonly _persistentDataCallbacks = new Map<string, ((data: Buffer) => void)[]>();
+  private readonly _persistentErrorCallbacks = new Map<string, ((error: Error) => void)[]>();
+
   constructor(@Inject(DISCOVERY_CONFIG) private readonly _configs: DiscoveryConfig) {
     this._defaultOptions = {
       ...this._defaultOptions,
@@ -257,10 +261,27 @@ export class SerialPortAdapter implements ISerialAdapter, OnModuleDestroy {
     });
   }
 
+  //  Restore persistent callbacks to connection
+  private _restorePersistentCallbacks(path: string, connection: SerialConnection): void {
+    // Restore data callbacks
+    const dataCallbacks = this._persistentDataCallbacks.get(path);
+    if (dataCallbacks) {
+      connection.dataStreamCallbacks = [...dataCallbacks];
+      this._logger.debug(`Restored ${dataCallbacks.length} data callbacks for ${path}`);
+    }
+
+    // Restore error callbacks
+    const errorCallbacks = this._persistentErrorCallbacks.get(path);
+    if (errorCallbacks) {
+      connection.errorCallbacks = [...errorCallbacks];
+      this._logger.debug(`Restored ${errorCallbacks.length} error callbacks for ${path}`);
+    }
+  }
+
   private _createConnection(path: string, options: SerialOptions): SerialConnection {
     const mergedOptions = { ...this._defaultOptions, ...options };
 
-    return {
+    const connection: SerialConnection = {
       path,
       state: {
         path,
@@ -276,6 +297,11 @@ export class SerialPortAdapter implements ISerialAdapter, OnModuleDestroy {
       dataResolvers: [],
       errorResolvers: [],
     };
+
+    //  persistent callbacks
+    this._restorePersistentCallbacks(path, connection);
+
+    return connection;
   }
 
   private async _attemptPortOpen(connection: SerialConnection): Promise<void> {
@@ -344,6 +370,7 @@ export class SerialPortAdapter implements ISerialAdapter, OnModuleDestroy {
     }
   }
 
+  // Enhanced cleanup - Clean connections but keep persistent callbacks
   private _cleanupConnection(path: string): void {
     const connection = this._connections.get(path);
     if (connection) {
@@ -358,8 +385,16 @@ export class SerialPortAdapter implements ISerialAdapter, OnModuleDestroy {
         clearTimeout(connection.bufferTimeout);
       }
 
-      this._connections.delete(path);
+      // Clear connection arrays (will be restored on next open)
+      connection.dataStreamCallbacks = [];
+      connection.errorCallbacks = [];
+      connection.dataResolvers = [];
+      connection.errorResolvers = [];
+      connection.bufferedDataQueue = [];
+
+      this._connections.delete(path); // Safe to delete - callbacks are persistent
     }
+
     this._connectionTimes.delete(path);
     this._logger.debug(`Connection ${path} cleaned up`);
   }
@@ -383,15 +418,20 @@ export class SerialPortAdapter implements ISerialAdapter, OnModuleDestroy {
       .filter((p) => !!p.manufacturer);
   }
 
+  //callbacks auto-restored
   public async open(path: string, options: SerialOptions): Promise<SerialPortState> {
+    // Check existing connection
     const existingConnection = this._connections.get(path);
-    if (existingConnection) {
-      this._logger.log(`Connection for ${path} already exists.`);
+    if (existingConnection && existingConnection.state.isOpen) {
+      this._logger.log(`Connection for ${path} already open.`);
       return existingConnection.state;
     }
 
+    // Create new connection - callbacks will be auto-restored
     const connection = this._createConnection(path, options);
     this._connections.set(path, connection);
+
+    this._logger.log(`Opening ${path} - ${connection.dataStreamCallbacks.length} callbacks restored`);
 
     try {
       const strategy = options.reconnectStrategy || 'retry';
@@ -460,13 +500,75 @@ export class SerialPortAdapter implements ISerialAdapter, OnModuleDestroy {
     });
   }
 
-  public onDataStream(path: string, callback: (data: Buffer) => void): void {
-    const connection = this._connections.get(path);
-    if (!connection) {
-      throw new Error(`Connection ${path} not found`);
+  // Enhanced onDataStream - Store callbacks persistently
+  public onDataStream(path: string, callback: (data: Buffer) => void): () => void {
+    // Store callback in persistent registry
+    if (!this._persistentDataCallbacks.has(path)) {
+      this._persistentDataCallbacks.set(path, []);
     }
 
-    connection.dataStreamCallbacks.push(callback);
+    const callbacks = this._persistentDataCallbacks.get(path)!;
+    callbacks.push(callback);
+
+    // If a connection exists, also add to connection
+    const connection = this._connections.get(path);
+    if (connection) {
+      connection.dataStreamCallbacks.push(callback);
+    }
+
+    this._logger.debug(`Data callback registered for ${path} - Total: ${callbacks.length}`);
+
+    // Return unsubscribe function
+    return () => {
+      // Remove from persistent registry
+      const index = callbacks.indexOf(callback);
+      if (index > -1) {
+        callbacks.splice(index, 1);
+        this._logger.debug(`Data callback unregistered for ${path} - Remaining: ${callbacks.length}`);
+      }
+
+      // Remove from connection if exists
+      const currentConnection = this._connections.get(path);
+      if (currentConnection) {
+        const connIndex = currentConnection.dataStreamCallbacks.indexOf(callback);
+        if (connIndex > -1) {
+          currentConnection.dataStreamCallbacks.splice(connIndex, 1);
+        }
+      }
+    };
+  }
+
+  // Enhanced error callback registration
+  public onErrorStream(path: string, callback: (error: Error) => void): () => void {
+    if (!this._persistentErrorCallbacks.has(path)) {
+      this._persistentErrorCallbacks.set(path, []);
+    }
+
+    const callbacks = this._persistentErrorCallbacks.get(path)!;
+    callbacks.push(callback);
+
+    const connection = this._connections.get(path);
+    if (connection) {
+      connection.errorCallbacks.push(callback);
+    }
+
+    this._logger.debug(`Error callback registered for ${path} - Total: ${callbacks.length}`);
+
+    return () => {
+      const index = callbacks.indexOf(callback);
+      if (index > -1) {
+        callbacks.splice(index, 1);
+        this._logger.debug(`Error callback unregistered for ${path} - Remaining: ${callbacks.length}`);
+      }
+
+      const currentConnection = this._connections.get(path);
+      if (currentConnection) {
+        const connIndex = currentConnection.errorCallbacks.indexOf(callback);
+        if (connIndex > -1) {
+          currentConnection.errorCallbacks.splice(connIndex, 1);
+        }
+      }
+    };
   }
 
   public async onData(path: string): Promise<Buffer> {
@@ -484,6 +586,33 @@ export class SerialPortAdapter implements ISerialAdapter, OnModuleDestroy {
     return new Promise<Buffer>((resolve, reject) => {
       connection.dataResolvers.push(resolve);
       connection.errorResolvers.push(reject);
+
+      // Set timeout to avoid hanging forever
+      const timeout = setTimeout(() => {
+        const resolverIndex = connection.dataResolvers.indexOf(resolve);
+        if (resolverIndex > -1) {
+          connection.dataResolvers.splice(resolverIndex, 1);
+        }
+        const errorIndex = connection.errorResolvers.indexOf(reject);
+        if (errorIndex > -1) {
+          connection.errorResolvers.splice(errorIndex, 1);
+        }
+        reject(new Error(`Timeout waiting for data on ${path}`));
+      }, 30000); // 30 second timeouts
+
+      // Clear timeout when resolved
+      const originalResolve = resolve;
+      const originalReject = reject;
+
+      connection.dataResolvers[connection.dataResolvers.length - 1] = (data: Buffer) => {
+        clearTimeout(timeout);
+        originalResolve(data);
+      };
+
+      connection.errorResolvers[connection.errorResolvers.length - 1] = (error: Error) => {
+        clearTimeout(timeout);
+        originalReject(error);
+      };
     });
   }
 
@@ -514,6 +643,7 @@ export class SerialPortAdapter implements ISerialAdapter, OnModuleDestroy {
     return connection.state.isOpen;
   }
 
+  // Normal close method - persistent callbacks preserved
   public async close(path: string): Promise<void> {
     const connection = this._connections.get(path);
     if (!connection) {
@@ -522,11 +652,20 @@ export class SerialPortAdapter implements ISerialAdapter, OnModuleDestroy {
 
     await this._closeConnection(path);
     this._cleanupConnection(path);
+    // Persistent callbacks remain in _persistentDataCallbacks
+    this._logger.debug(`Port ${path} closed - persistent callbacks preserved`);
   }
 
+  // Clean everything up
   public async dispose(): Promise<void> {
     const paths = Array.from(this._connections.keys());
     await Promise.all(paths.map(async (path) => this.close(path)));
+
+    // Clear persistent callbacks
+    this._persistentDataCallbacks.clear();
+    this._persistentErrorCallbacks.clear();
+
+    this._logger.log('All connections and persistent callbacks disposed');
   }
 
   public async getConnectedPorts(): Promise<string[]> {
@@ -581,5 +720,48 @@ export class SerialPortAdapter implements ISerialAdapter, OnModuleDestroy {
       connectingPorts: allConnections.filter((c) => c.state.isConnecting).length,
       failedPorts: allConnections.filter((c) => !c.state.isOpen && !c.state.isConnecting).length,
     };
+  }
+
+  // Clean up persistent callbacks (call when truly disposing a path)
+  public removePersistentCallbacks(path: string): void {
+    this._persistentDataCallbacks.delete(path);
+    this._persistentErrorCallbacks.delete(path);
+    this._logger.debug(`Persistent callbacks removed for ${path}`);
+  }
+
+  public getCallbackCounts(path: string): {
+    data: number;
+    error: number;
+    persistent: boolean;
+    persistentData: number;
+    persistentError: number;
+  } {
+    const connection = this._connections.get(path);
+    const persistentData = this._persistentDataCallbacks.get(path);
+    const persistentError = this._persistentErrorCallbacks.get(path);
+
+    return {
+      data: connection?.dataStreamCallbacks.length || 0,
+      error: connection?.errorCallbacks.length || 0,
+      persistent: (persistentData?.length || 0) > 0 || (persistentError?.length || 0) > 0,
+      persistentData: persistentData?.length || 0,
+      persistentError: persistentError?.length || 0,
+    };
+  }
+
+  public getPersistentCallbackInfo(): Map<string, { dataCallbacks: number; errorCallbacks: number }> {
+    const info = new Map<string, { dataCallbacks: number; errorCallbacks: number }>();
+
+    // Get all unique paths from both callback maps
+    const allPaths = new Set([...Array.from(this._persistentDataCallbacks.keys()), ...Array.from(this._persistentErrorCallbacks.keys())]);
+
+    for (const path of allPaths) {
+      info.set(path, {
+        dataCallbacks: this._persistentDataCallbacks.get(path)?.length || 0,
+        errorCallbacks: this._persistentErrorCallbacks.get(path)?.length || 0,
+      });
+    }
+
+    return info;
   }
 }

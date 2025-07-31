@@ -16,33 +16,15 @@ export class ControlUnitLockService implements OnModuleInit {
 
   constructor(@InjectSerialManager() private readonly _serialManager: ISerialAdapter) {}
 
-  public onModuleInit(): void {
-    this._detectPorts()
-      .then(async (): Promise<void> => {
-        return this._openPorts();
-      })
-      .catch((err: Error) => {
-        this._logger.error(`Setup error`, {
-          message: err.message,
-          stack: err.stack,
-          name: err.name,
-        });
-      });
-
-    setTimeout(() => {
-      this.execute({
-        protocol: ProtocolType.CU,
-        command: Command.GET_STATUS,
-        deviceId: 0,
-        lockIds: [],
-      })
-        .then((data) => {
-          this._logger.debug('[response]', data);
-        })
-        .catch((e: Error) => {
-          this._logger.error(e);
-        });
-    }, 5000);
+  public async onModuleInit(): Promise<void> {
+    await this._detectPorts();
+    await this._openPorts();
+    await this.execute({
+      protocol: ProtocolType.CU,
+      command: Command.GET_STATUS,
+      deviceId: 0,
+      lockIds: [],
+    });
   }
 
   public async execute(request: CuLockRequest): Promise<BaseResponse> {
