@@ -81,6 +81,9 @@ export class LoadcellsService implements OnModuleInit, OnModuleDestroy {
   // Data stream callbacks for Promise-based adapter
   private _dataStreamCallbacks = new Map<string, (data: Buffer) => void>();
 
+  // NEW: Track callback unsubscribe functions
+  private _callbackUnsubscribers = new Map<string, (() => void)[]>();
+
   constructor(@InjectSerialManager() private readonly _serialAdapter: ISerialAdapter) {
     this._messageAddresses = this._allMessages.map((msg) => parseInt(this._getBufferContent(msg.data).slice(0, 2), 16));
     this._currentMessages$.next([...this._allMessages]);
@@ -173,6 +176,7 @@ export class LoadcellsService implements OnModuleInit, OnModuleDestroy {
       });
     });
 
+    // NEW: Connect to ports (this will open them)
     await this._connectToPorts();
     this._scheduleDiscoveryTimeout();
     this._startConnectionHealthMonitoring();
@@ -181,15 +185,18 @@ export class LoadcellsService implements OnModuleInit, OnModuleDestroy {
     this._callStatusChangeHooks(true);
   }
 
-  public stop(): void {
+  public async stop(): Promise<void> {
     if (!this._isRunning$.value) {
       return;
     }
 
     this._logger.log('Stopping loadcells service');
 
-    // Clean up data stream callbacks
-    this._dataStreamCallbacks.clear();
+    // NEW: Clean up callbacks
+    this._cleanupCallbacks();
+
+    // NEW: Close all ports
+    await this._disconnectFromPorts();
 
     this._isRunning$.next(false);
     this._connectedPorts = [];
@@ -243,17 +250,62 @@ export class LoadcellsService implements OnModuleInit, OnModuleDestroy {
     return this._connectionHealth$.pipe(takeUntil(this._destroy$));
   }
 
+  // NEW: Get connection states for all ports
+  public async getPortConnectionStates(): Promise<Map<string, any>> {
+    const states = new Map();
+
+    for (const port of this._connectedPorts) {
+      try {
+        const state = await this._serialAdapter.getConnectionState(port);
+        states.set(port, state);
+      } catch (error) {
+        this._logger.debug(`Failed to get state for ${port}:`, error);
+        states.set(port, { isOpen: false, error: error.message });
+      }
+    }
+
+    return states;
+  }
+
+  // ENHANCED: Connect to ports with proper opening
   private async _connectToPorts(): Promise<void> {
     if (this._connectedPorts.length === 0) {
       return;
     }
 
-    for (const port of this._connectedPorts) {
-      this._logger.log(`Connecting to port: ${port}`);
+    const connectionPromises = this._connectedPorts.map(async (port) => this._connectToSinglePort(port));
 
+    // Connect to all ports in parallel
+    const results = await Promise.allSettled(connectionPromises);
+
+    // Log results
+    results.forEach((result, index) => {
+      const port = this._connectedPorts[index];
+      if (result.status === 'fulfilled') {
+        this._logger.log(`Successfully connected to ${port}`);
+      } else {
+        this._logger.error(`Failed to connect to ${port}:`, result.reason);
+        // Continue with other ports even if one fails
+      }
+    });
+  }
+
+  // NEW: Connect to single port
+  private async _connectToSinglePort(port: string): Promise<void> {
+    this._logger.log(`Connecting to port: ${port}`);
+
+    try {
+      // 1. OPEN PORT FIRST
+      const state = await this._serialAdapter.open(port, this._config.serialOptions);
+
+      if (!state.isOpen) {
+        throw new Error(`Failed to open port ${port}: ${state.lastError || 'Unknown error'}`);
+      }
+
+      this._logger.log(`Port ${port} opened successfully`);
+
+      // 2. Setup data callback AFTER port is opened
       const comId = this._extractComId(port);
-
-      // Setup data stream callback for Promise-based adapter
       const dataCallback = (data: Buffer) => {
         const reading = this._parseRawData(port, data, comId);
         if (reading) {
@@ -264,30 +316,162 @@ export class LoadcellsService implements OnModuleInit, OnModuleDestroy {
         }
       };
 
-      // Store callback for cleanup
+      // Store callback reference
       this._dataStreamCallbacks.set(port, dataCallback);
 
-      // Register data stream callback
-      this._serialAdapter.onDataStream(port, dataCallback);
+      // Register data stream callback - returns unsubscribe function
+      const unsubscribeData = this._serialAdapter.onDataStream(port, dataCallback);
 
-      // Subscribe to errors from EACH port using Promise wrapper
-      from(this._serialAdapter.onError(port))
-        .pipe(takeUntil(this._destroy$), retry({ count: 3, delay: 1000 }))
-        .subscribe({
-          next: (error) => {
-            this._errorsCount++;
-            this._updatePortStats(port, true);
-            this._callErrorHooks(error, `Serial port ${port}`);
-            this._updateStats();
-          },
-          error: (streamError) => {
-            this._logger.error(`Error stream failed for ${port}:`, streamError);
-          },
-        });
+      // 3. Setup error callback if adapter supports it
+      let unsubscribeError: () => void = () => {};
+      if (typeof this._serialAdapter.onErrorStream === 'function') {
+        const errorCallback = (error: Error) => {
+          this._errorsCount++;
+          this._updatePortStats(port, true);
+          this._callErrorHooks(error, `Serial port ${port}`);
+          this._updateStats();
+        };
 
-      // Monitor connection state for each port
+        unsubscribeError = this._serialAdapter.onErrorStream(port, errorCallback);
+      } else {
+        // Fallback to Promise-based error handling
+        from(this._serialAdapter.onError(port))
+          .pipe(takeUntil(this._destroy$), retry({ count: 3, delay: 1000 }))
+          .subscribe({
+            next: (error) => {
+              this._errorsCount++;
+              this._updatePortStats(port, true);
+              this._callErrorHooks(error, `Serial port ${port}`);
+              this._updateStats();
+            },
+            error: (streamError) => {
+              this._logger.error(`Error stream failed for ${port}:`, streamError);
+            },
+          });
+      }
+
+      // Store unsubscribe functions for cleanup
+      const unsubscribers = [unsubscribeData, unsubscribeError].filter(Boolean);
+      this._callbackUnsubscribers.set(port, unsubscribers);
+
+      // 4. Start monitoring connection
       this._monitorPortConnection(port);
+
+      this._logger.log(`Port ${port} setup completed with ${unsubscribers.length} callbacks`);
+    } catch (error) {
+      this._logger.error(`Failed to connect to port ${port}:`, error);
+      throw error; // Re-throw to be handled by Promise.allSettled
     }
+  }
+
+  // NEW: Disconnect from all ports
+  private async _disconnectFromPorts(): Promise<void> {
+    if (this._connectedPorts.length === 0) {
+      return;
+    }
+
+    this._logger.log(`Disconnecting from ${this._connectedPorts.length} ports`);
+
+    const disconnectionPromises = this._connectedPorts.map(async (port) => this._disconnectFromSinglePort(port));
+
+    // Disconnect from all ports in parallel
+    const results = await Promise.allSettled(disconnectionPromises);
+
+    // Log results
+    results.forEach((result, index) => {
+      const port = this._connectedPorts[index];
+      if (result.status === 'fulfilled') {
+        this._logger.log(`Successfully disconnected from ${port}`);
+      } else {
+        this._logger.error(`Failed to disconnect from ${port}:`, result.reason);
+      }
+    });
+
+    // Clear port arrays
+    this._connectedPorts = [];
+    this._dataStreamCallbacks.clear();
+    this._callbackUnsubscribers.clear();
+  }
+
+  // NEW: Disconnect from single port
+  private async _disconnectFromSinglePort(port: string): Promise<void> {
+    try {
+      // 1. Unsubscribe callbacks first
+      const unsubscribers = this._callbackUnsubscribers.get(port);
+      if (unsubscribers) {
+        unsubscribers.forEach((unsub) => {
+          try {
+            unsub();
+          } catch (error) {
+            this._logger.debug(`Error unsubscribing callback for ${port}:`, error);
+          }
+        });
+        this._callbackUnsubscribers.delete(port);
+      }
+
+      // 2. Close port
+      await this._serialAdapter.close(port);
+
+      // 3. Clean up references
+      this._dataStreamCallbacks.delete(port);
+
+      this._logger.debug(`Port ${port} disconnected and cleaned up`);
+    } catch (error) {
+      this._logger.error(`Error disconnecting from ${port}:`, error);
+      throw error;
+    }
+  }
+
+  // NEW: Clean up callbacks
+  private _cleanupCallbacks(): void {
+    // Unsubscribe all callbacks
+    this._callbackUnsubscribers.forEach((unsubscribers, port) => {
+      unsubscribers.forEach((unsub) => {
+        try {
+          unsub();
+        } catch (error) {
+          this._logger.debug(`Error unsubscribing callback for ${port}:`, error);
+        }
+      });
+    });
+
+    this._callbackUnsubscribers.clear();
+    this._dataStreamCallbacks.clear();
+  }
+
+  // NEW: Check if all ports are connected
+  public async areAllPortsConnected(): Promise<boolean> {
+    if (this._connectedPorts.length === 0) {
+      return false;
+    }
+
+    const connectionChecks = this._connectedPorts.map(async (port) => {
+      try {
+        return await this._serialAdapter.isPortConnected(port);
+      } catch {
+        return false;
+      }
+    });
+
+    const results = await Promise.all(connectionChecks);
+    return results.every((connected) => connected);
+  }
+
+  // NEW: Reconnect to failed ports
+  public async reconnectFailedPorts(): Promise<void> {
+    const reconnectPromises = this._connectedPorts.map(async (port) => {
+      try {
+        const isConnected = await this._serialAdapter.isPortConnected(port);
+        if (!isConnected) {
+          this._logger.log(`Reconnecting to failed port: ${port}`);
+          await this._connectToSinglePort(port);
+        }
+      } catch (error) {
+        this._logger.error(`Failed to reconnect to ${port}:`, error);
+      }
+    });
+
+    await Promise.all(reconnectPromises);
   }
 
   private _monitorPortConnection(port: string): void {

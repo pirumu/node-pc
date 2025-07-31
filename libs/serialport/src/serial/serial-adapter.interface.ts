@@ -79,14 +79,14 @@ export interface ISerialAdapter {
   close(path: string): Promise<void>;
   write(path: string, data: string | Buffer): Promise<boolean>;
 
-  // Stream data - callback for continuous data
-  onDataStream(path: string, callback: (data: Buffer) => void): void;
-
   // Buffered data - Promise resolves when buffer strategy emits
   onData(path: string): Promise<Buffer>;
+  // Stream data - callback for continuous data
+  onDataStream(path: string, callback: (data: Buffer) => void): () => void;
 
   // Error handling
   onError(path: string): Promise<Error>;
+  onErrorStream(path: string, callback: (error: Error) => void): () => void;
 
   // State management
   getConnectionState(path: string): Promise<SerialPortState>;

@@ -123,12 +123,16 @@ export class CuProtocol implements IProtocol<CuResponse> {
     return result;
   }
 
-  public createMessages({ deviceId, command, lockIds = [], timeout = 0 }: MessagesOptions): Buffer[] {
+  public createMessages({ deviceId, command, lockIds = [] }: MessagesOptions): Buffer[] {
     if (lockIds.length === 0) {
+      if (command === Command.GET_STATUS) {
+        return [this.createMessage({ deviceId, command, lockId: 0 })];
+      }
+
       lockIds = DEFAULT_LOCK_IDS;
     }
     return lockIds.map((lockId) => {
-      return this.createMessage({ deviceId, command, lockId, timeout });
+      return this.createMessage({ deviceId, command, lockId });
     });
   }
 }
