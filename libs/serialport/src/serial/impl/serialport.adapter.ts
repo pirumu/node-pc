@@ -1,5 +1,18 @@
 import { Inject, Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
-import { asyncScheduler, BehaviorSubject, from, lastValueFrom, Observable, of, scheduled, Subject, throwError, timer } from 'rxjs';
+import {
+  asyncScheduler,
+  BehaviorSubject,
+  from,
+  lastValueFrom,
+  Observable,
+  of,
+  scheduled,
+  Subject,
+  throwError,
+  timer,
+  EMPTY,
+  exhaustMap,
+} from 'rxjs';
 import {
   buffer,
   catchError,
@@ -13,8 +26,9 @@ import {
   takeUntil,
   tap,
   toArray,
+  retry,
 } from 'rxjs/operators';
-import { ByteLengthParser, DelimiterParser, ReadlineParser, SerialPort } from 'serialport';
+import { ByteLengthParser, DelimiterParser, ReadlineParser, SerialPort, SerialPortOpenOptions } from 'serialport';
 
 import { DISCOVERY_CONFIG } from '../../serialport.constants';
 import { DiscoveryConfig } from '../../services/port-discovery.service';
@@ -30,8 +44,6 @@ import {
   SerialPortInfo,
   SerialPortState,
 } from '../serial-adapter.interface';
-
-import { SerialPortHandler, retryStrategy, exponentialStrategy, intervalStrategy } from './serial-port.helper';
 
 export const DEFAULT_OPTIONS: SerialOptions = {
   baudRate: 9600,
@@ -93,6 +105,124 @@ export class SerialPortAdapter implements ISerialAdapter, OnModuleDestroy {
     } catch (error) {
       this._logger.error('Error during SerialPortAdapter cleanup:', error);
     }
+  }
+
+  /**
+   * @internal - Retry strategy helper
+   */
+  private _retryStrategy(
+    connection$: Observable<SerialPortState>,
+    path: string,
+    retryDelay: number,
+    maxAttempts: number,
+  ): Observable<SerialPortState> {
+    return connection$.pipe(
+      retry({
+        delay: (error, retryCount) => {
+          if (retryCount > maxAttempts) {
+            return throwError(() => new Error(`Max reconnect attempts (${maxAttempts}) exceeded for ${path}`));
+          }
+          this._logger.log(`Reconnecting ${path} in ${retryDelay}ms (attempt ${retryCount}/${maxAttempts})`);
+          return timer(retryDelay);
+        },
+      }),
+    );
+  }
+
+  /**
+   * @internal - Exponential strategy helper
+   */
+  private _exponentialStrategy(
+    connection$: Observable<SerialPortState>,
+    path: string,
+    retryDelay: number,
+    maxAttempts: number,
+  ): Observable<SerialPortState> {
+    return connection$.pipe(
+      retry({
+        delay: (error, retryCount) => {
+          if (retryCount > maxAttempts) {
+            return throwError(() => new Error(`Max reconnect attempts (${maxAttempts}) exceeded for ${path}`));
+          }
+          const delay = Math.min(retryDelay * Math.pow(2, retryCount - 1), 60000);
+          this._logger.log(`Reconnecting ${path} in ${delay}ms (attempt ${retryCount}/${maxAttempts})`);
+          return timer(delay);
+        },
+      }),
+    );
+  }
+
+  /**
+   * @internal - Interval strategy helper
+   */
+  private _intervalStrategy(
+    connection$: Observable<SerialPortState>,
+    path: string,
+    retryDelay: number,
+    maxAttempts: number,
+  ): Observable<SerialPortState> {
+    return timer(0, retryDelay).pipe(
+      exhaustMap((i) =>
+        connection$.pipe(
+          catchError((err) => {
+            this._logger.warn(`Connection attempt ${i + 1} for ${path} failed. Retrying in ${retryDelay}ms...`);
+            return EMPTY;
+          }),
+        ),
+      ),
+    );
+  }
+
+  /**
+   * @internal - Create parser for SerialPort
+   */
+  private _createParser(port: SerialPort, config: ParserConfig): any {
+    switch (config.type) {
+      case 'readline':
+        return port.pipe(new ReadlineParser(config.options || { delimiter: '\r\n' }));
+      case 'bytelength':
+        return port.pipe(new ByteLengthParser({ length: config.options?.length || 8 }));
+      case 'delimiter':
+        return port.pipe(new DelimiterParser({ delimiter: config.options?.delimiter || '\n' }));
+      case 'raw':
+        return null;
+    }
+  }
+
+  /**
+   * @internal - Setup listeners for SerialPort
+   */
+  private _setupPortListeners(
+    port: SerialPort,
+    parser: any,
+    rawData$: Subject<Buffer>,
+    error$: Subject<Error>,
+    options: SerialOptions,
+  ): void {
+    port.on('open', () => {
+      this._logger.log(`Port ${port.path} opened successfully`);
+    });
+
+    port.on('error', (err: Error) => {
+      this._logger.error(`Port ${port.path} error:`, err);
+      error$.next(err);
+    });
+
+    port.on('close', () => {
+      this._logger.warn(`Port ${port.path} closed`);
+    });
+
+    parser.on('data', (data: Buffer) => {
+      if (options.validateData && !options.validateData(data)) {
+        error$.next(new Error('Invalid data format'));
+        return;
+      }
+      if (options.headerByte !== undefined && data.length > 0 && data[0] !== options.headerByte) {
+        error$.next(new Error('Invalid header byte'));
+        return;
+      }
+      rawData$.next(data);
+    });
   }
 
   private _createBufferStrategy(source$: Observable<Buffer>, strategy: BufferStrategy): Observable<Buffer> {
@@ -277,13 +407,13 @@ export class SerialPortAdapter implements ISerialAdapter, OnModuleDestroy {
     // Use helper functions for retry strategies
     switch (strategy) {
       case 'retry':
-        return retryStrategy(connection$, path, retryDelay, maxAttempts, this._logger);
+        return this._retryStrategy(connection$, path, retryDelay, maxAttempts);
 
       case 'exponential':
-        return exponentialStrategy(connection$, path, retryDelay, maxAttempts, this._logger);
+        return this._exponentialStrategy(connection$, path, retryDelay, maxAttempts);
 
       case 'interval':
-        return intervalStrategy(connection$, path, retryDelay, maxAttempts, this._logger).pipe(takeUntil(connection.destroy$));
+        return this._intervalStrategy(connection$, path, retryDelay, maxAttempts).pipe(takeUntil(connection.destroy$));
 
       default:
         return connection$;
@@ -307,23 +437,35 @@ export class SerialPortAdapter implements ISerialAdapter, OnModuleDestroy {
       });
 
       try {
-        const handler = new SerialPortHandler(path, options, this._logger);
-        connection.handler = handler;
-        handler.rawData$.pipe(takeUntil(connection.destroy$)).subscribe({
-          next: (data) => connection.rawData$.next(data),
-          error: (err) => connection.error$.next(err),
-        });
+        // Create SerialPort with options
+        const portOptions: SerialPortOpenOptions<any> = {
+          path,
+          baudRate: options.baudRate,
+          dataBits: options.dataBits ?? 8,
+          stopBits: options.stopBits ?? 1,
+          parity: options.parity ?? 'none',
+          autoOpen: false,
+        };
 
-        handler.error$.pipe(takeUntil(connection.destroy$)).subscribe({
+        const port = new SerialPort(portOptions);
+        const parser = this._createParser(port, options.parser || { type: 'raw' });
+        const finalParser = parser === null ? port : parser;
+
+        // Setup listeners
+        this._setupPortListeners(port, finalParser, connection.rawData$, connection.error$, options);
+
+        connection.error$.pipe(takeUntil(connection.destroy$)).subscribe({
           next: (err) => {
-            connection.error$.next(err);
             updateState({ lastError: err.message });
           },
         });
 
-        handler
-          .open()
-          .then(() => {
+        // Open port
+        port.open((err) => {
+          if (err) {
+            updateState({ isConnecting: false, lastError: err.message });
+            subscriber.error(err);
+          } else {
             const state = updateState({
               isOpen: true,
               isConnecting: false,
@@ -332,14 +474,18 @@ export class SerialPortAdapter implements ISerialAdapter, OnModuleDestroy {
             });
             subscriber.next(state);
             subscriber.complete();
-          })
-          .catch((err) => {
-            updateState({ isConnecting: false, lastError: err.message });
-            subscriber.error(err);
-          });
+          }
+        });
+        // Store in connection
+        connection.port = port;
+        connection.parser = finalParser;
 
         return () => {
-          handler.destroy();
+          // Cleanup
+          port.removeAllListeners();
+          if (finalParser !== port) {
+            finalParser.removeAllListeners();
+          }
         };
       } catch (error) {
         updateState({ isConnecting: false, lastError: (error as Error).message });
@@ -347,13 +493,14 @@ export class SerialPortAdapter implements ISerialAdapter, OnModuleDestroy {
       }
     });
   }
+
   public write(path: string, data: string | Buffer): Observable<{ status: boolean }> {
     const connection = this._connections.get(path);
-    if (!connection?.handler?.port?.isOpen) {
+    if (!connection?.port?.isOpen) {
       return throwError(() => new Error(`Port ${path} is not open or does not exist.`));
     }
     return new Observable((subscriber) => {
-      connection.handler!.port.write(data, (err) => {
+      connection.port!.write(data, (err) => {
         if (err) {
           this._logger.error(`Write error on ${path}:`, err);
           connection.error$.next(err);
@@ -403,8 +550,8 @@ export class SerialPortAdapter implements ISerialAdapter, OnModuleDestroy {
       connection.destroy$.next();
       connection.destroy$.complete();
 
-      if (connection.handler?.port && connection.handler.port?.isOpen) {
-        connection.handler.port.close((err) => {
+      if (connection.port && connection.port.isOpen) {
+        connection.port.close((err) => {
           if (err) {
             this._logger.error(`Error closing port ${path}:`, err);
             subscriber.error(err);
