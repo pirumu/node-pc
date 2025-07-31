@@ -1,7 +1,19 @@
 import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { InjectSerialManager, ISerialAdapter } from '@serialport/serial';
 import { Observable, Subject, BehaviorSubject, timer, EMPTY, from, forkJoin, of, interval, timeout } from 'rxjs';
-import { map, takeUntil, tap, catchError, switchMap, filter, retry, mergeMap, distinctUntilChanged, debounceTime } from 'rxjs/operators';
+import {
+  map,
+  takeUntil,
+  tap,
+  catchError,
+  switchMap,
+  filter,
+  retry,
+  mergeMap,
+  distinctUntilChanged,
+  debounceTime,
+  concatMap,
+} from 'rxjs/operators';
 
 import { ALL_MESSAGES } from './loadcells.contants';
 import { LoadCellConfig, LoadCellDevice, LoadCellHooks, LoadCellReading, LoadCellStats } from './loadcells.types';
@@ -34,7 +46,8 @@ export class LoadcellsService implements OnModuleInit, OnModuleDestroy {
   private readonly _logger = new Logger(LoadcellsService.name);
   private readonly _destroy$ = new Subject<void>();
 
-  // Configuration
+  private _activeMessages: LoadCellDevice[] = [];
+
   private readonly _config: LoadCellConfig = {
     enabled: true,
     logLevel: 0,
@@ -52,12 +65,12 @@ export class LoadcellsService implements OnModuleInit, OnModuleDestroy {
       maxReconnectAttempts: 5,
       retryDelay: 5000,
     },
+    pollingInterval: 1000,
   };
 
   // State management
   private readonly _isRunning$ = new BehaviorSubject<boolean>(false);
   private readonly _onlineDevices$ = new BehaviorSubject<number[]>([]);
-  private readonly _currentMessages$ = new BehaviorSubject<LoadCellDevice[]>([]);
   private readonly _stats$ = new BehaviorSubject<LoadCellStats>(this._createInitialStats());
   private readonly _performanceStats$ = new BehaviorSubject<LoadCellPerformanceStats>(this._createInitialPerformanceStats());
   private readonly _connectionHealth$ = new BehaviorSubject<LoadCellConnectionHealth[]>([]);
@@ -90,7 +103,7 @@ export class LoadcellsService implements OnModuleInit, OnModuleDestroy {
 
   constructor(@InjectSerialManager() private readonly _serialAdapter: ISerialAdapter) {
     this._messageAddresses = this._allMessages.map((msg) => parseInt(this._getBufferContent(msg.data).slice(0, 2), 16));
-    this._currentMessages$.next([...this._allMessages]);
+    this._activeMessages = [...this._allMessages];
 
     // Start performance monitoring
     this._startPerformanceMonitoring();
@@ -136,8 +149,8 @@ export class LoadcellsService implements OnModuleInit, OnModuleDestroy {
     return this._isRunning$.pipe(takeUntil(this._destroy$));
   }
 
-  public get currentMessages$(): Observable<LoadCellDevice[]> {
-    return this._currentMessages$.pipe(takeUntil(this._destroy$));
+  public get currentMessages(): LoadCellDevice[] {
+    return this._activeMessages;
   }
 
   public get stats$(): Observable<LoadCellStats> {
@@ -205,19 +218,17 @@ export class LoadcellsService implements OnModuleInit, OnModuleDestroy {
     this._connectedPorts = [];
     this._discoveryPhase = true;
     this._onlineDevices$.next([]);
-    this._currentMessages$.next([...this._allMessages]);
+    this._activeMessages = [...this._allMessages];
     this._connectionHealth$.next([]);
 
     this._callStatusChangeHooks(false);
   }
 
   public setActiveDevices(deviceIds: number[]): void {
-    const activeMessages = this._allMessages.filter((msg) => {
+    this._activeMessages = this._allMessages.filter((msg) => {
       const buffer = this._bufferFromBufferString(msg.data);
       return deviceIds.includes(buffer[0]);
     });
-
-    this._currentMessages$.next(activeMessages);
     this._updateStats();
     this._logger.log(`Active devices set: ${deviceIds.join(', ')}`);
   }
@@ -304,7 +315,6 @@ export class LoadcellsService implements OnModuleInit, OnModuleDestroy {
     this._logger.log(`Connecting to port: ${port}`);
 
     try {
-      // 1. ENSURE PORT IS CLOSED FIRST (important!)
       try {
         const currentState = await this._serialAdapter.getConnectionState(port);
         if (currentState.isOpen) {
@@ -699,38 +709,25 @@ export class LoadcellsService implements OnModuleInit, OnModuleDestroy {
   }
 
   public startDataPolling(): void {
-    this._currentMessages$
+    interval(this._config.pollingInterval)
       .pipe(
         takeUntil(this._destroy$),
         filter(() => this._isRunning$.value),
         debounceTime(100), // Debounce rapid changes
-        switchMap((messages) => this._pollMessages(messages)),
+        switchMap(() => this._executePollingCycle()),
       )
-      .subscribe({
-        error: (error) => {
-          this._logger.error('Polling error:', error);
-          this._callErrorHooks(error, 'Data polling');
-          this._isRunning$.next(false);
-        },
-      });
+      .subscribe();
   }
 
   public stopDataPolling(): void {
-    this._currentMessages$.next([]);
+    this._activeMessages = [];
     this._updateStats();
   }
 
-  private _pollMessages(messages: LoadCellDevice[]): Observable<void> {
-    if (messages.length === 0) {
-      return timer(1000).pipe(map(() => void 0));
-    }
-
-    const totalInterval = this._config.initTimer * messages.length;
-    const messageInterval = totalInterval / messages.length;
-
-    return from(messages).pipe(
-      mergeMap((message, index) =>
-        timer(index * messageInterval).pipe(
+  private _executePollingCycle(): Observable<void> {
+    return from(this._activeMessages).pipe(
+      concatMap((message, index) =>
+        timer(index * this._config.initTimer).pipe(
           switchMap(() => this._sendMessage(message)),
           catchError((error) => {
             this._logger.error(`Failed to send message ${message.no}:`, error);
@@ -739,7 +736,7 @@ export class LoadcellsService implements OnModuleInit, OnModuleDestroy {
           }),
         ),
       ),
-      switchMap(() => timer(totalInterval).pipe(map(() => void 0))),
+      map(() => void 0),
     );
   }
 
@@ -892,13 +889,12 @@ export class LoadcellsService implements OnModuleInit, OnModuleDestroy {
   }
 
   private _updateStats(): void {
-    const currentMessages = this._currentMessages$.value;
     const onlineDevices = this._onlineDevices$.value;
 
     const stats: LoadCellStats = {
       totalMessages: this._allMessages.length,
       onlineDevices,
-      activeMessages: currentMessages.length,
+      activeMessages: this._activeMessages.length,
       readingsCount: this._readingsCount,
       errorsCount: this._errorsCount,
       lastReading: new Date(this._lastReadingTime),

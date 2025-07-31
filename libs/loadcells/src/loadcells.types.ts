@@ -26,6 +26,7 @@ export type LoadCellConfig = {
   messageLength: number;
   serialOptions: SerialOptions;
   discoveryTimeout: number;
+  pollingInterval: number;
 };
 
 export type LoadCellStats = {
