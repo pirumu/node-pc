@@ -1,39 +1,10 @@
+import { sleep } from '@framework/time/sleep';
 import { Inject, Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
-import {
-  asyncScheduler,
-  BehaviorSubject,
-  from,
-  lastValueFrom,
-  Observable,
-  of,
-  scheduled,
-  Subject,
-  throwError,
-  timer,
-  EMPTY,
-  exhaustMap,
-} from 'rxjs';
-import {
-  buffer,
-  catchError,
-  distinctUntilChanged,
-  filter,
-  finalize,
-  map,
-  mergeMap,
-  scan,
-  shareReplay,
-  takeUntil,
-  tap,
-  toArray,
-  retry,
-} from 'rxjs/operators';
 import { ByteLengthParser, DelimiterParser, ReadlineParser, SerialPort, SerialPortOpenOptions } from 'serialport';
 
 import { DISCOVERY_CONFIG } from '../../serialport.constants';
 import { DiscoveryConfig } from '../../services/port-discovery.service';
 import {
-  BufferStrategy,
   ConnectedPortInfo,
   ConnectionStats,
   ConnectionSummary,
@@ -62,7 +33,7 @@ export class SerialPortAdapter implements ISerialAdapter, OnModuleDestroy {
   private readonly _logger = new Logger(SerialPortAdapter.name);
   private readonly _connectionTimes = new Map<string, Date>();
   private readonly _connections = new Map<string, SerialConnection>();
-  private readonly _destroy$ = new Subject<void>();
+  private _isDestroyed = false;
   private readonly _defaultOptions: SerialOptions = DEFAULT_OPTIONS;
 
   constructor(@Inject(DISCOVERY_CONFIG) private readonly _configs: DiscoveryConfig) {
@@ -74,108 +45,49 @@ export class SerialPortAdapter implements ISerialAdapter, OnModuleDestroy {
 
   public async onModuleDestroy(): Promise<void> {
     this._logger.log('Cleaning up SerialPortAdapter...');
+    this._isDestroyed = true;
     this._connectionTimes.clear();
-    await this._cleanup();
+    await this.dispose();
   }
 
-  private async _cleanup(): Promise<void> {
-    this._destroy$.next();
-    this._destroy$.complete();
-    try {
-      await lastValueFrom(
-        this.dispose().pipe(
-          catchError((err) => {
-            this._logger.error(`Dispose failed during cleanup:`, err);
-            return from(Array.from(this._connections.keys())).pipe(
-              mergeMap((path) =>
-                this.close(path).pipe(
-                  catchError((individualErr) => {
-                    this._logger.error(`Error closing individual port ${path} during cleanup:`, individualErr);
-                    return of(undefined);
-                  }),
-                ),
-              ),
-              toArray(),
-              map(() => undefined),
-            );
-          }),
-        ),
-      );
-      this._logger.log('SerialPortAdapter cleanup completed');
-    } catch (error) {
-      this._logger.error('Error during SerialPortAdapter cleanup:', error);
+  private async _retryWithStrategy(
+    operation: () => Promise<void>,
+    path: string,
+    strategy: string,
+    retryDelay: number,
+    maxAttempts: number,
+  ): Promise<void> {
+    let attempt = 0;
+
+    while (attempt < maxAttempts && !this._isDestroyed) {
+      try {
+        await operation();
+        return;
+      } catch (error) {
+        attempt++;
+
+        if (attempt >= maxAttempts) {
+          throw new Error(`Max reconnect attempts (${maxAttempts}) exceeded for ${path}`);
+        }
+
+        let delay = retryDelay;
+
+        switch (strategy) {
+          case 'exponential':
+            delay = Math.min(retryDelay * Math.pow(2, attempt - 1), 60000);
+            break;
+          case 'retry':
+          default:
+            delay = retryDelay;
+            break;
+        }
+
+        this._logger.log(`Reconnecting ${path} in ${delay}ms (attempt ${attempt}/${maxAttempts})`);
+        await sleep(delay);
+      }
     }
   }
 
-  /**
-   * @internal - Retry strategy helper
-   */
-  private _retryStrategy(
-    connection$: Observable<SerialPortState>,
-    path: string,
-    retryDelay: number,
-    maxAttempts: number,
-  ): Observable<SerialPortState> {
-    return connection$.pipe(
-      retry({
-        delay: (error, retryCount) => {
-          if (retryCount > maxAttempts) {
-            return throwError(() => new Error(`Max reconnect attempts (${maxAttempts}) exceeded for ${path}`));
-          }
-          this._logger.log(`Reconnecting ${path} in ${retryDelay}ms (attempt ${retryCount}/${maxAttempts})`);
-          return timer(retryDelay);
-        },
-      }),
-    );
-  }
-
-  /**
-   * @internal - Exponential strategy helper
-   */
-  private _exponentialStrategy(
-    connection$: Observable<SerialPortState>,
-    path: string,
-    retryDelay: number,
-    maxAttempts: number,
-  ): Observable<SerialPortState> {
-    return connection$.pipe(
-      retry({
-        delay: (error, retryCount) => {
-          if (retryCount > maxAttempts) {
-            return throwError(() => new Error(`Max reconnect attempts (${maxAttempts}) exceeded for ${path}`));
-          }
-          const delay = Math.min(retryDelay * Math.pow(2, retryCount - 1), 60000);
-          this._logger.log(`Reconnecting ${path} in ${delay}ms (attempt ${retryCount}/${maxAttempts})`);
-          return timer(delay);
-        },
-      }),
-    );
-  }
-
-  /**
-   * @internal - Interval strategy helper
-   */
-  private _intervalStrategy(
-    connection$: Observable<SerialPortState>,
-    path: string,
-    retryDelay: number,
-    maxAttempts: number,
-  ): Observable<SerialPortState> {
-    return timer(0, retryDelay).pipe(
-      exhaustMap((i) =>
-        connection$.pipe(
-          catchError((err) => {
-            this._logger.warn(`Connection attempt ${i + 1} for ${path} failed. Retrying in ${retryDelay}ms...`);
-            return EMPTY;
-          }),
-        ),
-      ),
-    );
-  }
-
-  /**
-   * @internal - Create parser for SerialPort
-   */
   private _createParser(port: SerialPort, config: ParserConfig): any {
     switch (config.type) {
       case 'readline':
@@ -185,480 +97,484 @@ export class SerialPortAdapter implements ISerialAdapter, OnModuleDestroy {
       case 'delimiter':
         return port.pipe(new DelimiterParser({ delimiter: config.options?.delimiter || '\n' }));
       case 'raw':
-        return null;
+      default:
+        return port;
     }
   }
 
-  /**
-   * @internal - Setup listeners for SerialPort
-   */
-  private _setupPortListeners(
-    port: SerialPort,
-    parser: any,
-    rawData$: Subject<Buffer>,
-    error$: Subject<Error>,
-    options: SerialOptions,
-  ): void {
+  private _processBufferStrategy(connection: SerialConnection, data: Buffer): void {
+    const { bufferStrategy } = connection.options;
+
+    if (!bufferStrategy || bufferStrategy.type === 'none') {
+      // No buffering - emit immediately
+      this._emitBufferedData(connection, data);
+      return;
+    }
+
+    switch (bufferStrategy.type) {
+      case 'time':
+        connection.rawBuffer = Buffer.concat([connection.rawBuffer, data]);
+
+        if (connection.bufferTimeout) {
+          clearTimeout(connection.bufferTimeout);
+        }
+
+        connection.bufferTimeout = setTimeout(() => {
+          if (connection.rawBuffer.length > 0) {
+            this._emitBufferedData(connection, connection.rawBuffer);
+            connection.rawBuffer = Buffer.alloc(0);
+          }
+        }, bufferStrategy.timeMs || 100);
+        break;
+
+      case 'size':
+        connection.rawBuffer = Buffer.concat([connection.rawBuffer, data]);
+
+        if (connection.rawBuffer.length >= (bufferStrategy.size || 1024)) {
+          this._emitBufferedData(connection, connection.rawBuffer);
+          connection.rawBuffer = Buffer.alloc(0);
+        }
+        break;
+
+      case 'delimiter':
+        const delimiter = bufferStrategy.delimiter || Buffer.from([0x00]);
+        const combined = Buffer.concat([connection.rawBuffer, data]);
+        const maxSize = bufferStrategy.maxBufferSize || 1024 * 1024;
+
+        if (combined.length > maxSize) {
+          this._logger.warn(`Buffer exceeded max size (${maxSize} bytes). Flushing.`);
+          connection.rawBuffer = Buffer.alloc(0);
+          return;
+        }
+
+        let lastIndex = 0;
+        let foundIndex = -1;
+
+        while ((foundIndex = combined.indexOf(delimiter, lastIndex)) !== -1) {
+          const chunk = combined.subarray(lastIndex, foundIndex);
+          if (chunk.length > 0) {
+            this._emitBufferedData(connection, chunk);
+          }
+          lastIndex = foundIndex + delimiter.length;
+        }
+
+        connection.rawBuffer = combined.subarray(lastIndex);
+        break;
+
+      case 'combined':
+        connection.rawBuffer = Buffer.concat([connection.rawBuffer, data]);
+        const isSizeReached = connection.rawBuffer.length >= (bufferStrategy.size || 1024);
+
+        if (isSizeReached) {
+          this._emitBufferedData(connection, connection.rawBuffer);
+          connection.rawBuffer = Buffer.alloc(0);
+        } else {
+          if (connection.bufferTimeout) {
+            clearTimeout(connection.bufferTimeout);
+          }
+
+          connection.bufferTimeout = setTimeout(() => {
+            if (connection.rawBuffer.length > 0) {
+              this._emitBufferedData(connection, connection.rawBuffer);
+              connection.rawBuffer = Buffer.alloc(0);
+            }
+          }, bufferStrategy.timeMs || 100);
+        }
+        break;
+
+      default:
+        this._emitBufferedData(connection, data);
+    }
+  }
+
+  private _emitBufferedData(connection: SerialConnection, data: Buffer): void {
+    // Add to queue for onData() Promise resolvers
+    connection.bufferedDataQueue.push(data);
+
+    // Resolve waiting onData() promises
+    if (connection.dataResolvers.length > 0) {
+      const resolver = connection.dataResolvers.shift()!;
+      const bufferedData = connection.bufferedDataQueue.shift()!;
+      resolver(bufferedData);
+    }
+  }
+
+  private _setupPortListeners(connection: SerialConnection, port: SerialPort, parser: any): void {
+    const { options } = connection;
+
     port.on('open', () => {
       this._logger.log(`Port ${port.path} opened successfully`);
+      connection.state = {
+        ...connection.state,
+        isOpen: true,
+        isConnecting: false,
+        reconnectAttempts: 0,
+        lastError: undefined,
+      };
     });
 
     port.on('error', (err: Error) => {
       this._logger.error(`Port ${port.path} error:`, err);
-      error$.next(err);
+      connection.state = { ...connection.state, lastError: err.message };
+
+      // Notify error callbacks
+      connection.errorCallbacks.forEach((callback) => callback(err));
+
+      // Resolve error promises
+      connection.errorResolvers.forEach((resolver) => resolver(err));
+      connection.errorResolvers = [];
     });
 
     port.on('close', () => {
       this._logger.warn(`Port ${port.path} closed`);
+      connection.state = { ...connection.state, isOpen: false };
     });
 
     parser.on('data', (data: Buffer) => {
+      // Validation
       if (options.validateData && !options.validateData(data)) {
-        error$.next(new Error('Invalid data format'));
+        const error = new Error('Invalid data format');
+        connection.errorCallbacks.forEach((callback) => callback(error));
         return;
       }
+
       if (options.headerByte !== undefined && data.length > 0 && data[0] !== options.headerByte) {
-        error$.next(new Error('Invalid header byte'));
+        const error = new Error('Invalid header byte');
+        connection.errorCallbacks.forEach((callback) => callback(error));
         return;
       }
-      rawData$.next(data);
-    });
-  }
 
-  private _createBufferStrategy(source$: Observable<Buffer>, strategy: BufferStrategy): Observable<Buffer> {
-    switch (strategy.type) {
-      case 'none':
-        return source$;
+      // Stream callbacks - immediate raw data
+      connection.dataStreamCallbacks.forEach((callback) => callback(data));
 
-      case 'time':
-        return source$.pipe(
-          buffer(timer(strategy.timeMs || 100)),
-          filter((chunks) => chunks.length > 0),
-          map((chunks) => Buffer.concat(chunks)),
-        );
-
-      case 'size':
-        return source$.pipe(
-          scan(
-            (acc: { buffer: Buffer; size: number }, chunk: Buffer) => {
-              const newBuffer = Buffer.concat([acc.buffer, chunk]);
-              return { buffer: newBuffer, size: acc.size + chunk.length };
-            },
-            { buffer: Buffer.alloc(0), size: 0 },
-          ),
-          filter((state) => state.size >= (strategy.size || 1024)),
-          map((state) => state.buffer),
-        );
-
-      case 'delimiter':
-        const delimiter = strategy.delimiter || Buffer.from([0x00]);
-        const maxBufferSize = strategy.maxBufferSize || 1024 * 1024;
-
-        return source$.pipe(
-          scan(
-            (acc, chunk) => {
-              const combined = Buffer.concat([acc.buffer, chunk]);
-
-              if (combined.length > maxBufferSize) {
-                this._logger.warn(`Delimiter buffer exceeded max size (${maxBufferSize} bytes). Flushing buffer.`);
-                return { buffer: Buffer.alloc(0), emit$: acc.emit$ };
-              }
-
-              const chunks: Buffer[] = [];
-              let lastIndex = 0;
-              let foundIndex = -1;
-
-              while ((foundIndex = combined.indexOf(delimiter, lastIndex)) !== -1) {
-                chunks.push(combined.subarray(lastIndex, foundIndex));
-                lastIndex = foundIndex + delimiter.length;
-              }
-
-              chunks.forEach((completeChunk) => {
-                if (completeChunk.length > 0) {
-                  acc.emit$.next(completeChunk);
-                }
-              });
-
-              return {
-                buffer: combined.subarray(lastIndex),
-                emit$: acc.emit$,
-              };
-            },
-            {
-              buffer: Buffer.alloc(0),
-              emit$: new Subject<Buffer>(),
-            },
-          ),
-          mergeMap((state) => state.emit$),
-        );
-
-      case 'combined':
-        return source$.pipe(
-          buffer(
-            timer(strategy.timeMs || 100).pipe(
-              takeUntil(
-                source$.pipe(
-                  scan((acc, chunk) => acc + chunk.length, 0),
-                  filter((size) => size >= (strategy.size || 1024)),
-                ),
-              ),
-            ),
-          ),
-          filter((chunks) => chunks.length > 0),
-          map((chunks) => Buffer.concat(chunks)),
-        );
-
-      default:
-        return source$;
-    }
-  }
-
-  public listPorts(): Observable<SerialPortInfo[]> {
-    return from(SerialPort.list()).pipe(
-      map((ports) =>
-        ports
-          .map((p) => ({
-            path: p.path,
-            manufacturer: p.manufacturer,
-            serialNumber: p.serialNumber,
-            vendorId: p.vendorId,
-            productId: p.productId,
-          }))
-          .filter((p) => !!p.manufacturer),
-      ),
-      takeUntil(this._destroy$),
-    );
-  }
-
-  public open(path: string, options: SerialOptions): Observable<SerialPortState> {
-    const existingConnection = this._connections.get(path);
-    if (existingConnection) {
-      this._logger.log(`Connection for ${path} already exists. Returning existing state stream.`);
-      return existingConnection.state$.pipe(
-        distinctUntilChanged((prev, curr) => prev.isOpen === curr.isOpen && prev.isConnecting === curr.isConnecting),
-        takeUntil(this._destroy$),
-      );
-    }
-
-    const connection = this._createConnection(path, options);
-    this._connections.set(path, connection);
-
-    this._establishConnectionWithStrategy(connection).subscribe({
-      error: (err) => {
-        this._logger.error(`Unhandled error in connection strategy for ${path}:`, err);
-        const finalState: SerialPortState = {
-          path,
-          isOpen: false,
-          isConnecting: false,
-          lastError: err.message,
-          reconnectAttempts: connection.state$.value.reconnectAttempts,
-        };
-        connection.state$.next(finalState);
-      },
+      // Buffer processing for onData()
+      this._processBufferStrategy(connection, data);
     });
 
-    return connection.state$.pipe(
-      tap((state) => {
-        if (state.isOpen && !this._connectionTimes.has(path)) {
-          this._connectionTimes.set(path, new Date());
-        }
-      }),
-      distinctUntilChanged((prev, curr) => prev.isOpen === curr.isOpen && prev.isConnecting === curr.isConnecting),
-      shareReplay(1),
-      takeUntil(this._destroy$),
-    );
+    parser.on('error', (err: Error) => {
+      this._logger.error(`Parser error:`, err);
+      connection.errorCallbacks.forEach((callback) => callback(err));
+    });
   }
 
   private _createConnection(path: string, options: SerialOptions): SerialConnection {
     const mergedOptions = { ...this._defaultOptions, ...options };
-    const rawData$ = new Subject<Buffer>();
-    const connection: SerialConnection = {
+
+    return {
       path,
-      state$: new BehaviorSubject<SerialPortState>({
+      state: {
         path,
         isOpen: false,
         isConnecting: false,
         reconnectAttempts: 0,
-      }),
-      data$: new Subject<Buffer>(),
-      rawData$,
-      error$: new Subject<Error>(),
-      destroy$: new Subject<void>(),
+      },
       options: mergedOptions,
-      bufferedData$: this._createBufferStrategy(rawData$, mergedOptions.bufferStrategy || { type: 'none' }),
+      dataStreamCallbacks: [],
+      errorCallbacks: [],
+      rawBuffer: Buffer.alloc(0),
+      bufferedDataQueue: [],
+      dataResolvers: [],
+      errorResolvers: [],
+    };
+  }
+
+  private async _attemptPortOpen(connection: SerialConnection): Promise<void> {
+    const { path, options } = connection;
+
+    connection.state = {
+      ...connection.state,
+      isConnecting: true,
+      reconnectAttempts: connection.state.reconnectAttempts + 1,
     };
 
-    connection.bufferedData$.pipe(takeUntil(connection.destroy$)).subscribe({
-      next: (data) => connection.data$.next(data),
-      error: (err) => connection.error$.next(err),
-    });
+    const portOptions: SerialPortOpenOptions<any> = {
+      path,
+      baudRate: options.baudRate,
+      dataBits: options.dataBits ?? 8,
+      stopBits: options.stopBits ?? 1,
+      parity: options.parity ?? 'none',
+      autoOpen: false,
+    };
 
-    return connection;
-  }
+    const port = new SerialPort(portOptions);
+    const parser = this._createParser(port, options.parser || { type: 'raw' });
 
-  private _establishConnectionWithStrategy(connection: SerialConnection): Observable<SerialPortState> {
-    const { path, options } = connection;
-    const strategy = options.reconnectStrategy || 'retry';
-    const retryDelay = options.retryDelay || 1000;
-    const maxAttempts = options.maxReconnectAttempts ?? 5;
+    connection.port = port;
+    connection.parser = parser;
 
-    const connection$ = this._createAndSetupPort(connection);
+    this._setupPortListeners(connection, port, parser);
 
-    // Use helper functions for retry strategies
-    switch (strategy) {
-      case 'retry':
-        return this._retryStrategy(connection$, path, retryDelay, maxAttempts);
-
-      case 'exponential':
-        return this._exponentialStrategy(connection$, path, retryDelay, maxAttempts);
-
-      case 'interval':
-        return this._intervalStrategy(connection$, path, retryDelay, maxAttempts).pipe(takeUntil(connection.destroy$));
-
-      default:
-        return connection$;
-    }
-  }
-
-  private _createAndSetupPort(connection: SerialConnection): Observable<SerialPortState> {
-    return new Observable<SerialPortState>((subscriber) => {
-      const { path, options } = connection;
-
-      const updateState = (updates: Partial<SerialPortState>): SerialPortState => {
-        const currentState = connection.state$.value;
-        const newState = { ...currentState, ...updates };
-        connection.state$.next(newState);
-        return newState;
-      };
-
-      updateState({
-        isConnecting: true,
-        reconnectAttempts: connection.state$.value.reconnectAttempts + 1,
-      });
-
-      try {
-        // Create SerialPort with options
-        const portOptions: SerialPortOpenOptions<any> = {
-          path,
-          baudRate: options.baudRate,
-          dataBits: options.dataBits ?? 8,
-          stopBits: options.stopBits ?? 1,
-          parity: options.parity ?? 'none',
-          autoOpen: false,
-        };
-
-        const port = new SerialPort(portOptions);
-        const parser = this._createParser(port, options.parser || { type: 'raw' });
-        const finalParser = parser === null ? port : parser;
-
-        // Setup listeners
-        this._setupPortListeners(port, finalParser, connection.rawData$, connection.error$, options);
-
-        connection.error$.pipe(takeUntil(connection.destroy$)).subscribe({
-          next: (err) => {
-            updateState({ lastError: err.message });
-          },
-        });
-
-        // Open port
-        port.open((err) => {
-          if (err) {
-            updateState({ isConnecting: false, lastError: err.message });
-            subscriber.error(err);
-          } else {
-            const state = updateState({
-              isOpen: true,
-              isConnecting: false,
-              reconnectAttempts: 0,
-              lastError: undefined,
-            });
-            subscriber.next(state);
-            subscriber.complete();
-          }
-        });
-        // Store in connection
-        connection.port = port;
-        connection.parser = finalParser;
-
-        return () => {
-          // Cleanup
-          port.removeAllListeners();
-          if (finalParser !== port) {
-            finalParser.removeAllListeners();
-          }
-        };
-      } catch (error) {
-        updateState({ isConnecting: false, lastError: (error as Error).message });
-        subscriber.error(error);
-      }
-    });
-  }
-
-  public write(path: string, data: string | Buffer): Observable<{ status: boolean }> {
-    const connection = this._connections.get(path);
-    if (!connection?.port?.isOpen) {
-      return throwError(() => new Error(`Port ${path} is not open or does not exist.`));
-    }
-    return new Observable((subscriber) => {
-      connection.port!.write(data, (err) => {
+    return new Promise<void>((resolve, reject) => {
+      port.open((err) => {
         if (err) {
-          this._logger.error(`Write error on ${path}:`, err);
-          connection.error$.next(err);
-          subscriber.error(err);
+          connection.state = {
+            ...connection.state,
+            isConnecting: false,
+            lastError: err.message,
+          };
+          reject(err);
         } else {
-          subscriber.next({ status: true });
-          subscriber.complete();
+          resolve();
         }
       });
     });
   }
 
-  public onData(path: string): Observable<Buffer> {
+  private async _closeConnection(path: string): Promise<void> {
     const connection = this._connections.get(path);
     if (!connection) {
-      return throwError(() => new Error(`Connection ${path} not found`));
+      return;
     }
-    return connection.data$.pipe(takeUntil(connection.destroy$));
-  }
 
-  public onError(path: string): Observable<Error> {
-    const connection = this._connections.get(path);
-    if (!connection) {
-      return throwError(() => new Error(`Connection ${path} not found`));
+    if (connection.bufferTimeout) {
+      clearTimeout(connection.bufferTimeout);
     }
-    return connection.error$.pipe(takeUntil(connection.destroy$));
-  }
 
-  public onConnectionState(path: string): Observable<SerialPortState> {
-    const connection = this._connections.get(path);
-    if (!connection) {
-      return throwError(() => new Error(`Connection ${path} not found`));
-    }
-    return connection.state$.pipe(takeUntil(this._destroy$));
-  }
-
-  public isOpen(path: string): Observable<boolean> {
-    return this.onConnectionState(path).pipe(map((state) => state.isOpen));
-  }
-
-  public close(path: string): Observable<void> {
-    const connection = this._connections.get(path);
-    if (!connection) {
-      return of(undefined);
-    }
-    return new Observable<void>((subscriber) => {
-      connection.destroy$.next();
-      connection.destroy$.complete();
-
-      if (connection.port && connection.port.isOpen) {
-        connection.port.close((err) => {
+    if (connection.port && connection.port.isOpen) {
+      return new Promise<void>((resolve, reject) => {
+        connection.port!.close((err) => {
           if (err) {
             this._logger.error(`Error closing port ${path}:`, err);
-            subscriber.error(err);
+            reject(err);
           } else {
-            subscriber.next();
-            subscriber.complete();
+            resolve();
           }
         });
-      } else {
-        subscriber.next();
-        subscriber.complete();
-      }
-    }).pipe(
-      finalize(() => {
-        this._cleanupConnection(path);
-      }),
-    );
-  }
-
-  public dispose(): Observable<void> {
-    const closeAll$ = from(Array.from(this._connections.keys())).pipe(
-      mergeMap((path) =>
-        this.close(path).pipe(
-          catchError((err) => {
-            this._logger.error(`Error disconnecting from ${path} during dispose:`, err);
-            return of(null);
-          }),
-        ),
-      ),
-      toArray(),
-      map(() => undefined),
-    );
-
-    return closeAll$.pipe(
-      tap(() => {
-        this._destroy$.next();
-        this._destroy$.complete();
-      }),
-    );
+      });
+    }
   }
 
   private _cleanupConnection(path: string): void {
     const connection = this._connections.get(path);
     if (connection) {
-      connection.state$.complete();
-      connection.data$.complete();
-      connection.error$.complete();
-      connection.rawData$.complete();
+      if (connection.port) {
+        connection.port.removeAllListeners();
+      }
+      if (connection.parser && connection.parser !== connection.port) {
+        connection.parser.removeAllListeners();
+      }
+
+      if (connection.bufferTimeout) {
+        clearTimeout(connection.bufferTimeout);
+      }
+
       this._connections.delete(path);
     }
     this._connectionTimes.delete(path);
     this._logger.debug(`Connection ${path} cleaned up`);
   }
 
-  public getConnectedPorts(): string[] {
+  // PUBLIC METHODS
+
+  public async listPorts(): Promise<SerialPortInfo[]> {
+    if (this._isDestroyed) {
+      return [];
+    }
+
+    const ports = await SerialPort.list();
+    return ports
+      .map((p) => ({
+        path: p.path,
+        manufacturer: p.manufacturer,
+        serialNumber: p.serialNumber,
+        vendorId: p.vendorId,
+        productId: p.productId,
+      }))
+      .filter((p) => !!p.manufacturer);
+  }
+
+  public async open(path: string, options: SerialOptions): Promise<SerialPortState> {
+    const existingConnection = this._connections.get(path);
+    if (existingConnection) {
+      this._logger.log(`Connection for ${path} already exists.`);
+      return existingConnection.state;
+    }
+
+    const connection = this._createConnection(path, options);
+    this._connections.set(path, connection);
+
+    try {
+      const strategy = options.reconnectStrategy || 'retry';
+      const retryDelay = options.retryDelay || 1000;
+      const maxAttempts = options.maxReconnectAttempts ?? 5;
+
+      if (strategy === 'interval') {
+        // Interval strategy - keep trying at intervals (non-blocking)
+        this._startIntervalConnection(connection);
+      } else {
+        // Retry and exponential strategies (blocking)
+        await this._retryWithStrategy(async () => this._attemptPortOpen(connection), path, strategy, retryDelay, maxAttempts);
+      }
+
+      this._connectionTimes.set(path, new Date());
+      return connection.state;
+    } catch (error) {
+      this._logger.error(`Failed to establish connection for ${path}:`, error);
+      connection.state = {
+        ...connection.state,
+        isOpen: false,
+        isConnecting: false,
+        lastError: (error as Error).message,
+      };
+      return connection.state;
+    }
+  }
+
+  private async _startIntervalConnection(connection: SerialConnection): Promise<void> {
+    const { path, options } = connection;
+    const retryDelay = options.retryDelay || 1000;
+
+    const attemptConnection = async () => {
+      while (!this._isDestroyed && !connection.state.isOpen) {
+        try {
+          await this._attemptPortOpen(connection);
+          this._connectionTimes.set(path, new Date());
+          break;
+        } catch (error) {
+          this._logger.warn(`Connection attempt for ${path} failed. Retrying in ${retryDelay}ms...`);
+          await sleep(retryDelay);
+        }
+      }
+    };
+
+    // Run in background
+    attemptConnection();
+  }
+
+  public async write(path: string, data: string | Buffer): Promise<boolean> {
+    const connection = this._connections.get(path);
+    if (!connection?.port?.isOpen) {
+      throw new Error(`Port ${path} is not open or does not exist.`);
+    }
+
+    return new Promise<boolean>((resolve, reject) => {
+      connection.port!.write(data, (err) => {
+        if (err) {
+          this._logger.error(`Write error on ${path}:`, err);
+          connection.errorCallbacks.forEach((callback) => callback(err));
+          reject(err);
+        } else {
+          resolve(true);
+        }
+      });
+    });
+  }
+
+  public onDataStream(path: string, callback: (data: Buffer) => void): void {
+    const connection = this._connections.get(path);
+    if (!connection) {
+      throw new Error(`Connection ${path} not found`);
+    }
+
+    connection.dataStreamCallbacks.push(callback);
+  }
+
+  public async onData(path: string): Promise<Buffer> {
+    const connection = this._connections.get(path);
+    if (!connection) {
+      throw new Error(`Connection ${path} not found`);
+    }
+
+    // If there's already buffered data, return it immediately
+    if (connection.bufferedDataQueue.length > 0) {
+      return connection.bufferedDataQueue.shift()!;
+    }
+
+    // Otherwise, wait for next buffered data
+    return new Promise<Buffer>((resolve, reject) => {
+      connection.dataResolvers.push(resolve);
+      connection.errorResolvers.push(reject);
+    });
+  }
+
+  public async onError(path: string): Promise<Error> {
+    const connection = this._connections.get(path);
+    if (!connection) {
+      throw new Error(`Connection ${path} not found`);
+    }
+
+    return new Promise<Error>((resolve) => {
+      connection.errorCallbacks.push(resolve);
+    });
+  }
+
+  public async getConnectionState(path: string): Promise<SerialPortState> {
+    const connection = this._connections.get(path);
+    if (!connection) {
+      throw new Error(`Connection ${path} not found`);
+    }
+    return { ...connection.state };
+  }
+
+  public async isOpen(path: string): Promise<boolean> {
+    const connection = this._connections.get(path);
+    if (!connection) {
+      throw new Error(`Connection ${path} not found`);
+    }
+    return connection.state.isOpen;
+  }
+
+  public async close(path: string): Promise<void> {
+    const connection = this._connections.get(path);
+    if (!connection) {
+      return;
+    }
+
+    await this._closeConnection(path);
+    this._cleanupConnection(path);
+  }
+
+  public async dispose(): Promise<void> {
+    const paths = Array.from(this._connections.keys());
+    await Promise.all(paths.map(async (path) => this.close(path)));
+  }
+
+  public async getConnectedPorts(): Promise<string[]> {
     return Array.from(this._connections.values())
-      .filter((c) => c.state$.value.isOpen)
+      .filter((c) => c.state.isOpen)
       .map((c) => c.path);
   }
 
-  public getConnectedPortsInfo(): Observable<ConnectedPortInfo[]> {
-    const connectedPaths = this.getConnectedPorts();
+  public async getConnectedPortsInfo(): Promise<ConnectedPortInfo[]> {
+    const connectedPaths = await this.getConnectedPorts();
     if (connectedPaths.length === 0) {
-      return scheduled([], asyncScheduler);
+      return [];
     }
 
-    return this.listPorts().pipe(
-      map((allPorts) =>
-        connectedPaths
-          .map((path) => {
-            const connection = this._connections.get(path);
-            const portInfo = allPorts.find((p) => p.path === path);
-            return {
-              path,
-              info: portInfo,
-              state: connection?.state$.value,
-              options: connection?.options,
-              connectedAt: this._connectionTimes.get(path),
-            } as ConnectedPortInfo;
-          })
-          .filter((p): p is ConnectedPortInfo => !!p),
-      ),
-    );
+    const allPorts = await this.listPorts();
+    return connectedPaths
+      .map((path) => {
+        const connection = this._connections.get(path);
+        const portInfo = allPorts.find((p) => p.path === path);
+        return {
+          path,
+          info: portInfo,
+          state: connection?.state,
+          options: connection?.options,
+          connectedAt: this._connectionTimes.get(path),
+        };
+      })
+      .filter((p) => !!p);
   }
 
-  public isPortConnected(path: string): boolean {
-    return this._connections.get(path)?.state$.value.isOpen === true;
+  public async isPortConnected(path: string): Promise<boolean> {
+    return this._connections.get(path)?.state.isOpen === true;
   }
 
-  public getPortConnectionState(path: string): SerialPortState | null {
-    return this._connections.get(path)?.state$.value || null;
-  }
-
-  public getAllConnections(): ConnectionSummary[] {
+  public async getAllConnections(): Promise<ConnectionSummary[]> {
     return Array.from(this._connections.entries()).map(([path, connection]) => ({
       path,
-      state: connection.state$.value,
+      state: { ...connection.state },
       options: connection.options,
     }));
   }
 
-  public getConnectionTime(path: string): Date | undefined {
+  public async getConnectionTime(path: string): Promise<Date | undefined> {
     return this._connectionTimes.get(path);
   }
 
-  public getConnectionStats(): ConnectionStats {
-    const allConnections = this.getAllConnections();
+  public async getConnectionStats(): Promise<ConnectionStats> {
+    const allConnections = await this.getAllConnections();
     return {
       totalConnections: allConnections.length,
       openConnections: allConnections.filter((c) => c.state.isOpen).length,

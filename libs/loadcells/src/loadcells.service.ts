@@ -1,10 +1,33 @@
 import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { InjectSerialManager, ISerialAdapter } from '@serialport/serial';
-import { Observable, Subject, BehaviorSubject, timer, EMPTY, from, forkJoin } from 'rxjs';
-import { map, takeUntil, tap, catchError, switchMap, filter, retry, mergeMap } from 'rxjs/operators';
+import { Observable, Subject, BehaviorSubject, timer, EMPTY, from, forkJoin, of, interval } from 'rxjs';
+import { map, takeUntil, tap, catchError, switchMap, filter, retry, mergeMap, distinctUntilChanged, debounceTime } from 'rxjs/operators';
 
 import { ALL_MESSAGES } from './loadcells.contants';
 import { LoadCellConfig, LoadCellDevice, LoadCellHooks, LoadCellReading, LoadCellStats } from './loadcells.types';
+
+export type LoadCellPerformanceStats = {
+  messagesPerSecond: number;
+  errorRate: number;
+  avgResponseTime: number;
+  lastActivityTime: Date;
+  portStatistics: Map<
+    string,
+    {
+      messagesReceived: number;
+      errors: number;
+      lastMessage: Date;
+    }
+  >;
+};
+
+export type LoadCellConnectionHealth = {
+  port: string;
+  isHealthy: boolean;
+  issues: string[];
+  lastReading?: LoadCellReading;
+  connectionDuration: number;
+};
 
 @Injectable()
 export class LoadcellsService implements OnModuleInit, OnModuleDestroy {
@@ -36,6 +59,8 @@ export class LoadcellsService implements OnModuleInit, OnModuleDestroy {
   private readonly _onlineDevices$ = new BehaviorSubject<number[]>([]);
   private readonly _currentMessages$ = new BehaviorSubject<LoadCellDevice[]>([]);
   private readonly _stats$ = new BehaviorSubject<LoadCellStats>(this._createInitialStats());
+  private readonly _performanceStats$ = new BehaviorSubject<LoadCellPerformanceStats>(this._createInitialPerformanceStats());
+  private readonly _connectionHealth$ = new BehaviorSubject<LoadCellConnectionHealth[]>([]);
 
   // Hooks registry
   private readonly _hooks = new Map<string, LoadCellHooks>();
@@ -46,14 +71,22 @@ export class LoadcellsService implements OnModuleInit, OnModuleDestroy {
   private _discoveryPhase = true;
   private _readingsCount = 0;
   private _errorsCount = 0;
+  private _startTime = Date.now();
+  private _lastReadingTime = Date.now();
+  private _portStats = new Map<string, { messagesReceived: number; errors: number; lastMessage: Date }>();
 
   private readonly _allMessages: LoadCellDevice[] = ALL_MESSAGES;
-
   private readonly _messageAddresses: number[];
+
+  // Data stream callbacks for Promise-based adapter
+  private _dataStreamCallbacks = new Map<string, (data: Buffer) => void>();
 
   constructor(@InjectSerialManager() private readonly _serialAdapter: ISerialAdapter) {
     this._messageAddresses = this._allMessages.map((msg) => parseInt(this._getBufferContent(msg.data).slice(0, 2), 16));
     this._currentMessages$.next([...this._allMessages]);
+
+    // Start performance monitoring
+    this._startPerformanceMonitoring();
   }
 
   public onModuleInit(): void {
@@ -104,6 +137,14 @@ export class LoadcellsService implements OnModuleInit, OnModuleDestroy {
     return this._stats$.pipe(takeUntil(this._destroy$));
   }
 
+  public get performanceStats$(): Observable<LoadCellPerformanceStats> {
+    return this._performanceStats$.pipe(takeUntil(this._destroy$));
+  }
+
+  public get connectionHealth$(): Observable<LoadCellConnectionHealth[]> {
+    return this._connectionHealth$.pipe(takeUntil(this._destroy$));
+  }
+
   public async start(ports: string[]): Promise<void> {
     if (this._isRunning$.value) {
       this._logger.warn('Service is already running');
@@ -117,8 +158,24 @@ export class LoadcellsService implements OnModuleInit, OnModuleDestroy {
 
     this._logger.log(`Starting monitoring on ports: ${ports.join(', ')}`);
 
+    // Reset statistics
+    this._readingsCount = 0;
+    this._errorsCount = 0;
+    this._startTime = Date.now();
+    this._portStats.clear();
+
+    // Initialize port statistics
+    ports.forEach((port) => {
+      this._portStats.set(port, {
+        messagesReceived: 0,
+        errors: 0,
+        lastMessage: new Date(),
+      });
+    });
+
     await this._connectToPorts();
     this._scheduleDiscoveryTimeout();
+    this._startConnectionHealthMonitoring();
 
     this._isRunning$.next(true);
     this._callStatusChangeHooks(true);
@@ -130,11 +187,16 @@ export class LoadcellsService implements OnModuleInit, OnModuleDestroy {
     }
 
     this._logger.log('Stopping loadcells service');
+
+    // Clean up data stream callbacks
+    this._dataStreamCallbacks.clear();
+
     this._isRunning$.next(false);
     this._connectedPorts = [];
     this._discoveryPhase = true;
     this._onlineDevices$.next([]);
     this._currentMessages$.next([...this._allMessages]);
+    this._connectionHealth$.next([]);
 
     this._callStatusChangeHooks(false);
   }
@@ -160,8 +222,25 @@ export class LoadcellsService implements OnModuleInit, OnModuleDestroy {
     return this._stats$.value;
   }
 
+  public getCurrentPerformanceStats(): LoadCellPerformanceStats {
+    return this._performanceStats$.value;
+  }
+
   public refreshStats(): void {
     this._updateStats();
+    this._updatePerformanceStats();
+  }
+
+  public getPortHealth(port: string): Observable<LoadCellConnectionHealth> {
+    return this._connectionHealth$.pipe(
+      map((healthArray) => healthArray.find((h) => h.port === port)),
+      filter(Boolean),
+      takeUntil(this._destroy$),
+    );
+  }
+
+  public getAllPortsHealth(): Observable<LoadCellConnectionHealth[]> {
+    return this._connectionHealth$.pipe(takeUntil(this._destroy$));
   }
 
   private async _connectToPorts(): Promise<void> {
@@ -172,41 +251,182 @@ export class LoadcellsService implements OnModuleInit, OnModuleDestroy {
     for (const port of this._connectedPorts) {
       this._logger.log(`Connecting to port: ${port}`);
 
-      // Extract COM ID for each port
       const comId = this._extractComId(port);
 
-      // Subscribe to data from EACH port
-      this._serialAdapter
-        .onData(port)
-        .pipe(
-          takeUntil(this._destroy$),
-          map((data) => this._parseRawData(port, data, comId)), // Pass comId
-          filter(Boolean),
-          tap((reading) => this._processReading(reading)),
-        )
-        .subscribe({
-          next: (reading) => {
-            this._callDataHooks(reading);
-            this._updateStats();
-          },
-          error: (error) => {
-            this._logger.error(`Data stream error for ${port}:`, error);
-            this._callErrorHooks(error, `Data stream for ${port}`);
-          },
-        });
+      // Setup data stream callback for Promise-based adapter
+      const dataCallback = (data: Buffer) => {
+        const reading = this._parseRawData(port, data, comId);
+        if (reading) {
+          this._processReading(reading);
+          this._callDataHooks(reading);
+          this._updateStats();
+          this._updatePortStats(port, false);
+        }
+      };
 
-      // Subscribe to errors from EACH port
-      this._serialAdapter
-        .onError(port)
-        .pipe(takeUntil(this._destroy$))
+      // Store callback for cleanup
+      this._dataStreamCallbacks.set(port, dataCallback);
+
+      // Register data stream callback
+      this._serialAdapter.onDataStream(port, dataCallback);
+
+      // Subscribe to errors from EACH port using Promise wrapper
+      from(this._serialAdapter.onError(port))
+        .pipe(takeUntil(this._destroy$), retry({ count: 3, delay: 1000 }))
         .subscribe({
           next: (error) => {
             this._errorsCount++;
+            this._updatePortStats(port, true);
             this._callErrorHooks(error, `Serial port ${port}`);
             this._updateStats();
           },
+          error: (streamError) => {
+            this._logger.error(`Error stream failed for ${port}:`, streamError);
+          },
         });
+
+      // Monitor connection state for each port
+      this._monitorPortConnection(port);
     }
+  }
+
+  private _monitorPortConnection(port: string): void {
+    interval(5000)
+      .pipe(
+        // Check every 5 seconds
+        takeUntil(this._destroy$),
+        filter(() => this._isRunning$.value),
+        switchMap(() => from(this._serialAdapter.isPortConnected(port))),
+        distinctUntilChanged(),
+        tap((isConnected) => {
+          if (!isConnected) {
+            this._logger.warn(`Port ${port} disconnected`);
+            this._updatePortStats(port, true);
+          }
+        }),
+      )
+      .subscribe({
+        error: (error) => {
+          this._logger.error(`Connection monitoring failed for ${port}:`, error);
+        },
+      });
+  }
+
+  private _startConnectionHealthMonitoring(): void {
+    timer(0, 10000)
+      .pipe(
+        // Update every 10 seconds
+        takeUntil(this._destroy$),
+        filter(() => this._isRunning$.value),
+        switchMap(() => this._updateConnectionHealth()),
+      )
+      .subscribe({
+        error: (error) => {
+          this._logger.error('Connection health monitoring error:', error);
+        },
+      });
+  }
+
+  private _updateConnectionHealth(): Observable<void> {
+    const healthChecks = this._connectedPorts.map((port) =>
+      from(this._serialAdapter.getConnectionState(port)).pipe(
+        map((state) => {
+          const portStats = this._portStats.get(port);
+          const issues: string[] = [];
+
+          if (!state.isOpen) {
+            issues.push('Port not connected');
+          }
+
+          if (state.lastError) {
+            issues.push(`Last error: ${state.lastError}`);
+          }
+
+          if (portStats && portStats.errors > 10) {
+            issues.push(`High error count: ${portStats.errors}`);
+          }
+
+          const now = Date.now();
+          const connectionDuration = this._startTime ? now - this._startTime : 0;
+
+          if (portStats && now - portStats.lastMessage.getTime() > 30000) {
+            issues.push('No recent messages (>30s)');
+          }
+
+          return {
+            port,
+            isHealthy: issues.length === 0 && state.isOpen,
+            issues,
+            connectionDuration,
+          } as LoadCellConnectionHealth;
+        }),
+        catchError((error) => {
+          this._logger.debug(`Failed to get health for ${port}:`, error.message);
+          return of({
+            port,
+            isHealthy: false,
+            issues: [`Health check failed: ${error.message}`],
+            connectionDuration: 0,
+          } as LoadCellConnectionHealth);
+        }),
+      ),
+    );
+
+    return forkJoin(healthChecks).pipe(
+      tap((healthArray) => {
+        this._connectionHealth$.next(healthArray);
+      }),
+      map(() => void 0),
+      catchError((error) => {
+        this._logger.error('Failed to update connection health:', error);
+        return of(void 0);
+      }),
+    );
+  }
+
+  private _updatePortStats(port: string, isError: boolean): void {
+    const stats = this._portStats.get(port);
+    if (stats) {
+      if (isError) {
+        stats.errors++;
+      } else {
+        stats.messagesReceived++;
+      }
+      stats.lastMessage = new Date();
+      this._portStats.set(port, stats);
+    }
+  }
+
+  private _startPerformanceMonitoring(): void {
+    interval(5000)
+      .pipe(
+        // Update every 5 seconds
+        takeUntil(this._destroy$),
+        tap(() => this._updatePerformanceStats()),
+      )
+      .subscribe({
+        error: (error) => {
+          this._logger.error('Performance monitoring error:', error);
+        },
+      });
+  }
+
+  private _updatePerformanceStats(): void {
+    const now = Date.now();
+    const timeDiff = (now - this._lastReadingTime) / 1000; // seconds
+    const messagesPerSecond = timeDiff > 0 ? this._readingsCount / timeDiff : 0;
+    const errorRate = this._readingsCount > 0 ? this._errorsCount / this._readingsCount : 0;
+    const avgResponseTime = this._connectedPorts.length > 0 ? this._config.initTimer : 0;
+
+    const performanceStats: LoadCellPerformanceStats = {
+      messagesPerSecond,
+      errorRate,
+      avgResponseTime,
+      lastActivityTime: new Date(this._lastReadingTime),
+      portStatistics: new Map(this._portStats),
+    };
+
+    this._performanceStats$.next(performanceStats);
   }
 
   private _extractComId(portPath: string): number {
@@ -229,6 +449,7 @@ export class LoadcellsService implements OnModuleInit, OnModuleDestroy {
       .pipe(
         takeUntil(this._destroy$),
         filter(() => this._isRunning$.value),
+        debounceTime(100), // Debounce rapid changes
         switchMap((messages) => this._pollMessages(messages)),
       )
       .subscribe({
@@ -274,24 +495,32 @@ export class LoadcellsService implements OnModuleInit, OnModuleDestroy {
     }
 
     const buffer = this._bufferFromBufferString(message.data);
-    // Send it to ALL ports
+
+    // Send to ALL ports using Promise-based adapter
     const sendOperations = this._connectedPorts.map((port) =>
-      this._serialAdapter.write(port, buffer).pipe(
+      from(this._serialAdapter.write(port, buffer)).pipe(
         tap(() => {
           if (this._config.logLevel > 0) {
             this._logger.debug(`Sent message ${message.no} to ${port}`);
           }
         }),
-        retry(2),
+        retry({ count: 2, delay: 500 }),
         catchError((error) => {
           this._logger.error(`Failed to send to ${port}:`, error);
-          return EMPTY;
+          this._updatePortStats(port, true);
+          return of(false); // Return false instead of EMPTY to continue
         }),
       ),
     );
 
     // Send to all ports in parallel
-    return forkJoin(sendOperations).pipe(map(() => void 0));
+    return forkJoin(sendOperations).pipe(
+      map(() => void 0),
+      catchError((error) => {
+        this._logger.error('Failed to send message to all ports:', error);
+        return of(void 0);
+      }),
+    );
   }
 
   private _parseRawData(port: string, buffer: Buffer, comId: number): LoadCellReading | null {
@@ -318,7 +547,7 @@ export class LoadcellsService implements OnModuleInit, OnModuleDestroy {
 
         return {
           path: port,
-          deviceId: comId * 100 + rawDeviceId, // Use passed comId
+          deviceId: comId * 100 + rawDeviceId,
           rawDeviceId,
           weight: 0,
           status: 'error',
@@ -331,10 +560,11 @@ export class LoadcellsService implements OnModuleInit, OnModuleDestroy {
       const value = (rawPayload[8] << 24) | (rawPayload[7] << 16) | (rawPayload[6] << 8) | rawPayload[5];
 
       this._readingsCount++;
+      this._lastReadingTime = Date.now();
 
       return {
         path: port,
-        deviceId: comId * 100 + rawDeviceId, // Use passed comId
+        deviceId: comId * 100 + rawDeviceId,
         rawDeviceId,
         weight: value / this._config.precision,
         status: 'running',
@@ -417,7 +647,7 @@ export class LoadcellsService implements OnModuleInit, OnModuleDestroy {
       activeMessages: currentMessages.length,
       readingsCount: this._readingsCount,
       errorsCount: this._errorsCount,
-      lastReading: new Date(),
+      lastReading: new Date(this._lastReadingTime),
     };
 
     this._stats$.next(stats);
@@ -430,6 +660,16 @@ export class LoadcellsService implements OnModuleInit, OnModuleDestroy {
       activeMessages: this._allMessages?.length || 0,
       readingsCount: 0,
       errorsCount: 0,
+    };
+  }
+
+  private _createInitialPerformanceStats(): LoadCellPerformanceStats {
+    return {
+      messagesPerSecond: 0,
+      errorRate: 0,
+      avgResponseTime: 0,
+      lastActivityTime: new Date(),
+      portStatistics: new Map(),
     };
   }
 

@@ -1,9 +1,9 @@
 import { Injectable, Logger, OnModuleInit, OnModuleDestroy, Inject } from '@nestjs/common';
-import { Observable, BehaviorSubject, Subject, timer, EMPTY, from } from 'rxjs';
-import { map, switchMap, distinctUntilChanged, takeUntil, tap, catchError, debounceTime } from 'rxjs/operators';
+import { Observable, BehaviorSubject, Subject, timer, EMPTY, from, of } from 'rxjs';
+import { map, switchMap, distinctUntilChanged, takeUntil, tap, catchError, debounceTime, mergeMap, concatMap } from 'rxjs/operators';
 
 import { InjectSerialManager, ISerialAdapter, SerialOptions, SerialPortInfo, SerialPortState } from '../serial';
-import { DISCOVERY_CONFIG } from '../serialport.constants';
+import { DISCOVERY_CONFIG } from '@serialport/serialport.constants';
 
 export type DiscoveryConfig = {
   enabled: boolean;
@@ -61,7 +61,7 @@ export class PortDiscoveryService implements OnModuleInit, OnModuleDestroy {
   }
 
   public onModuleDestroy(): void {
-    this._logger.log('Shutting down AAuto Discovery Serialport Service');
+    this._logger.log('Shutting down Auto Discovery Serialport Service');
     this._destroy$.next();
     this._destroy$.complete();
   }
@@ -79,18 +79,58 @@ export class PortDiscoveryService implements OnModuleInit, OnModuleDestroy {
   }
 
   public disconnectFromPort(path: string): Observable<void> {
-    return this._serialAdapter.close(path).pipe(
+    return from(this._serialAdapter.close(path)).pipe(
       tap(() => {
         const currentPorts = this._connectedPorts$.value;
         currentPorts.delete(path);
         this._connectedPorts$.next(currentPorts);
         this._logger.log(`Disconnected from port: ${path}`);
       }),
+      catchError((error) => {
+        this._logger.error(`Failed to disconnect from port ${path}:`, error);
+        throw error;
+      }),
+    );
+  }
+
+  public connectToPort(path: string, options?: SerialOptions): Observable<SerialPortState> {
+    const connectOptions = { ...this._configs.serialOptions, ...options };
+
+    return from(this._serialAdapter.open(path, connectOptions)).pipe(
+      tap((state) => {
+        if (state.isOpen) {
+          // Get port info for the connected port
+          this._updateConnectedPort(path, state);
+          this._logger.log(`Connected to port: ${path}`);
+        }
+      }),
+      catchError((error) => {
+        this._logger.error(`Failed to connect to port ${path}:`, error);
+        throw error;
+      }),
     );
   }
 
   public refreshDiscover(): Observable<SerialPortInfo[]> {
     return this._discoverPorts();
+  }
+
+  public getPortConnectionState(path: string): Observable<SerialPortState> {
+    return from(this._serialAdapter.getConnectionState(path)).pipe(
+      catchError((error) => {
+        this._logger.error(`Failed to get connection state for ${path}:`, error);
+        throw error;
+      }),
+    );
+  }
+
+  public isPortConnected(path: string): Observable<boolean> {
+    return from(this._serialAdapter.isPortConnected(path)).pipe(
+      catchError((error) => {
+        this._logger.error(`Failed to check if port ${path} is connected:`, error);
+        return of(false);
+      }),
+    );
   }
 
   private _startDiscovery(): void {
@@ -113,11 +153,15 @@ export class PortDiscoveryService implements OnModuleInit, OnModuleDestroy {
         }),
         takeUntil(this._destroy$),
       )
-      .subscribe();
+      .subscribe({
+        error: (error) => {
+          this._logger.error('Discovery stream error:', error);
+        },
+      });
   }
 
   private _discoverPorts(): Observable<SerialPortInfo[]> {
-    return this._serialAdapter.listPorts().pipe(
+    return from(this._serialAdapter.listPorts()).pipe(
       map((ports) => this._filterPorts(ports)),
       tap((filteredPorts) => {
         const currentPorts = this._availablePorts$.value;
@@ -130,7 +174,13 @@ export class PortDiscoveryService implements OnModuleInit, OnModuleDestroy {
 
         if (addedPorts.length > 0) {
           this._logger.log(`New ports detected: [${addedPorts.join(', ')}]`);
+
+          // Auto-connect to new ports if enabled
+          if (this._configs.autoConnect) {
+            this._autoConnectToPorts(addedPorts, filteredPorts);
+          }
         }
+
         if (removedPorts.length > 0) {
           this._logger.log(`Ports removed: [${removedPorts.join(', ')}]`);
           this._handleRemovedPorts(removedPorts);
@@ -140,9 +190,52 @@ export class PortDiscoveryService implements OnModuleInit, OnModuleDestroy {
       }),
       catchError((error) => {
         this._logger.error('Failed to discover ports:', error);
-        return EMPTY;
+        return of([]); // Return empty array instead of EMPTY to continue the stream
       }),
     );
+  }
+
+  private _autoConnectToPorts(addedPorts: string[], allPorts: SerialPortInfo[]): void {
+    addedPorts.forEach((path) => {
+      const portInfo = allPorts.find((p) => p.path === path);
+      if (portInfo) {
+        this._logger.log(`Auto-connecting to port: ${path}`);
+
+        // Auto-connect with a small delay to avoid overwhelming the system
+        timer(500)
+          .pipe(
+            switchMap(() => this.connectToPort(path)),
+            takeUntil(this._destroy$),
+          )
+          .subscribe({
+            next: (state) => {
+              if (state.isOpen) {
+                this._logger.log(`Auto-connected successfully to: ${path}`);
+              }
+            },
+            error: (error) => {
+              this._logger.warn(`Auto-connect failed for ${path}:`, error.message);
+            },
+          });
+      }
+    });
+  }
+
+  private _updateConnectedPort(path: string, state: SerialPortState): void {
+    // Get port info from available ports
+    const portInfo = this._availablePorts$.value.find((p) => p.path === path);
+    if (portInfo) {
+      const connectedPort: ConnectedPort = {
+        path,
+        info: portInfo,
+        state,
+        connectedAt: new Date(),
+      };
+
+      const currentConnected = this._connectedPorts$.value;
+      currentConnected.set(path, connectedPort);
+      this._connectedPorts$.next(currentConnected);
+    }
   }
 
   private _filterPorts(ports: SerialPortInfo[]): SerialPortInfo[] {
@@ -181,6 +274,8 @@ export class PortDiscoveryService implements OnModuleInit, OnModuleDestroy {
       /\/dev\/tty\d+$/,
       /\/dev\/cu\.Bluetooth/,
       /COM\d+$/, // Windows system ports
+      /\/dev\/console$/,
+      /\/dev\/ttyS\d+$/, // Standard serial ports
     ];
 
     return systemPatterns.some((pattern) => pattern.test(port.path));
@@ -195,11 +290,95 @@ export class PortDiscoveryService implements OnModuleInit, OnModuleDestroy {
         currentConnected.delete(path);
         hasChanges = true;
         this._logger.log(`Port ${path} was disconnected (device removed)`);
+
+        // Also attempt to clean up the connection in the adapter
+        from(this._serialAdapter.close(path))
+          .pipe(takeUntil(this._destroy$))
+          .subscribe({
+            next: () => this._logger.debug(`Cleaned up connection for removed port: ${path}`),
+            error: (error) => this._logger.debug(`Port ${path} was already closed or cleanup failed:`, error.message),
+          });
       }
     });
 
     if (hasChanges) {
       this._connectedPorts$.next(currentConnected);
     }
+  }
+
+  // Additional utility methods for monitoring connection states
+  public monitorConnectionStates(): Observable<Map<string, SerialPortState>> {
+    return timer(0, 2000).pipe(
+      // Check every 2 seconds
+      switchMap(() => {
+        const connectedPaths = Array.from(this._connectedPorts$.value.keys());
+        if (connectedPaths.length === 0) {
+          return of(new Map<string, SerialPortState>());
+        }
+
+        return from(connectedPaths).pipe(
+          concatMap((path) =>
+            from(this._serialAdapter.getConnectionState(path)).pipe(
+              map((state) => ({ path, state })),
+              catchError((error) => {
+                this._logger.debug(`Failed to get state for ${path}:`, error.message);
+                return of({ path, state: null });
+              }),
+            ),
+          ),
+          map((results) => {
+            const stateMap = new Map<string, SerialPortState>();
+            if (Array.isArray(results)) {
+              results.forEach((result) => {
+                if (result.state) {
+                  stateMap.set(result.path, result.state);
+                }
+              });
+            } else if (results && results.state) {
+              stateMap.set(results.path, results.state);
+            }
+            return stateMap;
+          }),
+        );
+      }),
+      tap((stateMap) => {
+        // Update connected ports with latest states
+        const currentConnected = this._connectedPorts$.value;
+        let hasChanges = false;
+
+        stateMap.forEach((state, path) => {
+          const connectedPort = currentConnected.get(path);
+          if (connectedPort && JSON.stringify(connectedPort.state) !== JSON.stringify(state)) {
+            connectedPort.state = state;
+            hasChanges = true;
+          }
+        });
+
+        if (hasChanges) {
+          this._connectedPorts$.next(currentConnected);
+        }
+      }),
+      takeUntil(this._destroy$),
+    );
+  }
+
+  // Get all connection statistics
+  public getConnectionStats(): Observable<{
+    totalAvailable: number;
+    totalConnected: number;
+    connectedPaths: string[];
+    availablePaths: string[];
+  }> {
+    return this._availablePorts$.pipe(
+      map((availablePorts) => {
+        const connectedPorts = Array.from(this._connectedPorts$.value.keys());
+        return {
+          totalAvailable: availablePorts.length,
+          totalConnected: connectedPorts.length,
+          connectedPaths: connectedPorts,
+          availablePaths: availablePorts.map((p) => p.path),
+        };
+      }),
+    );
   }
 }

@@ -1,4 +1,3 @@
-import { BehaviorSubject, Observable, Subject } from 'rxjs';
 import { SerialPort } from 'serialport';
 
 export type SerialPortInfo = {
@@ -53,19 +52,6 @@ export type SerialOptions = {
   flushOnError?: boolean;
 };
 
-export type SerialConnection = {
-  path: string;
-  port?: SerialPort;
-  parser?: any;
-  state$: BehaviorSubject<SerialPortState>;
-  data$: Subject<Buffer>;
-  rawData$: Subject<Buffer>;
-  bufferedData$: Observable<Buffer>;
-  error$: Subject<Error>;
-  destroy$: Subject<void>;
-  options: SerialOptions;
-};
-
 export type ConnectedPortInfo = {
   path: string;
   info?: SerialPortInfo;
@@ -87,29 +73,52 @@ export type ConnectionStats = {
   failedPorts: number;
 };
 
-export type PortStatus = {
-  availablePorts: SerialPortInfo[];
-  connectedPorts: SerialPortInfo[];
-  totalAvailable: number;
-  totalConnected: number;
-  unconnectedPorts: SerialPortInfo[];
-};
-
 export interface ISerialAdapter {
-  listPorts(): Observable<SerialPortInfo[]>;
-  open(path: string, options: SerialOptions): Observable<SerialPortState>;
-  close(path: string): Observable<void>;
-  write(path: string, data: string | Buffer): Observable<{ status: boolean }>;
-  onData(path: string): Observable<Buffer>;
-  onError(path: string): Observable<Error>;
-  onConnectionState(path: string): Observable<SerialPortState>;
-  isOpen(path: string): Observable<boolean>;
-  dispose(): Observable<void>;
-  getConnectedPorts(): string[];
-  getConnectedPortsInfo(): Observable<ConnectedPortInfo[]>;
-  isPortConnected(path: string): boolean;
-  getPortConnectionState(path: string): SerialPortState | null;
-  getAllConnections(): ConnectionSummary[];
-  getConnectionTime(path: string): Date | undefined;
-  getConnectionStats(): ConnectionStats;
+  listPorts(): Promise<SerialPortInfo[]>;
+  open(path: string, options: SerialOptions): Promise<SerialPortState>;
+  close(path: string): Promise<void>;
+  write(path: string, data: string | Buffer): Promise<boolean>;
+
+  // Stream data - callback for continuous data
+  onDataStream(path: string, callback: (data: Buffer) => void): void;
+
+  // Buffered data - Promise resolves when buffer strategy emits
+  onData(path: string): Promise<Buffer>;
+
+  // Error handling
+  onError(path: string): Promise<Error>;
+
+  // State management
+  getConnectionState(path: string): Promise<SerialPortState>;
+  isOpen(path: string): Promise<boolean>;
+
+  // Utils
+  dispose(): Promise<void>;
+  getConnectedPorts(): Promise<string[]>;
+  getConnectedPortsInfo(): Promise<ConnectedPortInfo[]>;
+  isPortConnected(path: string): Promise<boolean>;
+  getAllConnections(): Promise<ConnectionSummary[]>;
+  getConnectionTime(path: string): Promise<Date | undefined>;
+  getConnectionStats(): Promise<ConnectionStats>;
 }
+
+export type SerialConnection = {
+  path: string;
+  port?: SerialPort;
+  parser?: any;
+  state: SerialPortState;
+  options: SerialOptions;
+
+  // Raw data callbacks
+  dataStreamCallbacks: ((data: Buffer) => void)[];
+  errorCallbacks: ((error: Error) => void)[];
+
+  // Buffer management
+  rawBuffer: Buffer;
+  bufferedDataQueue: Buffer[];
+  bufferTimeout?: NodeJS.Timeout;
+
+  // Promise resolvers for onData()
+  dataResolvers: ((data: Buffer) => void)[];
+  errorResolvers: ((error: Error) => void)[];
+};

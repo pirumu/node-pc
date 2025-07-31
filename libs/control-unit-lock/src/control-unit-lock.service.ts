@@ -3,8 +3,6 @@ import { ScuResponse } from '@culock/protocols/scu/scu.types';
 import { sleep } from '@framework/time/sleep';
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectSerialManager, ISerialAdapter, SerialPortState } from '@serialport/serial';
-import { first, firstValueFrom, lastValueFrom } from 'rxjs';
-import { filter } from 'rxjs/operators';
 
 import { DETECT_CU_PORT_MESSAGE, DETECT_SCU_PORT_MESSAGE } from './control-unit-lock.constants';
 import { CuLockRequest } from './dto';
@@ -72,17 +70,15 @@ export class ControlUnitLockService implements OnModuleInit {
       throw new Error(`Port not open: ${request.protocol}`);
     }
 
-    const responsePromise = firstValueFrom(this._serialManager.onData(port));
-
     const msg = protocol.createMessage({
       command: request.command,
       deviceId: request.deviceId,
       lockId: 0,
     });
 
-    this._serialManager.write(port, msg);
+    await this._serialManager.write(port, msg);
 
-    const response = await responsePromise;
+    const response = await this._serialManager.onData(port);
     return protocol.parseResponse(request.deviceId, request.lockIds, Buffer.from(response)) as ScuResponse;
   }
 
@@ -98,13 +94,11 @@ export class ControlUnitLockService implements OnModuleInit {
       lockIds: request.lockIds,
     });
 
-    const responsePromise = firstValueFrom(this._serialManager.onData(port));
-
     for (const msg of messages) {
-      await lastValueFrom(this._serialManager.write(port, msg));
+      await this._serialManager.write(port, msg);
       await sleep(250);
     }
-    const response = await responsePromise;
+    const response = await this._serialManager.onData(port);
     const result = protocol.parseResponse(request.deviceId, request.lockIds, Buffer.from(response)) as CuResponse;
     return this._filterStatus(request.lockIds, result);
   }
@@ -116,7 +110,7 @@ export class ControlUnitLockService implements OnModuleInit {
   private async _detectPorts(): Promise<void> {
     this._logger.log(`Starting detect port for culock`);
     try {
-      const availablePorts = await lastValueFrom(this._serialManager.listPorts());
+      const availablePorts = await this._serialManager.listPorts();
       this._logger.debug(`Found ${availablePorts.length} available ports`, availablePorts);
       if (!availablePorts || availablePorts.length === 0) {
         this._logger.warn('No port found for culock. Skipping');
@@ -124,7 +118,7 @@ export class ControlUnitLockService implements OnModuleInit {
       }
       for (const portInfo of availablePorts) {
         await this._scanSinglePort(portInfo.path);
-        await lastValueFrom(this._serialManager.close(portInfo.path));
+        await this._serialManager.close(portInfo.path);
       }
       this._logger.log('Scan completed:', {
         cu: this._controlUnitLockPorts.length,
@@ -144,41 +138,27 @@ export class ControlUnitLockService implements OnModuleInit {
     await Promise.all([
       ...this._controlUnitLockPorts.map(
         async (cuPort): Promise<SerialPortState> =>
-          firstValueFrom(
-            this._serialManager
-              .open(cuPort, {
-                baudRate: 19200,
-                bufferStrategy: {
-                  type: 'time',
-                  timeMs: 500,
-                  maxBufferSize: 1024,
-                },
-                parser: { type: 'bytelength', options: { length: 18 } },
-              })
-              .pipe(
-                filter((s) => s.isOpen),
-                first(),
-              ),
-          ),
+          this._serialManager.open(cuPort, {
+            baudRate: 19200,
+            bufferStrategy: {
+              type: 'time',
+              timeMs: 500,
+              maxBufferSize: 1024,
+            },
+            parser: { type: 'bytelength', options: { length: 18 } },
+          }),
       ),
       ...this._subControlUnitPorts.map(
         async (scuPort): Promise<SerialPortState> =>
-          firstValueFrom(
-            this._serialManager
-              .open(scuPort, {
-                baudRate: 19200,
-                bufferStrategy: {
-                  type: 'time',
-                  timeMs: 500,
-                  maxBufferSize: 1024,
-                },
-                parser: { type: 'bytelength', options: { length: 8 } },
-              })
-              .pipe(
-                filter((s) => s.isOpen),
-                first(),
-              ),
-          ),
+          this._serialManager.open(scuPort, {
+            baudRate: 19200,
+            bufferStrategy: {
+              type: 'time',
+              timeMs: 500,
+              maxBufferSize: 1024,
+            },
+            parser: { type: 'bytelength', options: { length: 8 } },
+          }),
       ),
     ]);
   }
@@ -188,12 +168,7 @@ export class ControlUnitLockService implements OnModuleInit {
 
     try {
       // Open port
-      const state = await firstValueFrom(
-        this._serialManager.open(portPath, { baudRate: 19200 }).pipe(
-          filter((s) => s.isOpen),
-          first(),
-        ),
-      );
+      const state = await this._serialManager.open(portPath, { baudRate: 19200, bufferStrategy: { type: 'time', timeMs: 1000 } });
 
       if (!state.isOpen) {
         this._logger.error(`Failed to open port: ${portPath}`);
@@ -210,7 +185,7 @@ export class ControlUnitLockService implements OnModuleInit {
         }
       }
       this._addPort(portPath, isCuHardware ? ProtocolType.CU : ProtocolType.CU);
-      await lastValueFrom(this._serialManager.close(portPath));
+      await this._serialManager.close(portPath);
     } catch (error) {
       this._logger.error(`Error scanning port ${portPath}:`, {
         message: error.message,
@@ -218,7 +193,7 @@ export class ControlUnitLockService implements OnModuleInit {
         stack: error.stack,
       });
       try {
-        await lastValueFrom(this._serialManager.close(portPath));
+        await this._serialManager.close(portPath);
       } catch (closeError) {
         this._logger.warn(`Failed to close port ${portPath}:`, {
           message: closeError.message,
@@ -231,9 +206,8 @@ export class ControlUnitLockService implements OnModuleInit {
 
   private async _checkScuHardware(portPath: string): Promise<boolean> {
     try {
-      const responsePromise = firstValueFrom(this._serialManager.onData(portPath));
-      await lastValueFrom(this._serialManager.write(portPath, Buffer.from(DETECT_SCU_PORT_MESSAGE)));
-      const response = await responsePromise;
+      await this._serialManager.write(portPath, Buffer.from(DETECT_SCU_PORT_MESSAGE));
+      const response = await this._serialManager.onData(portPath);
       const buffer = Buffer.isBuffer(response) ? response : Buffer.from(response, 'hex');
       return this._isScuResponse(buffer);
     } catch (error) {
@@ -248,9 +222,8 @@ export class ControlUnitLockService implements OnModuleInit {
 
   private async _checkCuHardware(portPath: string): Promise<boolean> {
     try {
-      const responsePromise = firstValueFrom(this._serialManager.onData(portPath).pipe(first()));
-      await lastValueFrom(this._serialManager.write(portPath, Buffer.from(DETECT_CU_PORT_MESSAGE)));
-      const response = await responsePromise;
+      await this._serialManager.write(portPath, Buffer.from(DETECT_CU_PORT_MESSAGE));
+      const response = await this._serialManager.onData(portPath);
       const buffer = Buffer.isBuffer(response) ? response : Buffer.from(response, 'hex');
       return this._isCuResponse(buffer);
     } catch (error) {
@@ -287,7 +260,7 @@ export class ControlUnitLockService implements OnModuleInit {
   }
 
   private async _isPortOpen(portPath: string): Promise<boolean> {
-    return firstValueFrom(this._serialManager.isOpen(portPath).pipe(first()));
+    return this._serialManager.isOpen(portPath);
   }
 
   private _filterStatus(lockIds: number[], result: CuResponse): CuResponse {
