@@ -8,7 +8,7 @@ import { SchedulerRegistry } from '@nestjs/schedule';
 import { CronJob } from 'cron';
 import { addSeconds, isAfter } from 'date-fns';
 
-import { LoadcellMonitoringConfig } from '../../../config';
+// import { LoadcellMonitoringConfig } from '../../../config';
 
 import { ILoadcellRepository, LOADCELL_REPOSITORY_TOKEN } from './repositories';
 
@@ -34,7 +34,7 @@ export class LoadCellMonitoringService implements OnModuleInit, OnModuleDestroy 
   }
 
   private _registerJob(name: string): void {
-    const config = this._configService.getOrThrow<LoadcellMonitoringConfig>(CONFIG_KEY.LOADCELL_MONITORING);
+    const config = this._configService.getOrThrow<any>(CONFIG_KEY.LOADCELL_MONITORING);
 
     const job = new CronJob<null, null>(`${config.priorityInSecond} * * * * *`, () => {
       this._logger.log(`time (${config.priorityInSecond}) for job ${name} to run!`);

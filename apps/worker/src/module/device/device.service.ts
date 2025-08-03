@@ -1,8 +1,9 @@
 import { WeightCalculatedEvent } from '@common/business/events';
 import { BinItemMRepository, BinMRepository, DeviceMRepository, PortMRepository } from '@dals/mongo/repositories';
-import { Logger } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { differenceInDays } from 'date-fns';
 
+@Injectable()
 export class DeviceWorkerService {
   private readonly _maxHistory = 10;
   private readonly _logger = new Logger(DeviceWorkerService.name);
@@ -175,7 +176,7 @@ export class DeviceWorkerService {
         };
       }),
     );
-    console.log(data);
+    this._logger.log(data);
     return data.filter(Boolean);
   }
 }

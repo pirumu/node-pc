@@ -50,6 +50,8 @@ export class LoadcellBridgeService implements OnModuleInit, OnModuleDestroy {
 
         // Start monitoring
         await this._startLoadcells();
+
+        await this.mock();
       } catch (error) {
         this._logger.error('Failed to initialize LoadCell service:', error);
       }
@@ -61,6 +63,21 @@ export class LoadcellBridgeService implements OnModuleInit, OnModuleDestroy {
     this._destroy$.complete();
   }
 
+  public async mock(): Promise<void> {
+    try {
+      const devices = await this._loadcellDeviceRepository.findAll();
+      const deviceIds = devices.map((d) => this._extractRawDeviceId(d.deviceNumId));
+
+      if (deviceIds.length > 0) {
+        this._loadcellsService.setActiveDevices(deviceIds);
+      } else {
+        this._logger.warn(`No devices found`);
+      }
+      this._loadcellsService.startDataPolling();
+    } catch (error) {
+      this._logger.error('Error handling bin/open:', error);
+    }
+  }
   // mqtt request handlers
   public async onBinOpened(payload: LoadcellMqttRequest): Promise<void> {
     try {
