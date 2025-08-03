@@ -24,7 +24,7 @@ export class TabletMapper {
       id: model._id.toString(),
       deviceId: model.deviceId,
       deviceKey: model.deviceKey,
-      setting: model.setting,
+      setting: model.setting as any,
       createdAt: model.createdAt?.toISOString(),
       updatedAt: model.updatedAt?.toISOString(),
     });
