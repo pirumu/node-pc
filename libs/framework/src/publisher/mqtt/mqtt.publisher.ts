@@ -24,7 +24,7 @@ export class MQTTPublisher implements IPublisher {
       .setQoS(0)
       .build();
 
-    return this._client.send(channel, record).subscribe({
+    return this._client.emit(channel, record).subscribe({
       complete: () => {
         this._logger.log('MQTTPublisher published successfully', {
           event: record,
