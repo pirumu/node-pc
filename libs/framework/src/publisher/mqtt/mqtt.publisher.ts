@@ -20,7 +20,7 @@ export class MQTTPublisher implements IPublisher {
   public publish(channel: string, data: Record<string, unknown>, metadata?: Record<string, string | string[]>, options?: any): any {
     const record = new MqttRecordBuilder(data)
       .setProperties({ userProperties: { [TRACING_ID]: ClsServiceManager.getClsService().getId(), ...(metadata || {}) } })
-      .setQoS(1)
+      .setQoS(0)
       .build();
 
     return this._client.send(channel, record).subscribe({
