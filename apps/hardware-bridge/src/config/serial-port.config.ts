@@ -2,7 +2,7 @@ import { resolve } from '@config/core';
 
 export const getSerialportConfig = () => {
   return {
-    defaultPorts: resolve('SERIALPORT_DEFAULT_PORTS', (v: string) => (v || '').split(','), { default: [] }),
+    defaultPorts: resolve('SERIALPORT_DEFAULT_PORTS', (v: string) => (v || '').split(','), { default: ['/dev/ttyS0'] }),
     discovery: {
       enabled: resolve('SERIALPORT_ENABLED', (v: string) => v === 'true', { default: true }),
       serialOptions: {
