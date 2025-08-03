@@ -1,21 +1,9 @@
-import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit, OnModuleDestroy, Inject } from '@nestjs/common';
 import { InjectSerialManager, ISerialAdapter } from '@serialport/serial';
 import { Observable, Subject, BehaviorSubject, timer, EMPTY, from, forkJoin, of, interval, timeout } from 'rxjs';
-import {
-  map,
-  takeUntil,
-  tap,
-  catchError,
-  switchMap,
-  filter,
-  retry,
-  mergeMap,
-  distinctUntilChanged,
-  debounceTime,
-  concatMap,
-} from 'rxjs/operators';
+import { map, takeUntil, tap, catchError, switchMap, filter, retry, distinctUntilChanged, debounceTime, concatMap } from 'rxjs/operators';
 
-import { ALL_MESSAGES } from './loadcells.contants';
+import { ALL_MESSAGES, LOADCELLS_SERVICE_CONFIG } from './loadcells.contants';
 import { LoadCellConfig, LoadCellDevice, LoadCellHooks, LoadCellReading, LoadCellStats } from './loadcells.types';
 
 export type LoadCellPerformanceStats = {
@@ -47,26 +35,6 @@ export class LoadcellsService implements OnModuleInit, OnModuleDestroy {
   private readonly _destroy$ = new Subject<void>();
 
   private _activeMessages: LoadCellDevice[] = [];
-
-  private readonly _config: LoadCellConfig = {
-    enabled: true,
-    logLevel: 0,
-    precision: 100,
-    initTimer: 500,
-    charStart: 0x55,
-    messageLength: 11,
-    discoveryTimeout: 10000, // 10 seconds
-    serialOptions: {
-      baudRate: 9600,
-      dataBits: 8,
-      stopBits: 1,
-      parity: 'none',
-      autoOpen: true,
-      maxReconnectAttempts: 5,
-      retryDelay: 5000,
-    },
-    pollingInterval: 1000,
-  };
 
   // State management
   private readonly _isRunning$ = new BehaviorSubject<boolean>(false);
@@ -101,7 +69,11 @@ export class LoadcellsService implements OnModuleInit, OnModuleDestroy {
   private _reconnectAttempts = new Map<string, number>();
   private readonly _maxReconnectAttempts = 3;
 
-  constructor(@InjectSerialManager() private readonly _serialAdapter: ISerialAdapter) {
+  constructor(
+    @Inject(LOADCELLS_SERVICE_CONFIG) private readonly _config: LoadCellConfig,
+    @InjectSerialManager()
+    private readonly _serialAdapter: ISerialAdapter,
+  ) {
     this._messageAddresses = this._allMessages.map((msg) => parseInt(this._getBufferContent(msg.data).slice(0, 2), 16));
     this._activeMessages = [...this._allMessages];
 
@@ -208,10 +180,10 @@ export class LoadcellsService implements OnModuleInit, OnModuleDestroy {
 
     this._logger.log('Stopping loadcells service');
 
-    // NEW: Clean up callbacks
+    // Clean up callbacks
     this._cleanupCallbacks();
 
-    // NEW: Close all ports
+    // Close all ports
     await this._disconnectFromPorts();
 
     this._isRunning$.next(false);
@@ -264,7 +236,7 @@ export class LoadcellsService implements OnModuleInit, OnModuleDestroy {
     return this._connectionHealth$.pipe(takeUntil(this._destroy$));
   }
 
-  // NEW: Get connection states for all ports
+  // Get connection states for all ports
   public async getPortConnectionStates(): Promise<Map<string, any>> {
     const states = new Map();
 
@@ -449,7 +421,7 @@ export class LoadcellsService implements OnModuleInit, OnModuleDestroy {
       });
   }
 
-  // NEW: Disconnect from all ports
+  // Disconnect from all ports
   private async _disconnectFromPorts(): Promise<void> {
     if (this._connectedPorts.length === 0) {
       return;
@@ -478,7 +450,7 @@ export class LoadcellsService implements OnModuleInit, OnModuleDestroy {
     this._callbackUnsubscribers.clear();
   }
 
-  // NEW: Disconnect from single port
+  // Disconnect from single port
   private async _disconnectFromSinglePort(port: string): Promise<void> {
     if (this._portStates.get(port) === 'disconnecting') {
       this._logger.warn(`Port ${port} already disconnecting`);
@@ -559,7 +531,7 @@ export class LoadcellsService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  // NEW: Clean up callbacks
+  // Clean up callbacks
   private _cleanupCallbacks(): void {
     // Unsubscribe all callbacks
     this._callbackUnsubscribers.forEach((unsubscribers, port) => {
@@ -576,7 +548,7 @@ export class LoadcellsService implements OnModuleInit, OnModuleDestroy {
     this._dataStreamCallbacks.clear();
   }
 
-  // NEW: Check if all ports are connected
+  // Check if all ports are connected
   public async areAllPortsConnected(): Promise<boolean> {
     if (this._connectedPorts.length === 0) {
       return false;
@@ -594,7 +566,7 @@ export class LoadcellsService implements OnModuleInit, OnModuleDestroy {
     return results.every((connected) => connected);
   }
 
-  // NEW: Reconnect to failed ports
+  // Reconnect to failed ports
   public async reconnectFailedPorts(): Promise<void> {
     const reconnectPromises = this._connectedPorts.map(async (port) => {
       try {
@@ -694,7 +666,6 @@ export class LoadcellsService implements OnModuleInit, OnModuleDestroy {
   }
 
   private _extractComId(portPath: string): number {
-    // Extract COM ID from port path (e.g., COM11 -> 11, /dev/ttyUSB0 -> 0)
     const comMatch = portPath.match(/COM(\d+)/i);
     const ttyMatch = portPath.match(/ttyS(\d+)/);
 
@@ -712,7 +683,7 @@ export class LoadcellsService implements OnModuleInit, OnModuleDestroy {
     interval(this._config.pollingInterval)
       .pipe(
         takeUntil(this._destroy$),
-        filter(() => this._isRunning$.value),
+        filter(() => this._isRunning$.value && this._activeMessages.length > 0),
         debounceTime(100), // Debounce rapid changes
         switchMap(() => this._executePollingCycle()),
       )
@@ -1047,7 +1018,7 @@ export class LoadcellsService implements OnModuleInit, OnModuleDestroy {
     return criticalMessages.some((msg) => error.message.toLowerCase().includes(msg.toLowerCase()));
   }
 
-  // 7. NEW: Handle port disconnection with smart reconnection
+  // 7. Handle port disconnection with smart reconnection
   private async _handlePortDisconnection(port: string): Promise<void> {
     this._portStates.set(port, 'disconnected');
     this._updatePortStats(port, true);
@@ -1075,7 +1046,7 @@ export class LoadcellsService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  // 8. NEW: Handle critical errors that might need immediate action
+  // 8. Handle critical errors that might need immediate action
   private async _handleCriticalPortError(port: string, error: Error): Promise<void> {
     this._logger.warn(`Critical error on ${port}, attempting recovery:`, error.message);
 

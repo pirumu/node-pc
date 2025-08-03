@@ -23,9 +23,9 @@ export class BinEntity extends BaseEntity {
   isDrawer: boolean;
   drawerName: string;
   status: string;
-  isSync: boolean;
-  retryCount: number;
-  isCalibrated: boolean;
+  isSync?: boolean;
+  retryCount?: number;
+  isCalibrated?: boolean;
   newMax?: number;
 
   constructor(props: Properties<BinEntity>) {

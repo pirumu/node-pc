@@ -11,4 +11,5 @@ export enum AUTH_ROUTES {
   LOGIN_BY_PIN_PASS = 'login-by-pin-pass',
   LOGIN = 'login',
   LOGIN_BY_FINGERPRINT = 'login/finger',
+  SCAN_CARD = 'scan/card',
 }

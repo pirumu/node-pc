@@ -1,0 +1,17 @@
+{
+"sites": [
+	{
+		"id" : 1,
+		"name" : "Site 1",
+		"email" : "test@gmail.com",
+		"mobile" : "012345678",
+		"report_schedule" : "daily",
+		"report_timing" : "{\"invDailyHours\":\"0\",\"invDailyMin\":\"0\"}",
+		"report_format" : "csv",
+		"low_stock_schedule" : "daily",
+		"low_stock_timing" : "{\"lowStockDailyHours1\":\"0\",\"lowStockDailyMin1\":\"0\",\"lowStockDailyHours2\":\"\",\"lowStockDailyMin2\":\"\",\"lowStockDailyHours3\":\"\",\"lowStockDailyMin3\":\"\"}",
+		"type_notification" : "{\"sms\":null,\"email\":true}",
+		"created_at" : "2024-11-19 10:04:01",
+		"updated_at" : "2024-11-19 10:04:01"
+	}
+]}

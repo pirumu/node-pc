@@ -1,98 +1,119 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { Expose, Transform } from 'class-transformer';
+import { Exclude, Expose, Type } from 'class-transformer';
 
 export class ItemResponse {
   @ApiProperty()
-  @Expose({ name: 'id' })
-  id: number;
+  @Type(() => String)
+  @Expose({ name: 'id', toPlainOnly: true })
+  id: string;
 
   @ApiProperty()
-  @Expose({ name: 'name' })
+  @Type(() => String)
+  @Expose({ name: 'name', toPlainOnly: true })
   name: string;
 
   @ApiProperty()
-  @Expose({ name: 'part_no' })
+  @Type(() => String)
+  @Expose({ name: 'part_no', toPlainOnly: true })
   partNo: string;
 
   @ApiProperty()
-  @Expose({ name: 'material_no' })
+  @Type(() => String)
+  @Expose({ name: 'material_no', toPlainOnly: true })
   materialNo: string;
 
   @ApiProperty()
-  @Expose({ name: 'location' })
-  location: string;
+  @Type(() => String)
+  @Expose({ name: 'location', toPlainOnly: true })
+  location: string[];
 
   @ApiProperty({ enum: ['torque_wrench', '....'] })
-  @Expose({ name: 'type' })
+  @Type(() => String)
+  @Expose({ name: 'type', toPlainOnly: true })
   type: string;
 
   @ApiProperty()
-  @Expose({ name: 'label' })
+  @Type(() => String)
+  @Expose({ name: 'label', toPlainOnly: true })
   label: string;
 
   @ApiProperty()
-  @Expose({ name: 'charge_time' })
+  @Type(() => String)
+  @Expose({ name: 'charge_time', toPlainOnly: true })
   chargeTime: string;
 
   @ApiProperty()
-  @Expose({ name: 'due_date' })
+  @Type(() => String)
+  @Expose({ name: 'due_date', toPlainOnly: true })
   dueDate: string;
 
   @ApiProperty()
-  @Expose({ name: 'expiry_date' })
+  @Type(() => String)
+  @Expose({ name: 'expiry_date', toPlainOnly: true })
   expiryDate: string;
 
   @ApiProperty({ required: false })
-  @Expose({ name: 'image' })
+  @Type(() => String)
+  @Expose({ name: 'image', toPlainOnly: true })
   image?: string;
 
   @ApiProperty()
-  @Expose({ name: 'serial' })
+  @Type(() => String)
+  @Expose({ name: 'serial', toPlainOnly: true })
   serial: string;
 
   @ApiProperty()
-  @Expose({ name: 'description' })
+  @Type(() => String)
+  @Expose({ name: 'description', toPlainOnly: true })
   description: string;
 
   @ApiProperty({ enum: ['available'] })
-  @Expose({ name: 'status' })
+  @Type(() => String)
+  @Expose({ name: 'status', toPlainOnly: true })
   status: string;
 
-  @ApiProperty()
-  @Expose({ name: 'createdAt' })
-  @Transform(({ value }) => value?.toISOString())
+  @ApiProperty({ name: 'createdAt' })
+  @Type(() => String)
+  @Expose({ name: 'createdAt', toPlainOnly: true })
   createdAt: string;
 
-  @ApiProperty()
-  @Expose({ name: 'updatedAt' })
-  @Transform(({ value }) => value?.toISOString())
+  @ApiProperty({ name: 'updatedAt' })
+  @Type(() => String)
+  @Expose({ name: 'updatedAt', toPlainOnly: true })
   updatedAt: string;
 
-  @ApiProperty()
-  @Expose({ name: 'total_quantity' })
+  @ApiProperty({ name: 'total_quantity' })
+  @Type(() => Number)
+  @Expose({ name: 'total_quantity', toPlainOnly: true })
   totalQuantity: number;
 
-  @ApiProperty()
-  @Expose({ name: 'total_calc_quantity' })
+  @ApiProperty({ name: 'total_calc_quantity' })
+  @Type(() => Number)
+  @Expose({ name: 'total_calc_quantity', toPlainOnly: true })
   totalCalcQuantity: number;
 
   @ApiProperty({ required: false })
-  @Expose({ name: 'list_wo' })
+  @Type(() => Number)
+  @Expose({ name: 'list_wo', toPlainOnly: true })
   listWo?: string;
 
   @ApiProperty({ required: false })
-  @Expose({ name: 'bin_id' })
-  binId?: number;
+  @Type(() => String)
+  @Expose({ name: 'bin_id', toPlainOnly: true })
+  binId?: string;
 
   @ApiProperty({ required: false })
-  @Expose({ name: 'issue_quantity' })
+  @Type(() => Number)
+  @Expose({ name: 'issue_quantity', toPlainOnly: true })
   issueQuantity?: number;
 
   @ApiProperty({ type: [String] })
-  @Expose({ name: 'locations' })
+  @Type(() => String)
+  @Expose({ name: 'locations', toPlainOnly: true })
   locations: string[];
 
   @ApiProperty({ required: false })
-  @Expose({ name: 'item_type_id' })
-  itemTypeId?: number;
+  @Type(() => String)
+  @Expose({ name: 'item_type_id', toPlainOnly: true })
+  itemTypeId?: string;
 }

@@ -3,6 +3,8 @@ import { ApiDocs, ControllerDocs } from '@framework/swagger';
 import { Body, Controller, Post } from '@nestjs/common';
 import { instanceToPlain } from 'class-transformer';
 
+import { WsGateway } from '../ws';
+
 import { AUTH_ROUTES } from './auth.constants';
 import { LoginByPinRequest } from './dtos';
 import { LoginRequest } from './dtos/request';
@@ -17,6 +19,7 @@ export class AuthController {
   constructor(
     private readonly _authService: AuthService,
     private readonly _fingerprintAuthService: FingerprintAuthService,
+    private readonly _wsGateway: WsGateway,
   ) {}
 
   @ApiDocs({
@@ -49,5 +52,25 @@ export class AuthController {
   @Post(AUTH_ROUTES.LOGIN_BY_FINGERPRINT)
   public async loginViaFingerprint(@TracingID({ transport: Transport.HTTP }) tracingId: string): Promise<Record<string, any>> {
     return this._fingerprintAuthService.authenticate(tracingId);
+  }
+
+  @ApiDocs({
+    summary: 'Fake scan card login',
+    responseSchema: JwtAuthResponse,
+  })
+  @Post(AUTH_ROUTES.SCAN_CARD)
+  public async loginByCard(@TracingID({ transport: Transport.HTTP }) tracingId: string): Promise<any> {
+    const res = await this._authService.loginByCard();
+    this._wsGateway.sendMessage('scan-employee' as any, {
+      success: true,
+      data: {
+        access_token: res.accessToken,
+        username: 'admin',
+        userRole: 'admin',
+        isIssue: 1,
+        isReturn: 1,
+        isReplenish: 1,
+      },
+    });
   }
 }

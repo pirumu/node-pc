@@ -9,13 +9,13 @@ export class Cabinet extends BaseSchema {
   @Prop({ type: MSchema.Types.String, required: true })
   name: string;
 
-  @Prop({ type: MSchema.Types.String, required: false })
-  code?: string;
+  @Prop({ type: MSchema.Types.String, required: false, default: null })
+  code: string | null;
 
-  @Prop({ type: MSchema.Types.Number, required: false })
+  @Prop({ type: MSchema.Types.Number, required: false, default: 0 })
   numberOfRows?: number;
 
-  @Prop({ type: MSchema.Types.Number, required: false })
+  @Prop({ type: MSchema.Types.Number, required: false, default: 0 })
   totalBins?: number;
 
   @Prop({ type: MSchema.Types.String, required: false })

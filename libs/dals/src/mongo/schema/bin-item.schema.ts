@@ -15,12 +15,6 @@ export class BinItem extends BaseSchema {
   @Prop({ type: MSchema.Types.Number, required: true })
   order: number;
 
-  @Prop({ type: MSchema.Types.String, required: false })
-  batchNo?: string;
-
-  @Prop({ type: MSchema.Types.String, required: false })
-  serialNo?: string;
-
   @Prop({ type: MSchema.Types.Number, required: true })
   min: number;
 
@@ -30,26 +24,32 @@ export class BinItem extends BaseSchema {
   @Prop({ type: MSchema.Types.Number, required: true })
   critical: number;
 
-  @Prop({ type: MSchema.Types.Number, required: true })
-  hasChargeTime: number;
+  @Prop({ type: MSchema.Types.Boolean, required: true })
+  hasChargeTime: boolean;
+
+  @Prop({ type: MSchema.Types.Boolean, required: true })
+  hasCalibrationDue: boolean;
+
+  @Prop({ type: MSchema.Types.Boolean, required: true })
+  hasExpiryDate: boolean;
+
+  @Prop({ type: MSchema.Types.Boolean, required: true })
+  hasLoadHydrostaticTestDue: boolean;
+
+  @Prop({ type: MSchema.Types.String, required: false })
+  batchNo?: string;
+
+  @Prop({ type: MSchema.Types.String, required: false })
+  serialNo?: string;
 
   @Prop({ type: MSchema.Types.String, required: false })
   chargeTime?: string;
 
-  @Prop({ type: MSchema.Types.Number, required: true })
-  hasCalibrationDue: number;
-
   @Prop({ type: MSchema.Types.Date, required: false })
   calibrationDue?: Date;
 
-  @Prop({ type: MSchema.Types.Number, required: true })
-  hasExpiryDate: number;
-
   @Prop({ type: MSchema.Types.Date, required: false })
   expiryDate?: Date;
-
-  @Prop({ type: MSchema.Types.Number, required: true })
-  hasLoadHydrostaticTestDue: number;
 
   @Prop({ type: MSchema.Types.Date, required: false })
   loadHydrostaticTestDue?: Date;

@@ -9,7 +9,7 @@ export class ItemType extends BaseSchema {
   @Prop({ type: MSchema.Types.String, required: true })
   type: string;
 
-  @Prop({ type: MSchema.Types.String, required: true })
+  @Prop({ type: MSchema.Types.String, default: '' })
   description: string;
 
   @Prop({ type: MSchema.Types.Boolean, required: true })

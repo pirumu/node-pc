@@ -10,14 +10,15 @@ import { JobCardService } from '../job-card';
 
 import { GetItemsRequest, IssueItemRequest } from './dtos/request';
 import { IItemRepository, ITEM_REPOSITORY_TOKEN } from './repositories';
+import { PROCESS_ITEM_TYPE } from '@common/constants';
 
 @Injectable()
 export class ItemService {
   constructor(
-    private readonly _areaService: AreaService,
+    // private readonly _areaService: AreaService,
     private readonly _binItemService: BinItemService,
-    private readonly _jobCardService: JobCardService,
-    private readonly _deviceService: DeviceService,
+    // private readonly _jobCardService: JobCardService,
+    // private readonly _deviceService: DeviceService,
     @Inject(ITEM_REPOSITORY_TOKEN) private readonly _repository: IItemRepository,
   ) {}
 
@@ -31,21 +32,84 @@ export class ItemService {
     return this._repository.getIssueItems({ ...dto, dateThreshold });
   }
 
-  // public async issue(currentUser: any, items: IssueItemEntity[]): Promise<any> {
-  //   const dateThreshold = new Date();
-  //   dateThreshold.setHours(0, 0, 0, 0);
+  public async issue(request: IssueItemRequest): Promise<IssueItemEntity[]> {
+    const dateThreshold = new Date();
+    dateThreshold.setHours(0, 0, 0, 0);
+    return this._repository.getItemsForIssue({
+      itemIds: request.items.map((i) => i.itemId),
+      binIds: request.items.map((i) => i.binId).filter((i) => i !== undefined),
+      processBy: '688dc7ee7bc1864fe80de091',
+      dateThreshold: dateThreshold,
+    });
+  }
+
+  // public async issue(processor: AuthUserDto, tabletDeviceId: string, request: IssueItemRequest): Promise<any> {
+  //   const dateThreshold = new Date().setHours(0, 0, 0, 0);
   //
-  //   const processItemPromises = items.map((item) => this._processSingleItemForIssue(item, currentUser, dateThreshold));
+  //   const uniqueId = tabletDeviceId;
+  //   const { items } = request;
   //
-  //   const result = await Promise.all(processItemPromises);
+  //   // Extract all itemIds and binIds for batch processing
+  //   const requestItemsMap = new Map(items.map((item) => [item.itemId, item]));
   //
-  //   // 2. Refactor của hàm `formatData` được tích hợp luôn vào đây
-  //   const formattedData = await this.formatIssueData(result);
+  //   let totalRequestQty = 0;
+  //   const result: ItemResult[] = [];
   //
-  //   // 3. Tính tổng số lượng yêu cầu
-  //   const totalRequestQty = items.reduce((sum, item) => sum + item.quantity, 0);
+  //   const aggregatedItems = [];
+  //   for (const requestedItem of items) {
+  //     const itemData = aggregatedItems.find((aggItem) => aggItem._id.toString() === requestedItem.itemId);
   //
-  //   // Dữ liệu đã sẵn sàng để gửi đi hoặc xử lý tiếp
+  //     if (!itemData) {
+  //       throw AppHttpException.badRequest({ message: 'Item not found', data: requestItemsMap.get(requestedItem.itemId) });
+  //     }
+  //
+  //     let quantityCalc = 0;
+  //     const locations: LocationResult[] = [];
+  //     totalRequestQty += requestedItem.quantity;
+  //     for (const location of itemData.locations) {
+  //       let finalLocation: LocationResult = location.userReturnLocation
+  //         ? {
+  //             cabinet: location.userReturnLocation.cabinet || location.cabinet,
+  //             bin: location.userReturnLocation.bin,
+  //             preQty: location.preQty,
+  //           }
+  //         : {
+  //             cabinet: location.cabinet,
+  //             bin: location.bin,
+  //             preQty: location.preQty,
+  //           };
+  //
+  //       if (requestedItem.quantity - quantityCalc > location.preQty) {
+  //         quantityCalc += location.preQty;
+  //         finalLocation.requestQty = location.preQty;
+  //       } else {
+  //         finalLocation.requestQty = requestedItem.quantity - quantityCalc;
+  //         locations.push(finalLocation);
+  //         break;
+  //       }
+  //       locations.push(finalLocation);
+  //     }
+  //
+  //     // Format Work Orders
+  //     let workOrders: any[] = [];
+  //     if (requestedItem.listWO && requestedItem.listWO.length) {
+  //       workOrders = await this._repository.e(requestedItem.listWO);
+  //       if (!workOrders.length) {
+  //         throw AppHttpException.badRequest({ message: 'Invalid work order list', data: requestedItem.listWO });
+  //       }
+  //     }
+  //
+  //     result.push({
+  //       id: itemData._id.toString(),
+  //       name: itemData.name,
+  //       itemTypeId: itemData.itemTypeId,
+  //       type: itemData.type,
+  //       partNo: itemData.partNo,
+  //       materialNo: itemData.materialNo,
+  //       locations,
+  //       listWO: workOrders || [],
+  //     });
+  //   }
   //   return {
   //     success: true,
   //     data: result,
@@ -53,8 +117,12 @@ export class ItemService {
   //     requestQty: totalRequestQty,
   //   };
   // }
-  //
+
   // private async _processSingleItemForIssue();
   //
   // private async _formatIssueData() {}
+
+  public async getTypeItems(type: PROCESS_ITEM_TYPE) {
+    return this._repository.getItemsByType(type);
+  }
 }

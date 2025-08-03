@@ -128,11 +128,8 @@ export class BinDto {
 export class CabinetDto {
   @ApiProperty({ description: 'Cabinet ID' })
   @IsNumber()
-  @Type(() => Number)
-  @Transform(({ value, obj }) => {
-    return typeof value === 'string' ? parseInt(value.slice(-8), 16) : value;
-  })
-  id: number;
+  @Type(() => String)
+  id: string;
 
   @ApiProperty({ description: 'Cabinet name' })
   @IsString()
@@ -143,13 +140,13 @@ export class CabinetDto {
   code: string;
 
   @ApiProperty({ description: 'Number of rows' })
-  @Expose({ name: 'number_of_rows' })
+  @Expose({ name: 'number_of_rows', toPlainOnly: true })
   @IsNumber()
   @Type(() => Number)
   numberOfRows: number;
 
   @ApiProperty({ description: 'Total bins' })
-  @Expose({ name: 'total_bins' })
+  @Expose({ name: 'total_bins', toPlainOnly: true })
   @IsNumber()
   @Type(() => Number)
   totalBins: number;

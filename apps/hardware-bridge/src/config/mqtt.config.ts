@@ -6,14 +6,14 @@ export type MqttConfig = { publisher: Required<MqttOptions>['options']; consumer
 export const getMqttConfig = (): MqttConfig => {
   return {
     publisher: {
-      url: resolve('MQTT_URL', String, { default: 'mqtt://127.0.0.1:1883' }),
+      url: resolve('MQTT_URI', String, { default: 'mqtt://127.0.0.1:1883' }),
       protocolVersion: resolve('MQTT_PROTOCOL_VERSION', Number, { default: 5 }),
       username: resolve('MQTT_USERNAME', String, { default: '' }),
       password: resolve('MQTT_PASSWORD', String, { default: '' }),
       clientId: resolve('MQTT_PUBLISHER_ID', String, { default: 'mqtt-hardware-bridge-publisher' }),
     },
     consumer: {
-      url: resolve('MQTT_URL', String, { default: 'mqtt://127.0.0.1:1883' }),
+      url: resolve('MQTT_URI', String, { default: 'mqtt://127.0.0.1:1883' }),
       protocolVersion: resolve('MQTT_PROTOCOL_VERSION', Number, { default: 5 }),
       username: resolve('MQTT_USERNAME', String, { default: '' }),
       password: resolve('MQTT_PASSWORD', String, { default: '' }),

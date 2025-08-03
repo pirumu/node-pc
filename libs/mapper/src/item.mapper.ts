@@ -1,7 +1,7 @@
 import { LeanDocument } from '@dals/mongo/base.repository';
 import { Item } from '@dals/mongo/schema/item.schema';
 import { ItemEntity } from '@entity';
-import { HydratedDocument } from 'mongoose';
+import { HydratedDocument, Types } from 'mongoose';
 
 export class ItemMapper {
   public static toModel(entity: ItemEntity): Item {
@@ -9,7 +9,7 @@ export class ItemMapper {
     model.name = entity.name;
     model.partNo = entity.partNo;
     model.materialNo = entity.materialNo;
-    model.itemTypeId = entity.itemTypeId;
+    model.itemTypeId = new Types.ObjectId(entity.itemTypeId);
     model.type = entity.type;
     model.image = entity.image;
     model.description = entity.description;
@@ -29,7 +29,7 @@ export class ItemMapper {
       name: model.name,
       partNo: model.partNo,
       materialNo: model.materialNo,
-      itemTypeId: model.itemTypeId,
+      itemTypeId: model.itemTypeId.toString(),
       type: model.type,
       image: model.image,
       description: model.description,

@@ -1,5 +1,5 @@
 import { ModelDefinition, Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Schema as MSchema } from 'mongoose';
+import { Schema as MSchema, Types } from 'mongoose';
 
 import { BaseSchema } from './base.schema';
 import { schemaOptions } from './default.options';
@@ -7,7 +7,10 @@ import { schemaOptions } from './default.options';
 @Schema(schemaOptions)
 export class Bin extends BaseSchema {
   @Prop({ type: MSchema.Types.ObjectId, ref: 'Cabinet', required: true })
-  cabinetId: string;
+  cabinetId: Types.ObjectId;
+
+  @Prop({ type: MSchema.Types.ObjectId, ref: 'User', required: false })
+  processBy?: Types.ObjectId;
 
   @Prop({ type: MSchema.Types.String, required: true })
   name: string;
@@ -33,15 +36,6 @@ export class Bin extends BaseSchema {
   @Prop({ type: MSchema.Types.Number, required: true })
   critical: number;
 
-  @Prop({ type: MSchema.Types.String, required: false })
-  description?: string;
-
-  @Prop({ type: MSchema.Types.ObjectId, ref: 'User', required: false })
-  processBy?: string;
-
-  @Prop({ type: MSchema.Types.Date, required: false })
-  processTime?: string;
-
   @Prop({ type: MSchema.Types.Boolean, required: true })
   isProcessing: boolean;
 
@@ -54,9 +48,6 @@ export class Bin extends BaseSchema {
   @Prop({ type: MSchema.Types.Boolean, required: true })
   isRfid: boolean;
 
-  @Prop({ type: MSchema.Types.Boolean, required: false })
-  isDamage?: boolean;
-
   @Prop({ type: MSchema.Types.Boolean, required: true })
   isDrawer: boolean;
 
@@ -66,16 +57,25 @@ export class Bin extends BaseSchema {
   @Prop({ type: MSchema.Types.String, required: true })
   status: string;
 
-  @Prop({ type: MSchema.Types.Boolean, default: false })
-  isSync: boolean;
+  @Prop({ type: MSchema.Types.String, required: false })
+  description?: string;
 
-  @Prop({ type: MSchema.Types.Number, default: 0 })
-  retryCount: number;
+  @Prop({ type: MSchema.Types.Date, required: false, default: new Date() })
+  processTime?: Date;
 
-  @Prop({ type: MSchema.Types.Boolean, default: false })
-  isCalibrated: boolean;
+  @Prop({ type: MSchema.Types.Boolean, required: false, default: false })
+  isDamage?: boolean;
 
-  @Prop({ type: MSchema.Types.Number, required: false })
+  @Prop({ type: MSchema.Types.Boolean, required: false, default: false })
+  isSync?: boolean;
+
+  @Prop({ type: MSchema.Types.Number, required: false, default: 0 })
+  retryCount?: number;
+
+  @Prop({ type: MSchema.Types.Boolean, required: false, default: false })
+  isCalibrated?: boolean;
+
+  @Prop({ type: MSchema.Types.Number, required: false, default: 0 })
   newMax?: number;
 }
 

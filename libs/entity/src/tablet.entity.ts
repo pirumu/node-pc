@@ -2,7 +2,9 @@ import { Properties } from '@framework/types';
 
 import { BaseEntity } from './base.entity';
 
-export type TabletSettings = {};
+export type TabletSettings = {
+  clusterId: string;
+};
 
 export class TabletEntity extends BaseEntity {
   deviceId: string;

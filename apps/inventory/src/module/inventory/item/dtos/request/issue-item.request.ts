@@ -6,11 +6,13 @@ export class WOItemDto {
   @ApiProperty({ description: 'Work Order ID', name: 'wo_id' })
   @IsMongoId()
   @Type(() => String)
+  @Expose({ name: 'wo_id', toClassOnly: true })
   woId: string;
 
   @ApiProperty({ description: 'Area ID', name: 'area_id' })
   @IsMongoId()
   @Type(() => String)
+  @Expose({ name: 'area_id', toClassOnly: true })
   areaId: string;
 }
 
@@ -42,12 +44,14 @@ export class RequestIssueItemDto {
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => WOItemDto)
+  @IsOptional()
   listWO: WOItemDto[];
 
   @ApiProperty({ description: 'Condition ID', name: 'condition_id' })
   @IsNumber()
   @IsMongoId()
-  @Expose({ name: 'condition_id' })
+  @Expose({ name: 'condition_id', toClassOnly: true })
+  @IsOptional()
   conditionId: string;
 
   @ApiProperty({ description: 'Bin ID', required: false })

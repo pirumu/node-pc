@@ -38,8 +38,8 @@ export class DeviceDescriptionEntity {
 export class DeviceEntity extends BaseEntity {
   deviceNumId: number;
   portId: string;
-  binId: string;
-  itemId: string;
+  binId?: string;
+  itemId?: string;
   quantity: number;
   calcQuantity: number;
   damageQuantity: number;
@@ -47,14 +47,14 @@ export class DeviceEntity extends BaseEntity {
   zeroWeight: number;
   unitWeight: number;
   calcWeight: number;
-  quantityMinThreshold: number;
-  quantityCritThreshold: number;
-  macAddress: string;
-  chipId: string;
+  quantityMinThreshold?: number;
+  quantityCritThreshold?: number;
+  macAddress?: string;
+  chipId?: string;
   heartbeat: number;
-  setupTimestamp: string;
-  zeroTimestamp: string;
-  weightHistory: string;
+  setupTimestamp?: string;
+  zeroTimestamp?: string;
+  weightHistory?: string[];
   count: number;
   changeQty: number;
   status: string;

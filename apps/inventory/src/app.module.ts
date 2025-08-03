@@ -101,7 +101,7 @@ import { WsModule } from './module/ws';
             },
           },
           mqtt: {
-            options: config,
+            options: config.publisher,
             enabled: true,
           },
         };
@@ -130,6 +130,6 @@ import { WsModule } from './module/ws';
 })
 export class AppModule implements NestModule {
   public configure(consumer: MiddlewareConsumer): void {
-    consumer.apply(DeviceKeyAuthMiddleware).forRoutes(...['/ports']);
+    // consumer.apply(DeviceKeyAuthMiddleware).forRoutes(...['/ports']);
   }
 }

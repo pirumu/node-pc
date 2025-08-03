@@ -1,0 +1,44 @@
+{
+	"itemTypes": [
+		{
+			"idNum": 1,
+			"type": "PPE Box",
+			"description": "",
+			"isIssue": true,
+			"isReturn": true,
+			"isReplenish": true
+		},
+		{
+			"idNum": 2,
+			"type": "Torch Light",
+			"description": "",
+			"isIssue": true,
+			"isReturn": true,
+			"isReplenish": true
+		},
+		{
+			"idNum": 3,
+			"type": "Digital Mutimeter",
+			"description": "",
+			"isIssue": true,
+			"isReturn": true,
+			"isReplenish": true
+		},
+		{
+			"idNum": 4,
+			"type": "Torque Wrench",
+			"description": "",
+			"isIssue": true,
+			"isReturn": true,
+			"isReplenish": true
+		},
+		{
+			"idNum": 5,
+			"type": "eAOS Tablet",
+			"description": "",
+			"isIssue": true,
+			"isReturn": true,
+			"isReplenish": true
+		}
+	]
+}

@@ -1,0 +1,10 @@
+{
+"cabinets": [
+	{
+		"name" : "JFS",
+		"code" : null,
+		"numberOfRows" : 6,
+		"totalBins" : 4,
+		"type" : "main"
+	}
+]}

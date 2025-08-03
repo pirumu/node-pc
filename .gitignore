@@ -38,7 +38,7 @@ yarn.lock
 !.vscode/extensions.json
 
 # dotenv environment variable files
-env/inventory/.env
+#env/inventory/.env
 .env.development
 .env.test
 .env.production

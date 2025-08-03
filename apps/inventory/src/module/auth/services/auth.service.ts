@@ -77,4 +77,24 @@ export class AuthService {
       loginId: user.loginId,
     });
   }
+
+  // test only
+  public async loginByCard(): Promise<JwtAuthResponse> {
+    const accessToken = await this._jwtAuthService.generateToken({
+      cloud: {},
+      employeeId: '12345',
+      genealogy: null,
+      id: '2132321321',
+      password: '',
+      pinCode: undefined,
+      role: 'admin',
+      loginId: 'admin',
+      cardNumber: 1234,
+    } as any);
+
+    return new JwtAuthResponse({
+      accessToken,
+      loginId: 'admin',
+    });
+  }
 }

@@ -1,16 +1,16 @@
 import { LeanDocument } from '@dals/mongo/base.repository';
 import { Device, DeviceDescription } from '@dals/mongo/schema/device.schema';
 import { DeviceEntity, DeviceDescriptionEntity } from '@entity';
-import { HydratedDocument } from 'mongoose';
+import { HydratedDocument, Types } from 'mongoose';
 
 export class DeviceMapper {
   public static toModel(entity: DeviceEntity): Device {
     const model = new Device();
 
     model.deviceNumId = entity.deviceNumId;
-    model.portId = entity.portId;
-    model.binId = entity.binId;
-    model.itemId = entity.itemId;
+    model.portId = new Types.ObjectId(entity.portId);
+    model.binId = entity.binId ? new Types.ObjectId(entity.binId) : undefined;
+    model.itemId = entity.itemId ? new Types.ObjectId(entity.itemId) : undefined;
     model.quantity = entity.quantity;
     model.calcQuantity = entity.calcQuantity;
     model.damageQuantity = entity.damageQuantity;
@@ -25,7 +25,7 @@ export class DeviceMapper {
     model.heartbeat = entity.heartbeat;
     model.setupTimestamp = entity.setupTimestamp;
     model.zeroTimestamp = entity.zeroTimestamp;
-    model.weightHistory = entity.weightHistory;
+    model.weightHistory = entity.weightHistory || [];
     model.count = entity.count;
     model.changeQty = entity.changeQty;
     model.status = entity.status;
@@ -75,30 +75,30 @@ export class DeviceMapper {
     return new DeviceEntity({
       id: model._id.toString(),
       deviceNumId: model.deviceNumId,
-      portId: model.portId?.toString(),
+      portId: model.portId.toString(),
       binId: model.binId?.toString(),
       itemId: model.itemId?.toString(),
-      quantity: model.quantity,
-      calcQuantity: model.calcQuantity,
-      damageQuantity: model.damageQuantity,
-      weight: model.weight,
-      zeroWeight: model.zeroWeight,
-      unitWeight: model.unitWeight,
-      calcWeight: model.calcWeight,
-      quantityMinThreshold: model.quantityMinThreshold,
-      quantityCritThreshold: model.quantityCritThreshold,
-      macAddress: model.macAddress,
-      chipId: model.chipId,
-      heartbeat: model.heartbeat,
+      quantity: model.quantity || 0,
+      calcQuantity: model.calcQuantity || 0,
+      damageQuantity: model.damageQuantity || 0,
+      weight: model.weight || 0,
+      zeroWeight: model.zeroWeight || 0,
+      unitWeight: model.unitWeight || 0,
+      calcWeight: model.calcWeight || 0,
+      quantityMinThreshold: model.quantityMinThreshold || 0,
+      quantityCritThreshold: model.quantityCritThreshold || 0,
+      macAddress: model.macAddress || '',
+      chipId: model.chipId || '',
+      heartbeat: model.heartbeat || 0,
       setupTimestamp: model.setupTimestamp,
       zeroTimestamp: model.zeroTimestamp,
       weightHistory: model.weightHistory,
-      count: model.count,
-      changeQty: model.changeQty,
+      count: model.count || 0,
+      changeQty: model.changeQty || 0,
       status: model.status,
-      isSync: model.isSync,
-      retryCount: model.retryCount,
-      isUpdateWeight: model.isUpdateWeight,
+      isSync: !!model.isSync,
+      retryCount: model.retryCount || 0,
+      isUpdateWeight: !!model.isUpdateWeight,
       label: model.label,
       description: model.description ? this._toDescriptionEntity(model.description) : {},
       createdAt: model.createdAt?.toISOString(),

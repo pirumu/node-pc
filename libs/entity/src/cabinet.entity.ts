@@ -2,7 +2,7 @@ import { BaseEntity, Properties } from './base.entity';
 
 export class CabinetEntity extends BaseEntity {
   name: string;
-  code?: string;
+  code: string | null;
   numberOfRows?: number;
   totalBins?: number;
   type?: string;

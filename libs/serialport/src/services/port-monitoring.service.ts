@@ -85,7 +85,7 @@ export class PortMonitoringService implements OnModuleInit, OnModuleDestroy {
   private _responseTimeSamples: number[] = [];
 
   private readonly _defaultConfig: MonitoringConfig = {
-    enabled: true,
+    enabled: false,
     connectionCheckInterval: 2000, // 2 seconds
     healthCheckInterval: 10000, // 10 seconds
     discoveryRefreshInterval: 5000, // 5 seconds
@@ -108,7 +108,9 @@ export class PortMonitoringService implements OnModuleInit, OnModuleDestroy {
 
   public onModuleInit(): void {
     this._logger.log('Initializing Port Monitoring Service');
-    this._startMonitoring();
+    if (this._config.enabled) {
+      this._startMonitoring();
+    }
   }
 
   public onModuleDestroy(): void {

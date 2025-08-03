@@ -3,7 +3,7 @@ import * as process from 'node:process';
 
 import { AppConfig, MongoDBConfig } from '@config/contracts';
 import { CONFIG_KEY } from '@config/core';
-import { HWB_MODELS, HWB_MONGO_REPOSITORIES, MongoDALModule } from '@dals/mongo';
+import { API_MODELS, API_MONGO_REPOSITORIES, HWB_MODELS, HWB_MONGO_REPOSITORIES, MongoDALModule } from '@dals/mongo';
 import { DEFAULT_CONFIG, FingerprintScanModule } from '@fingerprint-scanner';
 import { TRACING_ID } from '@framework/constants';
 import { AppLoggerModule } from '@framework/logger';
@@ -88,8 +88,8 @@ import { FingerprintModule } from './modules/fingerprint';
         };
       },
       inject: [ConfigService],
-      models: [...HWB_MODELS],
-      repositories: [...HWB_MONGO_REPOSITORIES],
+      models: [...API_MODELS],
+      repositories: [...API_MONGO_REPOSITORIES],
     }),
     PublisherModule.forRootAsync({
       global: true,
@@ -111,7 +111,24 @@ import { FingerprintModule } from './modules/fingerprint';
       inject: [ConfigService],
     }),
     HidDeviceModule,
-    LoadcellsModule,
+    LoadcellsModule.forRootAsync({
+      useFactory: () => {
+        return {
+          loadCellConfig: {
+            enabled: true,
+            logLevel: 1,
+            pollingInterval: 1500,
+          },
+          healthMonitoringConfig: {
+            enabled: true,
+            heartbeatTimeout: 10000,
+            logConnectionChanges: true,
+            checkInterval: 5000,
+          },
+        };
+      },
+      inject: [ConfigService],
+    }),
     ...HARDWARE_MODULES,
     FingerprintModule,
   ],

@@ -135,7 +135,7 @@ export class BinService {
   }
 
   private _isFailOpenCU(response: CuResponse): boolean {
-    return !response.isValid || !response.isSuccess || !response?.lockStatuses || Object.keys(response).length === 0;
+    return !response.isSuccess || !response?.lockStatuses || Object.keys(response).length === 0;
   }
 
   private async _handleFailOpenAndThrowException(data: {
@@ -165,7 +165,7 @@ export class BinService {
   @Transactional()
   private async _updateSuccessOpenStatus(bin: BinEntity): Promise<boolean> {
     bin.markAlive();
-    return this._repository.updateBinOpenStatus(bin.id, bin, { withDevice: { isUpdateWeight: 0 } });
+    return this._repository.updateBinOpenStatus(bin.id, bin, { withDevice: { isUpdateWeight: false } });
   }
 
   public async activate(id: string): Promise<boolean> {

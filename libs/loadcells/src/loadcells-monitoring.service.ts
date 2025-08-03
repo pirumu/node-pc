@@ -1,8 +1,9 @@
-import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit, OnModuleDestroy, Inject } from '@nestjs/common';
 import { addMilliseconds, formatDistanceToNow } from 'date-fns';
 import { Observable, Subject, BehaviorSubject, timer } from 'rxjs';
 import { takeUntil, catchError, switchMap } from 'rxjs/operators';
 
+import { LOADCELLS_HEALTH_MONITORING_CONFIG } from './loadcells.contants';
 import { LoadcellsService } from './loadcells.service';
 import {
   DeviceConnectionEvent,
@@ -19,14 +20,6 @@ export class LoadcellsHealthMonitoringService implements OnModuleInit, OnModuleD
   private readonly _logger = new Logger(LoadcellsHealthMonitoringService.name);
   private readonly _destroy$ = new Subject<void>();
 
-  // Configuration
-  private readonly _config: HealthMonitoringConfig = {
-    enabled: true,
-    checkInterval: 3000, // 3 seconds (same as original)
-    heartbeatTimeout: 10000, // 10 seconds (same as original)
-    logConnectionChanges: true,
-  };
-
   // State management
   private readonly _deviceHeartbeats$ = new BehaviorSubject<Map<number, DeviceHeartbeat>>(new Map());
   private readonly _healthStats$ = new BehaviorSubject<DeviceHealthStats>(this._createInitialStats());
@@ -39,7 +32,10 @@ export class LoadcellsHealthMonitoringService implements OnModuleInit, OnModuleD
   private _loadCellDevices = new Set<number>();
   private _previousConnectionStates = new Map<number, boolean>();
 
-  constructor(private readonly _loadCellService: LoadcellsService) {}
+  constructor(
+    @Inject(LOADCELLS_HEALTH_MONITORING_CONFIG) private readonly _config: HealthMonitoringConfig,
+    private readonly _loadCellService: LoadcellsService,
+  ) {}
 
   public onModuleInit(): void {
     this._logger.log('Initializing Device Health Monitoring Service');

@@ -15,15 +15,20 @@ export class TabletService {
     private readonly _cloudService: CloudService,
   ) {}
 
+  public async getByDeviceId(deviceId: string): Promise<TabletEntity> {
+    return (await this._repository.findByDeviceId(deviceId)) as unknown as TabletEntity;
+  }
+
   public async exist(deviceKey: string): Promise<boolean> {
     return this._repository.exist(deviceKey);
   }
 
   public async register(dto: RegisterTabletRequestDto, deviceId: string): Promise<string> {
-    const isValidCredential = await this._verifyCredentials(dto.username, dto.password, dto.cloudUrl);
-    if (!isValidCredential) {
-      throw new UnauthorizedException('Invalid cloud credentials');
-    }
+    console.log(dto);
+    // const isValidCredential = await this._verifyCredentials(dto.username, dto.password, dto.cloudUrl);
+    // if (!isValidCredential) {
+    //   throw new UnauthorizedException('Invalid cloud credentials');
+    // }
 
     const deviceKey = this._generateDeviceKey();
 

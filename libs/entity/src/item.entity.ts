@@ -17,22 +17,15 @@ export class ItemEntity extends BaseEntity {
   }
 }
 
-export class IssueItemEntity extends BaseEntity {
-  name: any;
-  partNo: any;
-  materialNo: any;
-  itemTypeId: any;
-  type: any;
-  image: any;
-  description: any;
-  locations: any;
-  totalQuantity: any;
-  totalCalcQuantity: any;
-  binId: any;
-  dueDate: any;
+export class IssueItemEntity extends ItemEntity {
+  locations: string[];
+  totalQuantity: number;
+  totalCalcQuantity: number;
+  binId: string;
+  dueDate: string;
 
-  constructor(props: Properties<ItemEntity>) {
-    super();
+  constructor(props: Properties<IssueItemEntity>) {
+    super(props);
     Object.assign(this, props);
   }
 }

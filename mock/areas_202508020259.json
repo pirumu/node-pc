@@ -1,0 +1,143 @@
+{
+"areas": [
+	{
+		"id" : 1,
+		"name" : "Wheel Nuts",
+		"torque" : 500,
+		"created_at" : "2024-11-18 16:24:38",
+		"updated_at" : "2024-11-18 16:24:38"
+	},
+	{
+		"id" : 2,
+		"name" : "Bonnet Bolts",
+		"torque" : 90,
+		"created_at" : "2024-11-18 16:24:38",
+		"updated_at" : "2024-11-18 16:24:38"
+	},
+	{
+		"id" : 3,
+		"name" : "Fire Extinguisher Screws",
+		"torque" : 20,
+		"created_at" : "2024-11-18 16:24:38",
+		"updated_at" : "2024-11-18 16:24:38"
+	},
+	{
+		"id" : 4,
+		"name" : "Fire Hose Connector",
+		"torque" : 100,
+		"created_at" : "2024-11-18 16:24:38",
+		"updated_at" : "2024-11-18 16:24:38"
+	},
+	{
+		"id" : 5,
+		"name" : "Fuel Filter Cover",
+		"torque" : 40,
+		"created_at" : "2024-11-18 16:24:38",
+		"updated_at" : "2024-11-18 16:24:38"
+	},
+	{
+		"id" : 6,
+		"name" : "Oil Filter Cover",
+		"torque" : 40,
+		"created_at" : "2024-11-18 16:24:38",
+		"updated_at" : "2024-11-18 16:24:38"
+	},
+	{
+		"id" : 7,
+		"name" : "Earthwire Mounting Nut",
+		"torque" : 25,
+		"created_at" : "2024-11-18 16:24:38",
+		"updated_at" : "2024-11-18 16:24:38"
+	},
+	{
+		"id" : 8,
+		"name" : "Alternator Cable Nut",
+		"torque" : 25,
+		"created_at" : "2024-11-18 16:24:38",
+		"updated_at" : "2024-11-18 16:24:38"
+	},
+	{
+		"id" : 9,
+		"name" : "Alternator Lower Bolt",
+		"torque" : 85,
+		"created_at" : "2024-11-18 16:24:38",
+		"updated_at" : "2024-11-18 16:24:38"
+	},
+	{
+		"id" : 10,
+		"name" : "Alternator Bolt Nut",
+		"torque" : 60,
+		"created_at" : "2024-11-18 16:24:38",
+		"updated_at" : "2024-11-18 16:24:38"
+	},
+	{
+		"id" : 11,
+		"name" : "Alternator Upper Screw",
+		"torque" : 60,
+		"created_at" : "2024-11-18 16:24:38",
+		"updated_at" : "2024-11-18 16:24:38"
+	},
+	{
+		"id" : 12,
+		"name" : "Engine Oil Drain Plug",
+		"torque" : 55,
+		"created_at" : "2024-11-18 16:24:38",
+		"updated_at" : "2024-11-18 16:24:38"
+	},
+	{
+		"id" : 13,
+		"name" : "Drive Axle Plugs",
+		"torque" : 30,
+		"created_at" : "2024-11-18 16:24:38",
+		"updated_at" : "2024-11-18 16:24:38"
+	},
+	{
+		"id" : 14,
+		"name" : "Fuel Filter Protective Housing",
+		"torque" : 40,
+		"created_at" : "2024-11-18 16:24:38",
+		"updated_at" : "2024-11-18 16:24:38"
+	},
+	{
+		"id" : 15,
+		"name" : "Transfer Box Plugs",
+		"torque" : 60,
+		"created_at" : "2024-11-18 16:24:38",
+		"updated_at" : "2024-11-18 16:24:38"
+	},
+	{
+		"id" : 16,
+		"name" : "Reduction Unit (HUB) Plugs",
+		"torque" : 27,
+		"created_at" : "2024-11-18 16:24:38",
+		"updated_at" : "2024-11-18 16:24:38"
+	},
+	{
+		"id" : 17,
+		"name" : "Reduction Unit (HUB) Level Plugs",
+		"torque" : 12,
+		"created_at" : "2024-11-18 16:24:38",
+		"updated_at" : "2024-11-18 16:24:38"
+	},
+	{
+		"id" : 18,
+		"name" : "Gearbox Drain Plug",
+		"torque" : 50,
+		"created_at" : "2024-11-18 16:24:38",
+		"updated_at" : "2024-11-18 16:24:38"
+	},
+	{
+		"id" : 19,
+		"name" : "Gearbox Filter Housing Bolts",
+		"torque" : 25,
+		"created_at" : "2024-11-18 16:24:38",
+		"updated_at" : "2024-11-18 16:24:38"
+	},
+	{
+		"id" : 20,
+		"name" : "Gearbox Access Hatch Mounting Screws",
+		"torque" : 23,
+		"created_at" : "2024-11-18 16:24:38",
+		"updated_at" : "2024-11-18 16:24:38"
+	}
+]}

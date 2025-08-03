@@ -25,7 +25,7 @@ export class Application {
       {
         transport: Transport.MQTT,
         options: {
-          ...mqttConfig,
+          ...mqttConfig.consumer,
           resubscribe: true,
           reschedulePings: true,
           // use v5 to support userProperties
@@ -43,7 +43,7 @@ export class Application {
 
   private static async _bootstrap(): Promise<void> {
     const app = await NestFactory.create(AppModule, {
-      bufferLogs: true,
+      // bufferLogs: true,
       abortOnError: false,
     });
     app.useLogger(app.get(APP_LOGGER));

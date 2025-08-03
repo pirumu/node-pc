@@ -57,7 +57,9 @@ export class PortDiscoveryService implements OnModuleInit, OnModuleDestroy {
 
   public onModuleInit(): void {
     this._logger.log('Initializing Auto Discovery Serialport Service');
-    this._startDiscovery();
+    if (this._configs.enabled) {
+      this._startDiscovery();
+    }
   }
 
   public onModuleDestroy(): void {

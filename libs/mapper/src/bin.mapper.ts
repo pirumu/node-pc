@@ -1,12 +1,12 @@
 import { LeanDocument } from '@dals/mongo/base.repository';
 import { Bin } from '@dals/mongo/schema/bin.schema';
 import { BinEntity } from '@entity';
-import { HydratedDocument } from 'mongoose';
+import { HydratedDocument, Types } from 'mongoose';
 
 export class BinMapper {
   public static toModel(entity: BinEntity): Bin {
     const model = new Bin();
-    model.cabinetId = entity.cabinetId;
+    model.cabinetId = new Types.ObjectId(entity.cabinetId);
     model.name = entity.name;
     model.cuId = entity.cuId;
     model.lockId = entity.lockId;
@@ -16,8 +16,8 @@ export class BinMapper {
     model.max = entity.max;
     model.critical = entity.critical;
     model.description = entity.description;
-    model.processBy = entity.processBy;
-    model.processTime = entity.processTime;
+    model.processBy = entity.processBy ? new Types.ObjectId(entity.processBy) : undefined;
+    model.processTime = entity.processTime ? new Date(entity.processTime) : undefined;
     model.isProcessing = entity.isProcessing;
     model.isFailed = entity.isFailed;
     model.isLocked = entity.isLocked;
@@ -43,7 +43,7 @@ export class BinMapper {
   private static _toEntity(model: Bin): BinEntity {
     return new BinEntity({
       id: model._id.toString(),
-      cabinetId: model.cabinetId,
+      cabinetId: model.cabinetId.toString(),
       name: model.name,
       cuId: model.cuId,
       lockId: model.lockId,
@@ -53,8 +53,8 @@ export class BinMapper {
       max: model.max,
       critical: model.critical,
       description: model.description,
-      processBy: model.processBy,
-      processTime: model.processTime,
+      processBy: model.processBy ? model.processBy.toString() : undefined,
+      processTime: model.processTime ? model.processTime.toISOString() : undefined,
       isProcessing: model.isProcessing,
       isFailed: model.isFailed,
       isLocked: model.isLocked,
@@ -63,10 +63,10 @@ export class BinMapper {
       isDrawer: model.isDrawer,
       drawerName: model.drawerName,
       status: model.status,
-      isSync: model.isSync,
-      retryCount: model.retryCount,
-      isCalibrated: model.isCalibrated,
-      newMax: model.newMax,
+      isSync: !!model.isSync,
+      retryCount: model.retryCount ? model.retryCount : 0,
+      isCalibrated: !!model.isCalibrated,
+      newMax: model.newMax ? model.newMax : 0,
       createdAt: model.createdAt?.toISOString(),
       updatedAt: model.updatedAt?.toISOString(),
     });

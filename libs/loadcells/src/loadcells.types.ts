@@ -107,3 +107,14 @@ export type DeviceHealthHooks = {
   onError?: DeviceErrorHandler;
   onBatchStatus?: (statuses: DeviceStatusPayload[]) => void | Promise<void>;
 };
+
+export type LoadcellsModuleOptions = {
+  loadCellConfig: Partial<LoadCellConfig>;
+  healthMonitoringConfig: Partial<HealthMonitoringConfig>;
+};
+
+export type LoadcellsModuleAsyncOptions = {
+  useFactory?: (...args: any[]) => Promise<LoadcellsModuleOptions> | LoadcellsModuleOptions;
+  inject?: any[];
+  imports?: any[];
+};

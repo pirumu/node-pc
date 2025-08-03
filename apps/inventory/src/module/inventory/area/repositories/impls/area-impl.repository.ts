@@ -8,9 +8,7 @@ import { IAreaRepository } from '../area.repository';
 @Injectable()
 export class AreaImplRepository implements IAreaRepository {
   constructor(private readonly _repository: AreaMRepository) {
-    this._repository.findMany({}).then((results) => {
-      console.log('result', AreaMapper.toEntities(results));
-    });
+    this._repository.findMany({}).then((results) => {});
   }
 
   public async findAll(): Promise<AreaEntity[]> {

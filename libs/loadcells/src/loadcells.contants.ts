@@ -54,3 +54,7 @@ export const ALL_MESSAGES: LoadCellDevice[] = [
   { no: 50, data: '<Buffer 32 3C 04 00 0A 00 01 00 3D 09', quantity: 1, dataLength: 11 },
   { no: 51, data: '<Buffer 33 3C 04 00 0A 00 01 00 FC C5', quantity: 1, dataLength: 11 },
 ];
+
+export const LOADCELLS_MODULE_CONFIG_OPTIONS = Symbol('LOADCELLS_MODULE_CONFIG_OPTIONS');
+export const LOADCELLS_SERVICE_CONFIG = Symbol('LOADCELLS_SERVICE_CONFIG');
+export const LOADCELLS_HEALTH_MONITORING_CONFIG = Symbol('LOADCELLS_HEALTH_MONITORING_CONFIG');

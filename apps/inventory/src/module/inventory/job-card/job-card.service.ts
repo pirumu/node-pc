@@ -8,6 +8,6 @@ export class JobCardService {
   constructor(@Inject(JOB_CARD_REPOSITORY_TOKEN) private readonly _repository: IJobCardRepository) {}
 
   public async getJobCardsByIds(ids: string[]): Promise<JobCardEntity[]> {
-    return this._repository.findAll(ids);
+    return this._repository.findByIds(ids);
   }
 }

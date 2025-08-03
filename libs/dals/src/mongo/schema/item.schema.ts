@@ -1,5 +1,5 @@
 import { ModelDefinition, Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Schema as MSchema } from 'mongoose';
+import { Schema as MSchema, Types } from 'mongoose';
 
 import { BaseSchema } from './base.schema';
 import { schemaOptions } from './default.options';
@@ -16,7 +16,7 @@ export class Item extends BaseSchema {
   materialNo: string;
 
   @Prop({ type: MSchema.Types.ObjectId, ref: 'ItemType', required: true })
-  itemTypeId: string;
+  itemTypeId: Types.ObjectId;
 
   @Prop({ type: MSchema.Types.String, required: true })
   type: string;

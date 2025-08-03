@@ -7,4 +7,5 @@ export interface ITabletRepository {
   create(entity: TabletEntity): Promise<TabletEntity>;
   update(id: string, data: Partial<TabletEntity>): Promise<boolean>;
   exist(deviceKey: string): Promise<boolean>;
+  findByDeviceId(deviceId: string): Promise<TabletEntity | null>;
 }

@@ -8,7 +8,7 @@ import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nest
 import { ConfigService } from '@nestjs/config';
 import { PortDiscoveryService, PortMonitoringService } from '@serialport';
 import { InjectSerialManager, ISerialAdapter } from '@serialport/serial';
-import { firstValueFrom, from, interval, lastValueFrom, Subject } from 'rxjs';
+import { from, interval, lastValueFrom, Subject } from 'rxjs';
 import { map, take, takeUntil, timeout } from 'rxjs/operators';
 
 import { LoadcellMqttRequest } from './dto/request';
@@ -37,21 +37,23 @@ export class LoadcellBridgeService implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   public async onModuleInit(): Promise<void> {
-    try {
-      // Setup services
-      await this._setupServices();
+    (async (): Promise<void> => {
+      try {
+        // Setup services
+        await this._setupServices();
 
-      // Setup LoadCell hooks
-      this._setupLoadCellHooks();
+        // Setup LoadCell hooks
+        this._setupLoadCellHooks();
 
-      // Setup health monitoring
-      await this._setupHealthMonitoring();
+        // Setup health monitoring
+        await this._setupHealthMonitoring();
 
-      // Start monitoring
-      await this._startLoadcells();
-    } catch (error) {
-      this._logger.error('Failed to initialize LoadCell service:', error);
-    }
+        // Start monitoring
+        await this._startLoadcells();
+      } catch (error) {
+        this._logger.error('Failed to initialize LoadCell service:', error);
+      }
+    })().catch(this._logger.error);
   }
 
   public async onModuleDestroy(): Promise<void> {
@@ -128,7 +130,7 @@ export class LoadcellBridgeService implements OnModuleInit, OnModuleDestroy {
   public async getDevices(): Promise<any> {
     return {
       online: await lastValueFrom(this._loadcellsService.onlineDevices$),
-      active: (await lastValueFrom(this._loadcellsService.currentMessages$)).map((m) => m.no),
+      active: this._loadcellsService.currentMessages.map((m) => m.no),
       tracking: this._healthService.getTrackingDevices(),
     };
   }

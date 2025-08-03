@@ -216,7 +216,7 @@ export class DeviceService {
     return this._repository.reset(device.id, device.binId);
   }
 
-  public async getDevicesByBinAndItem(binId: string, itemId: string): Promise<DeviceEntity[] | null> {
+  public async getDevicesByBinAndItem(binId: string, itemId: string): Promise<DeviceEntity[]> {
     return this._repository.findAllByBinIdAndItemId({ binId, itemId });
   }
 }
