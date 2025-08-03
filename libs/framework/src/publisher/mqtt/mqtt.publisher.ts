@@ -5,6 +5,7 @@ import { ClientProxy, ClientProxyFactory, MqttRecordBuilder, Transport } from '@
 import { ClsServiceManager } from 'nestjs-cls';
 
 import { IPublisher } from '../publisher.types';
+import { SnowflakeId } from '@framework/snowflake';
 
 export class MQTTPublisher implements IPublisher {
   private readonly _logger = new Logger(MQTTPublisher.name);
@@ -19,7 +20,7 @@ export class MQTTPublisher implements IPublisher {
 
   public publish(channel: string, data: Record<string, unknown>, metadata?: Record<string, string | string[]>, options?: any): any {
     const record = new MqttRecordBuilder(data)
-      .setProperties({ userProperties: { [TRACING_ID]: ClsServiceManager.getClsService().getId(), ...(metadata || {}) } })
+      .setProperties({ userProperties: { [TRACING_ID]: new SnowflakeId().id(), ...(metadata || {}) } })
       .setQoS(0)
       .build();
 
