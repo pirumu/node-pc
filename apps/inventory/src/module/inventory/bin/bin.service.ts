@@ -21,7 +21,18 @@ export class BinService {
     @Inject(BIN_REPOSITORY_TOKEN) private readonly _repository: IBinRepository,
   ) {}
 
-  private async _getBinById(id: string): Promise<BinEntity> {
+  public async getBinById(id: string): Promise<BinEntity> {
+    const binEntity = await this._repository.findById(id);
+    if (!binEntity) {
+      throw AppHttpException.badRequest({
+        message: `Bin with ${id} not found`,
+        data: { binId: id },
+      });
+    }
+    return binEntity;
+  }
+
+  public async markIsDamage(id: string): Promise<BinEntity> {
     const binEntity = await this._repository.findById(id);
     if (!binEntity) {
       throw AppHttpException.badRequest({
@@ -33,7 +44,7 @@ export class BinService {
   }
 
   public async open(id: string): Promise<boolean> {
-    const binEntity = await this._getBinById(id);
+    const binEntity = await this.getBinById(id);
 
     await this._publisherService.publish(Transport.MQTT, EVENT_TYPE.TRACE_CU_LOCK_OPEN, {
       data: {
@@ -168,14 +179,18 @@ export class BinService {
     return this._repository.updateBinOpenStatus(bin.id, bin, { withDevice: { isUpdateWeight: false } });
   }
 
+  public async updateBinOpenStatus(bin: BinEntity) {
+    return this._repository.updateBinOpenStatus(bin.id, bin);
+  }
+
   public async activate(id: string): Promise<boolean> {
-    const binEntity = await this._getBinById(id);
+    const binEntity = await this.getBinById(id);
     binEntity.activate();
     return this._repository.updateBinOpenStatus(binEntity.id, binEntity);
   }
 
   public async deactivate(id: string): Promise<boolean> {
-    const binEntity = await this._getBinById(id);
+    const binEntity = await this.getBinById(id);
     binEntity.deactivate();
     return this._repository.updateBinOpenStatus(binEntity.id, binEntity);
   }

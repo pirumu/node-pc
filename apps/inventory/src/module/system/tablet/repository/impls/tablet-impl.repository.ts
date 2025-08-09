@@ -37,4 +37,9 @@ export class TabletImplRepository implements ITabletRepository {
 
     return result.modifiedCount > 0;
   }
+
+  public async findByDeviceId(deviceId: string): Promise<TabletEntity | null> {
+    const model = await this._mrepository.findFirst({ deviceId }, { lean: true });
+    return TabletMapper.toEntity(model);
+  }
 }

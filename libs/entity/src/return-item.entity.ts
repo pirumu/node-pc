@@ -2,7 +2,7 @@ import { Properties } from '@framework/types';
 
 import { BaseEntity } from './base.entity';
 
-export type WorkOrderItem = {
+export type WorkingOrderItem = {
   woId: string;
   wo: string;
   vehicleId: string;
@@ -13,8 +13,8 @@ export type WorkOrderItem = {
 };
 
 export type LocationItem = {
-  cabinet?: { id: string; name: string };
-  bin: { id: string; name: string; row: number };
+  cabinet: { id: string; name: string };
+  bin: { id: string; name: string; row: number; cuId: number; lockId: number };
   preQty: number;
   requestQty: number;
   quantity: number;
@@ -24,7 +24,7 @@ export class ReturnItemEntity extends BaseEntity {
   itemId: string;
   userId: string;
   quantity: number;
-  workOrders: WorkOrderItem[];
+  workingOrders: WorkingOrderItem[];
   locations: LocationItem[];
   binId: string;
 

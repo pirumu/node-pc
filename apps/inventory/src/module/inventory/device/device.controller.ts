@@ -14,7 +14,6 @@ import {
   GetDevicesByPortRequest,
   RemoveLabelRequest,
   UnassignDevicesRequest,
-  UpdateDeviceRequest,
 } from './dtos/request';
 
 @ControllerDocs({
@@ -29,26 +28,30 @@ export class DeviceController extends BaseController {
   }
 
   @Get(DEVICE_ROUTES.GET_DETAIL_DEVICE)
-  public async getDetailDevice(@Query() query: GetDeviceDetailRequest): Promise<{ success: boolean; device: any }> {
+  public async getDetailDevice(@Query() query: GetDeviceDetailRequest): Promise<any> {
     const device = await this._deviceService.getDetail(query);
-
     return {
-      success: true,
-      device,
+      ...device,
+      id: device?.deviceNumId,
+      deviceId: device?.deviceNumId,
+      deviceDescription: device?.description,
     };
   }
 
   @Post(DEVICE_ROUTES.UPDATE)
-  public async update(@Body() updateData: UpdateDeviceRequest): Promise<{ success: boolean; data?: any; message?: string }> {
-    // const result = await this._deviceService.update(updateData);
-
-    return { success: true, data: null };
+  public async update(@Body() updateData: any): Promise<any> {
+    return { data: await this._deviceService.update(updateData) };
   }
 
   @Get(DEVICE_ROUTES.GET_DEVICES_BY_APP)
   public async getDevicesByApp(@Query() query: GetDevicesByAppRequest): Promise<any> {
     const devices = await this._deviceService.getByApp(query);
-    return devices;
+    return devices.map((device) => ({
+      ...device,
+      id: device.deviceNumId,
+      deviceId: device.deviceNumId,
+      deviceDescription: device.description,
+    }));
   }
 
   @Get(DEVICE_ROUTES.GET_DEVICES_BY_PORT)

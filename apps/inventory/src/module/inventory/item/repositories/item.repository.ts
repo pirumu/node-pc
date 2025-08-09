@@ -1,13 +1,37 @@
-import { PROCESS_ITEM_TYPE } from '@common/constants';
-import { DeviceEntity, IssueItemEntity, ItemEntity, ReturnItemEntity } from '@entity';
+import { DeviceEntity, ItemEntity } from '@entity';
 
-export const ITEM_REPOSITORY_TOKEN = 'item';
+import {
+  BinItemCombinationOutput,
+  FindIssuableItemsArgs,
+  FindJobCardsAndAreasOutput,
+  FindReplenishableItemsArgs,
+  FindReturnableItemsArgs,
+  ItemsForIssueInput,
+  ItemsForIssueOutput,
+  ItemsForReplenishArgs,
+  ItemsForReplenishOutput,
+  ItemsForReturnArgs,
+  ItemsForReturnOutput,
+  PaginatedIssuableItemsOutput,
+  PaginatedReplenishableItemsOutput,
+  PaginatedReturnableItemsOutput,
+} from './item.types';
+
+export const ITEM_REPOSITORY_TOKEN = 'IItemRepository';
+
 export interface IItemRepository {
-  getIssueItems(filters: { type?: string; keyword?: string; dateThreshold: Date }): Promise<IssueItemEntity[]>;
-
-  getItemsForIssue(filters: { processBy: string; itemIds: string[]; binIds: string[]; dateThreshold: Date }): Promise<IssueItemEntity[]>;
-
-  // getReturnItem(data: { itemId: string; userId: string; binId?: string }): Promise<ReturnItemEntity | null>;
-
-  getItemsByType(type: PROCESS_ITEM_TYPE): Promise<any[]>;
+  findClusterIdForProcess(tabletDeviceId: string): Promise<string | null>;
+  findIssuableItems(args: FindIssuableItemsArgs): Promise<PaginatedIssuableItemsOutput>;
+  findItemsForIssue(args: ItemsForIssueInput): Promise<ItemsForIssueOutput>;
+  findReturnableItems(args: FindReturnableItemsArgs): Promise<PaginatedReturnableItemsOutput>;
+  findItemsForReturn(args: ItemsForReturnArgs): Promise<ItemsForReturnOutput>;
+  findReplenishableItems(args: FindReplenishableItemsArgs): Promise<PaginatedReplenishableItemsOutput>;
+  findItemsForReplenish(args: ItemsForReplenishArgs): Promise<ItemsForReplenishOutput>;
+  findJobCardsAndAreas(woIds: string[], areaIds: string[]): Promise<FindJobCardsAndAreasOutput>;
+  findDevicesWithItemByBinIds(binIds: string[]): Promise<Array<{ device: DeviceEntity; item: ItemEntity }>>;
+  updateReturnItemWorkingOrder(userId: string, itemId: string, workOrders: any[]): Promise<any>;
+  findBinItemCombinations(keyword?: string): Promise<BinItemCombinationOutput[]>;
+  findIssuableItemTypes(): Promise<string[]>;
+  findReturnableItemTypes(): Promise<string[]>;
+  findReplenishableItemTypes(): Promise<string[]>;
 }

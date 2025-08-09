@@ -29,7 +29,7 @@ export class JwtAuthService {
         cardNumber: user.cardNumber,
         role: user.role,
         genealogy: user.genealogy,
-
+        loginId: user.loginId,
         // backward compatible
         userLogin: user.loginId,
         userRole: user.role,

@@ -2,7 +2,7 @@ import { ApiProperty } from '@nestjs/swagger';
 import { Type, Transform, Expose } from 'class-transformer';
 import { IsArray, IsNumber, IsOptional, ValidateNested, ArrayMinSize, IsPositive, IsMongoId } from 'class-validator';
 
-export class WOItemDto {
+export class WorkingOrder {
   @ApiProperty({ description: 'Work Order ID', name: 'wo_id' })
   @IsMongoId()
   @Type(() => String)
@@ -38,14 +38,15 @@ export class RequestIssueItemDto {
   status?: string;
 
   @ApiProperty({
-    type: [WOItemDto],
-    description: 'List of Work Orders (for torque items)',
+    type: [WorkingOrder],
+    required: false,
+    description: 'List of working orders (for torque items)',
   })
   @IsArray()
   @ValidateNested({ each: true })
-  @Type(() => WOItemDto)
+  @Type(() => WorkingOrder)
   @IsOptional()
-  listWO: WOItemDto[];
+  workingOrders: WorkingOrder[];
 
   @ApiProperty({ description: 'Condition ID', name: 'condition_id' })
   @IsNumber()
@@ -56,11 +57,11 @@ export class RequestIssueItemDto {
 
   @ApiProperty({ description: 'Bin ID', required: false })
   @IsMongoId()
-  @IsOptional()
-  binId?: string;
+  @Expose({ toClassOnly: true })
+  binId: string;
 }
 
-export class IssueItemRequest {
+export class ItemRequest {
   @ApiProperty({
     type: [RequestIssueItemDto],
     description: 'Array of items to issue',
@@ -69,5 +70,6 @@ export class IssueItemRequest {
   @ArrayMinSize(1, { message: 'At least one item is required' })
   @ValidateNested({ each: true })
   @Type(() => RequestIssueItemDto)
+  @Expose({ toClassOnly: true })
   items: RequestIssueItemDto[];
 }

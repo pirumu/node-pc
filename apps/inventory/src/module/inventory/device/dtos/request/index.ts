@@ -18,9 +18,9 @@ export class GetDeviceDetailRequest {
     description: 'Device ID',
   })
   @IsNotEmpty()
-  @IsString()
-  @IsMongoId({ message: 'ID must be a valid MongoDB ObjectId' })
-  id: string;
+  // @IsNumber()
+  // @IsMongoId({ message: 'ID must be a valid MongoDB ObjectId' })
+  id: number;
 }
 
 export class GetDevicesByPortRequest {

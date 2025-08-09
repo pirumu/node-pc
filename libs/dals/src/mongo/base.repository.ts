@@ -117,7 +117,7 @@ export abstract class BaseRepository<M extends SoftDeleteDocument> {
 
   // eslint-disable-next-line @typescript-eslint/explicit-function-return-type,@typescript-eslint/explicit-module-boundary-types
   public async updateFirst(filter: FilterQuery<M>, update: UpdateQuery<M> | UpdateWithAggregationPipeline, options: QueryOptions<M>) {
-    return this.model.updateOne(filter, update, options as any).exec();
+    return this.model.updateOne(filter, update, options).exec();
   }
 
   // eslint-disable-next-line @typescript-eslint/explicit-function-return-type,@typescript-eslint/explicit-module-boundary-types
@@ -126,7 +126,7 @@ export abstract class BaseRepository<M extends SoftDeleteDocument> {
     update: UpdateQuery<M> | UpdateWithAggregationPipeline,
     options?: QueryOptions<M> & { upsert?: boolean },
   ) {
-    return this.model.updateMany(filter, update, options as any).exec();
+    return this.model.updateMany(filter, update, options).exec();
   }
 
   public async bulkWrite(records: Array<AnyBulkWriteOperation<M>>): Promise<{

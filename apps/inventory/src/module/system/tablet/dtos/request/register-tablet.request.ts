@@ -5,8 +5,7 @@ import { IsBoolean, IsInt, IsOptional, IsString, IsUrl, Min } from 'class-valida
 export class RegisterTabletRequestDto {
   @ApiProperty({ name: 'clusterId' })
   @Expose({ name: 'clusterId' })
-  @IsInt()
-  public clusterId: number;
+  public clusterId: string;
 
   @ApiProperty({ name: 'username' })
   @Expose({ name: 'username' })

@@ -1,3 +1,4 @@
+import { PortEntity } from './port.entity';
 import { Properties } from '@framework/types';
 
 import { BaseEntity } from './base.entity';
@@ -38,15 +39,16 @@ export class DeviceDescriptionEntity {
 export class DeviceEntity extends BaseEntity {
   deviceNumId: number;
   portId: string;
+  portName?: string;
   binId?: string;
   itemId?: string;
   quantity: number;
   calcQuantity: number;
-  damageQuantity: number;
+  calcWeight: number;
   weight: number;
   zeroWeight: number;
   unitWeight: number;
-  calcWeight: number;
+  damageQuantity: number;
   quantityMinThreshold?: number;
   quantityCritThreshold?: number;
   macAddress?: string;
@@ -75,4 +77,8 @@ export class DeviceEntity extends BaseEntity {
   public isAlive(): boolean {
     return this.heartbeat > Date.now() - 30 * 1000;
   }
+}
+
+export class DeviceWithPortEntity extends DeviceEntity {
+  port: PortEntity;
 }

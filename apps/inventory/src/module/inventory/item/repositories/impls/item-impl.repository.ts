@@ -1,472 +1,705 @@
-import { PROCESS_ITEM_TYPE } from '@common/constants';
-import { AreaMRepository, ItemMRepository, ItemTypeMRepository, JobCardMRepository, ReturnItemMRepository } from '@dals/mongo/repositories';
-import { IssueItemEntity } from '@entity/item.entity';
+import {
+  AreaMRepository,
+  BinItemMRepository,
+  DeviceMRepository,
+  ItemMRepository,
+  ItemTypeMRepository,
+  JobCardMRepository,
+  ReturnItemMRepository,
+  TabletMRepository,
+} from '@dals/mongo/repositories';
+import { Bin } from '@dals/mongo/schema/bin.schema';
+import { Cabinet } from '@dals/mongo/schema/cabinet.schema';
+import { Device } from '@dals/mongo/schema/device.schema';
+import { Item } from '@dals/mongo/schema/item.schema';
+import { ReturnItem } from '@dals/mongo/schema/return-item.schema';
+import { BinEntity, CabinetEntity, DeviceEntity, ItemEntity, ReturnItemEntity } from '@entity';
+import { AreaMapper, BinMapper, CabinetMapper, DeviceMapper, ItemMapper, JobCardMapper, ReturnItemMapper } from '@mapper';
 import { Injectable, Logger } from '@nestjs/common';
 import { PipelineStage, Types } from 'mongoose';
 
+import {
+  BinItemCombinationOutput,
+  FindIssuableItemsArgs,
+  FindJobCardsAndAreasOutput,
+  FindReplenishableItemsArgs,
+  FindReturnableItemsArgs,
+  ItemsForIssueInput,
+  ItemsForIssueOutput,
+  ItemsForReplenishArgs,
+  ItemsForReplenishOutput,
+  ItemsForReturnArgs,
+  ItemsForReturnOutput,
+  PaginatedIssuableItemsOutput,
+  PaginatedReplenishableItemsOutput,
+  PaginatedReturnableItemsOutput,
+} from '../item.types';
 import { IItemRepository } from '../item.repository';
 
 @Injectable()
 export class ItemImplRepository implements IItemRepository {
   private readonly _logger = new Logger(ItemImplRepository.name);
+
   constructor(
-    private readonly _repository: ItemMRepository,
+    private readonly _itemRepository: ItemMRepository,
+    private readonly _binItemRepository: BinItemMRepository,
+    private readonly _deviceRepository: DeviceMRepository,
     private readonly _itemTypeRepository: ItemTypeMRepository,
     private readonly _returnItemRepository: ReturnItemMRepository,
     private readonly _jobCardRepository: JobCardMRepository,
     private readonly _areaRepository: AreaMRepository,
+    private readonly _tabletMRepository: TabletMRepository,
   ) {}
 
-  public async getIssueItems(filters: { type?: string; keyword?: string; dateThreshold: Date }): Promise<IssueItemEntity[]> {
-    const { keyword, type, dateThreshold } = filters;
+  public async findDevicesWithItemByBinIds(binIds: string[]): Promise<Array<{ device: DeviceEntity; item: ItemEntity }>> {
+    const docs: Array<Device & { item: Item }> = (await this._deviceRepository.findMany(
+      {
+        binId: { $in: binIds.map((binId) => new Types.ObjectId(binId)) },
+      },
+      {
+        populate: { path: 'item', model: 'Item', foreignField: '_id', localField: 'itemId' },
+      },
+    )) as any;
 
+    return docs.map((doc) => ({
+      device: DeviceMapper.toEntity(doc) as DeviceEntity,
+      item: ItemMapper.toEntity(doc.item) as ItemEntity,
+    }));
+  }
+
+  //========================== ISSUE ==============================================//
+  private _buildIssuableItemMatchStage(keyword?: string, type?: string): PipelineStage[] {
     const matchConditions: Record<string, any> = {};
-    if (keyword) {
-      matchConditions.$or = [{ partNo: { $regex: keyword, $options: 'i' } }, { name: { $regex: keyword, $options: 'i' } }];
-    }
     if (type) {
-      matchConditions.type = type;
+      matchConditions['item.type'] = type;
     }
+    if (keyword) {
+      matchConditions['$or'] = [
+        { ['item.name']: { $regex: keyword, $options: 'i' } },
+        { ['item.partNo']: { $regex: keyword, $options: 'i' } },
+      ];
+    }
+
+    if (Object.keys(matchConditions).length > 0) {
+      return [{ $match: matchConditions }];
+    }
+    return [];
+  }
+
+  public async findIssuableItems(args: FindIssuableItemsArgs): Promise<PaginatedIssuableItemsOutput> {
+    const { page, limit, keyword, type, expiryDate } = args;
+    const skip = (page - 1) * limit;
 
     const pipeline: PipelineStage[] = [
-      { $match: matchConditions },
-      {
-        $lookup: {
-          from: 'devices',
-          let: { itemId: '$_id' },
-          as: 'validDevices',
-          pipeline: [
-            {
-              $match: {
-                $expr: {
-                  $and: [{ $eq: ['$itemId', '$$itemId'] }, { $gt: ['$quantity', 0] }],
-                },
-              },
-            },
-            {
-              $lookup: {
-                from: 'bins',
-                let: { binId: '$binId' },
-                as: 'bin',
-                pipeline: [
-                  {
-                    $match: {
-                      $expr: {
-                        $and: [{ $eq: ['$_id', '$$binId'] }, { $ne: ['$isFailed', true] }, { $ne: ['$isDamage', true] }],
-                      },
-                    },
-                  },
-                ],
-              },
-            },
-            { $unwind: '$bin' },
-          ],
-        },
-      },
-      { $unwind: '$validDevices' },
+      { $match: { quantity: { $gt: 0 } } },
+      { $lookup: { from: 'bins', localField: 'binId', foreignField: '_id', as: 'bin' } },
+      { $unwind: '$bin' },
+      { $match: { ['bin.isFailed']: false, ['bin.isDamage']: false } },
+      { $lookup: { from: 'items', localField: 'itemId', foreignField: '_id', as: 'item' } },
+      { $unwind: '$item' },
+      ...this._buildIssuableItemMatchStage(keyword, type),
       {
         $lookup: {
           from: 'binitems',
-          let: {
-            itemId: '$_id',
-            binId: '$validDevices.bin._id',
-          },
+          let: { binId: '$bin._id', itemId: '$item._id' },
           pipeline: [
             {
               $match: {
+                $expr: { $and: [{ $eq: ['$binId', '$$binId'] }, { $eq: ['$itemId', '$$itemId'] }] },
+                $or: [{ expiryDate: { $gte: expiryDate } }, { expiryDate: null }],
+              },
+            },
+          ],
+          as: 'binItemInfo',
+        },
+      },
+      { $match: { ['binItemInfo.0']: { $exists: true } } },
+      { $unwind: '$binItemInfo' },
+      {
+        $facet: {
+          metadata: [{ $count: 'total' }],
+          data: [
+            { $sort: { ['item.name']: 1 } },
+            { $skip: skip },
+            { $limit: limit },
+            {
+              $project: {
+                _id: 0,
+                id: { $toString: '$item._id' },
+                name: '$item.name',
+                partNo: '$item.partNo',
+                materialNo: '$item.materialNo',
+                itemTypeId: { $toString: '$item.itemTypeId' },
+                type: '$item.type',
+                image: '$item.image',
+                description: '$item.description',
+                totalQuantity: '$quantity',
+                totalCalcQuantity: '$calcQuantity',
+                binId: { $toString: '$bin._id' },
+                binName: '$bin.name',
+                dueDate: '$binItemInfo.expiryDate',
+              },
+            },
+          ],
+        },
+      },
+      {
+        $project: {
+          rows: '$data',
+          total: { $ifNull: [{ $arrayElemAt: ['$metadata.total', 0] }, 0] },
+        },
+      },
+    ];
+
+    const results = await this._deviceRepository.aggregate<PaginatedIssuableItemsOutput>(pipeline);
+    return results[0] || { rows: [], total: 0 };
+  }
+
+  public async findItemsForIssue(args: ItemsForIssueInput): Promise<ItemsForIssueOutput> {
+    const { userId, pairs, expiryDate } = args;
+    if (!pairs || pairs.length === 0) {
+      return [];
+    }
+    const matchConditions = pairs.map((pair) => ({
+      binId: new Types.ObjectId(pair.binId),
+      itemId: new Types.ObjectId(pair.itemId),
+      $or: [{ expiryDate: { $gte: expiryDate } }, { expiryDate: { $eq: null } }],
+    }));
+    const pipeline: PipelineStage[] = [
+      {
+        $match: {
+          $or: matchConditions,
+        },
+      },
+      {
+        $lookup: {
+          from: 'items',
+          localField: 'itemId',
+          foreignField: '_id',
+          as: 'itemDocs',
+        },
+      },
+      { $match: { ['itemDocs.0']: { $exists: true } } },
+      { $addFields: { item: { $first: '$itemDocs' } } },
+      {
+        $lookup: {
+          from: 'bins',
+          localField: 'binId',
+          foreignField: '_id',
+          as: 'binDocs',
+        },
+      },
+      { $match: { ['binDocs.0']: { $exists: true } } },
+      { $addFields: { bin: { $first: '$binDocs' } } },
+      { $match: { ['bin.isFailed']: false, ['bin.isDamage']: false } },
+      {
+        $lookup: {
+          from: 'cabinets',
+          localField: 'bin.cabinetId',
+          foreignField: '_id',
+          as: 'cabinetDocs',
+        },
+      },
+      { $match: { ['cabinetDocs.0']: { $exists: true } } },
+      { $addFields: { cabinet: { $first: '$cabinetDocs' } } },
+      {
+        $lookup: {
+          from: 'devices',
+          let: { itemId: '$itemId', binId: '$binId' },
+          pipeline: [
+            {
+              $match: {
+                quantity: { $gt: 0 },
                 $expr: {
-                  $and: [
-                    { $eq: ['$itemId', '$$itemId'] },
-                    { $eq: ['$binId', '$$binId'] },
-                    {
-                      $or: [{ $gte: ['$expiryDate', dateThreshold] }, { $eq: ['$expiryDate', null] }, { $eq: ['$expiryDate', undefined] }],
-                    },
-                  ],
+                  $and: [{ $eq: ['$itemId', '$$itemId'] }, { $eq: ['$binId', '$$binId'] }],
                 },
               },
             },
+          ],
+          as: 'devices',
+        },
+      },
+      { $match: { ['devices.0']: { $exists: true } } },
+      {
+        $lookup: {
+          from: 'returnitems',
+          let: { itemId: '$itemId' },
+          pipeline: [
             {
-              $lookup: {
-                from: 'bins',
-                pipeline: [
-                  {
-                    $match: {
-                      $expr: { $eq: ['$_id', '$$binId'] },
-                    },
-                  },
-                ],
-                as: 'bin',
+              $match: {
+                userId: new Types.ObjectId(userId),
+                $expr: { $eq: ['$itemId', '$$itemId'] },
               },
             },
-            { $unwind: '$bin' },
+            { $sort: { createdAt: -1 } },
+            { $limit: 1 },
           ],
-          as: 'validBinItems',
+          as: 'returnItemDocs',
         },
       },
-      { $match: { ['validBinItems.0']: { $exists: true } } },
+      {
+        $addFields: {
+          returnItem: { $first: '$returnItemDocs' },
+        },
+      },
       {
         $project: {
-          _id: 1,
-          name: 1,
-          partNo: 1,
-          materialNo: 1,
-          itemTypeId: 1,
-          type: 1,
-          image: 1,
-          description: 1,
-          createdAt: 1,
-          updatedAt: 1,
-          totalQuantity: '$validDevices.quantity',
-          totalCalcQuantity: '$validDevices.calcQuantity',
-          binId: '$validDevices.bin._id',
-          locations: ['$validDevices.bin.name'],
-          dueDate: { $arrayElemAt: ['$validBinItems.expiryDate', 0] },
+          _id: 0,
+          item: 1,
+          bin: 1,
+          cabinet: 1,
+          devices: 1,
+          returnItem: 1,
         },
       },
-      { $sort: { name: 1 } },
     ];
-
-    const items = await this._repository.aggregate<{
-      _id: Types.ObjectId;
-      name: string;
-      partNo: string;
-      materialNo: string;
-      itemTypeId: string;
-      type: string;
-      image: string;
-      description: string;
-      createdAt: Date;
-      updatedAt: Date;
-      totalQuantity: number;
-      totalCalcQuantity: number;
-      binId: string;
-      locations: string[];
-      dueDate: Date;
+    const resultsAsDocs = await this._binItemRepository.aggregate<{
+      item: Item;
+      bin: Bin;
+      cabinet: Cabinet;
+      devices: Device[];
+      returnItem: ReturnItem | null;
     }>(pipeline);
-    return items.map(
-      (i) =>
-        new IssueItemEntity({
-          id: i._id.toString(),
-          name: i.name,
-          partNo: i.partNo,
-          materialNo: i.materialNo,
-          itemTypeId: i.itemTypeId.toString(),
-          type: i.type,
-          image: i.image,
-          description: i.description,
-          createdAt: i.createdAt?.toISOString(),
-          updatedAt: i.updatedAt?.toISOString(),
-          totalQuantity: i.totalQuantity,
-          totalCalcQuantity: i.totalCalcQuantity,
-          binId: i.binId.toString(),
-          locations: i.locations,
-          dueDate: i.dueDate?.toISOString(),
-        }),
-    );
+
+    return resultsAsDocs.map((doc) => ({
+      item: ItemMapper.toEntity(doc.item) as ItemEntity,
+      bin: BinMapper.toEntity(doc.bin) as BinEntity,
+      cabinet: CabinetMapper.toEntity(doc.cabinet) as CabinetEntity,
+      devices: DeviceMapper.toEntities(doc.devices) as DeviceEntity[],
+      returnItem: ReturnItemMapper.toEntity(doc.returnItem),
+    }));
   }
 
-  public async getItemsForIssue(filters: {
-    processBy: string;
-    itemIds: string[];
-    binIds: string[];
-    dateThreshold: Date;
-  }): Promise<IssueItemEntity[]> {
-    const { itemIds, binIds, dateThreshold, processBy } = filters;
+  //========================== Return ==============================================//
+  private _buildReturnableItemMatchStage(keyword?: string, type?: string, prefix = ''): PipelineStage[] {
+    const matchConditions: Record<string, any> = {};
+    if (type) {
+      matchConditions[`${prefix}type`] = type;
+    }
+    if (keyword) {
+      matchConditions['$or'] = [
+        { [`${prefix}name`]: { $regex: keyword, $options: 'i' } },
+        { [`${prefix}partNo`]: { $regex: keyword, $options: 'i' } },
+      ];
+    }
+    if (Object.keys(matchConditions).length > 0) {
+      return [{ $match: matchConditions }];
+    }
+    return [];
+  }
 
-    const itemMIds = itemIds.map((id) => new Types.ObjectId(id));
-    const binMIds = binIds.map((id) => new Types.ObjectId(id));
+  public async findReturnableItems(args: FindReturnableItemsArgs): Promise<PaginatedReturnableItemsOutput> {
+    const { userId, page, limit, keyword, type } = args;
+    const skip = (page - 1) * limit;
+
+    const pipeline: PipelineStage[] = [
+      {
+        $match: { userId: new Types.ObjectId(userId) },
+      },
+      {
+        $lookup: { from: 'items', localField: 'itemId', foreignField: '_id', as: 'item' },
+      },
+      { $unwind: '$item' },
+      ...this._buildReturnableItemMatchStage(keyword, type, 'item.'),
+      { $unwind: '$locations' },
+
+      { $match: { ['locations.quantity']: { $gt: 0 } } },
+      {
+        $lookup: { from: 'bins', localField: 'locations.bin.id', foreignField: '_id', as: 'binInfo' },
+      },
+      { $unwind: '$binInfo' },
+      { $match: { ['binInfo.isFailed']: false, ['binInfo.isDamage']: false } },
+      {
+        $lookup: {
+          from: 'devices',
+          let: { binId: '$binInfo._id', itemId: '$item._id' },
+          pipeline: [{ $match: { $expr: { $and: [{ $eq: ['$binId', '$$binId'] }, { $eq: ['$itemId', '$$itemId'] }] } } }],
+          as: 'deviceInfo',
+        },
+      },
+      { $unwind: { path: '$deviceInfo', preserveNullAndEmptyArrays: true } },
+      {
+        $lookup: {
+          from: 'binitems',
+          let: { binId: '$binInfo._id', itemId: '$item._id' },
+          pipeline: [{ $match: { $expr: { $and: [{ $eq: ['$binId', '$$binId'] }, { $eq: ['$itemId', '$$itemId'] }] } } }],
+          as: 'binItemInfo',
+        },
+      },
+      { $unwind: { path: '$binItemInfo', preserveNullAndEmptyArrays: true } },
+      {
+        $facet: {
+          metadata: [{ $count: 'total' }],
+          data: [
+            { $sort: { ['item.name']: 1 } },
+            { $skip: skip },
+            { $limit: limit },
+            {
+              $project: {
+                _id: 0,
+                id: { $toString: '$item._id' },
+                name: '$item.name',
+                partNo: '$item.partNo',
+                materialNo: '$item.materialNo',
+                itemTypeId: { $toString: '$item.itemTypeId' },
+                type: '$item.type',
+                image: '$item.image',
+                description: '$item.description',
+                totalQuantity: { $ifNull: ['$deviceInfo.quantity', 0] },
+                totalCalcQuantity: { $ifNull: ['$deviceInfo.calcQuantity', 0] },
+                issueQuantity: '$locations.quantity',
+                locations: ['$binInfo.name'],
+                binId: { $toString: '$binInfo._id' },
+                batchNo: '$binItemInfo.batchNo',
+                serialNo: '$binItemInfo.serialNo',
+                dueDate: '$binItemInfo.expiryDate',
+                workingOrders: '$workingOrders',
+              },
+            },
+          ],
+        },
+      },
+      {
+        $project: {
+          rows: '$data',
+          total: { $ifNull: [{ $arrayElemAt: ['$metadata.total', 0] }, 0] },
+        },
+      },
+    ];
+
+    const results = await this._returnItemRepository.aggregate<PaginatedReturnableItemsOutput>(pipeline);
+
+    return results[0] || { rows: [], total: 0 };
+  }
+
+  public async findItemsForReturn(args: ItemsForReturnArgs): Promise<ItemsForReturnOutput> {
+    const { userId, pairs } = args;
+    if (!pairs || pairs.length === 0) {
+      return [];
+    }
+    const matchConditions = pairs.map((pair) => ({
+      userId: new Types.ObjectId(userId),
+      itemId: new Types.ObjectId(pair.itemId),
+      binId: new Types.ObjectId(pair.binId),
+    }));
 
     const pipeline: PipelineStage[] = [
       {
         $match: {
-          _id: { $in: itemMIds },
+          $or: matchConditions,
+        },
+      },
+      {
+        $lookup: {
+          from: 'items',
+          localField: 'itemId',
+          foreignField: '_id',
+          as: 'itemDocs',
+        },
+      },
+      { $match: { ['itemDocs.0']: { $exists: true } } },
+      { $addFields: { item: { $first: '$itemDocs' } } },
+      {
+        $lookup: {
+          from: 'devices',
+          localField: 'itemId',
+          foreignField: 'itemId',
+          as: 'devices',
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          returnItem: '$$ROOT',
+          item: '$item',
+          devices: '$devices',
+        },
+      },
+      {
+        $unset: ['returnItem.itemDocs', 'returnItem.item', 'returnItem.devices'],
+      },
+    ];
+
+    const docs = await this._returnItemRepository.aggregate<{
+      returnItem: ReturnItem;
+      item: Item;
+      devices: Device[];
+    }>(pipeline);
+
+    return docs.map((doc) => ({
+      returnItem: ReturnItemMapper.toEntity(doc.returnItem) as ReturnItemEntity,
+      item: ItemMapper.toEntity(doc.item) as ItemEntity,
+      devices: DeviceMapper.toEntities(doc.devices),
+    }));
+  }
+
+  //========================== Replenish ==============================================//
+  private _buildReplenishableItemMatchStage(keyword?: string): PipelineStage[] {
+    const matchConditions: Record<string, any> = {};
+    if (keyword) {
+      matchConditions['$or'] = [
+        { ['item.name']: { $regex: keyword, $options: 'i' } },
+        { ['item.partNo']: { $regex: keyword, $options: 'i' } },
+      ];
+    }
+
+    if (Object.keys(matchConditions).length > 0) {
+      return [{ $match: matchConditions }];
+    }
+    return [];
+  }
+
+  public async findReplenishableItems(args: FindReplenishableItemsArgs): Promise<PaginatedReplenishableItemsOutput> {
+    const { page, limit, keyword, type } = args;
+    const skip = (page - 1) * limit;
+
+    const pipeline: PipelineStage[] = [
+      {
+        $match: {
+          $expr: { $lt: ['$quantity', '$calcQuantity'] },
+        },
+      },
+      {
+        $lookup: { from: 'bins', localField: 'binId', foreignField: '_id', as: 'bin' },
+      },
+      { $unwind: '$bin' },
+      { $match: { ['bin.isFailed']: false, ['bin.isDamage']: false } },
+      {
+        $lookup: { from: 'items', localField: 'itemId', foreignField: '_id', as: 'item' },
+      },
+      { $unwind: '$item' },
+      ...this._buildReplenishableItemMatchStage(keyword),
+      {
+        $lookup: {
+          from: 'item_types',
+          localField: 'item.itemTypeId',
+          foreignField: '_id',
+          as: 'itemTypeInfo',
+        },
+      },
+      { $unwind: '$itemTypeInfo' },
+      {
+        $match: type ? { ['itemTypeInfo.type']: type } : { ['itemTypeInfo.isReturn']: false },
+      },
+      {
+        $facet: {
+          metadata: [{ $count: 'total' }],
+          data: [
+            { $sort: { ['item.name']: 1 } },
+            { $skip: skip },
+            { $limit: limit },
+            {
+              $project: {
+                _id: 0,
+                id: { $toString: '$item._id' },
+                name: '$item.name',
+                partNo: '$item.partNo',
+                materialNo: '$item.materialNo',
+                itemTypeId: { $toString: '$item.itemTypeId' },
+                type: '$item.type',
+                image: '$item.image',
+                description: '$item.description',
+                totalQuantity: '$quantity',
+                totalCalcQuantity: '$calcQuantity',
+                locations: ['$bin.name'],
+                binId: { $toString: '$bin._id' },
+              },
+            },
+          ],
+        },
+      },
+      {
+        $project: {
+          rows: '$data',
+          total: { $ifNull: [{ $arrayElemAt: ['$metadata.total', 0] }, 0] },
+        },
+      },
+    ];
+
+    const result = await this._deviceRepository.aggregate<PaginatedReplenishableItemsOutput>(pipeline);
+    return result[0] || { rows: [], total: 0 };
+  }
+
+  public async findItemsForReplenish(args: ItemsForReplenishArgs): Promise<ItemsForReplenishOutput> {
+    const { pairs } = args;
+    if (!pairs || pairs.length === 0) {
+      return [];
+    }
+
+    const itemIds = pairs.map((p) => new Types.ObjectId(p.itemId));
+    const binIds = pairs.map((p) => new Types.ObjectId(p.binId));
+
+    const pipeline: PipelineStage[] = [
+      {
+        $match: {
+          _id: { $in: itemIds },
         },
       },
       {
         $lookup: {
           from: 'devices',
           let: { itemId: '$_id' },
-          as: 'devices',
           pipeline: [
             {
               $match: {
+                binId: { $in: binIds },
                 $expr: {
-                  $and: [{ $eq: ['$itemId', '$$itemId'] }, { $gt: ['$quantity', 0] }, { $in: ['$binId', binMIds] }],
+                  $and: {
+                    $eq: ['$itemId', '$$itemId'],
+                    $lt: ['$quantity', '$calcQuantity'],
+                  },
                 },
               },
             },
-            { $sort: { binId: 1 } },
+            {
+              $lookup: { from: 'bins', localField: 'binId', foreignField: '_id', as: 'bin' },
+            },
+            { $unwind: '$bin' },
+            {
+              $lookup: { from: 'cabinets', localField: 'bin.cabinetId', foreignField: '_id', as: 'bin.cabinet' },
+            },
+            { $unwind: '$bin.cabinet' },
           ],
+          as: 'devices',
         },
       },
-      { $unwind: '$devices' },
+      {
+        $match: {
+          ['devices.0']: { $exists: true },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          item: '$$ROOT',
+          devices: '$devices',
+        },
+      },
+      {
+        $unset: 'item.devices',
+      },
+    ];
+
+    const docs = await this._itemRepository.aggregate<{ item: Item; devices: (Device & { bin: Bin; cabinet: Cabinet })[] }>(pipeline);
+
+    return docs.map(
+      (doc) =>
+        ({
+          item: ItemMapper.toEntity(doc.item) as ItemEntity,
+          devices: doc.devices.map((d) => ({
+            ...DeviceMapper.toEntity(d),
+            bin: BinMapper.toEntity(d.bin) as BinEntity,
+            cabinet: CabinetMapper.toEntity(d.cabinet) as CabinetEntity,
+          })),
+        }) as any,
+    );
+  }
+
+  public async findJobCardsAndAreas(woIds: string[], areaIds: string[]): Promise<FindJobCardsAndAreasOutput> {
+    const woObjectIds = woIds.map((id) => new Types.ObjectId(id));
+    const areaObjectIds = areaIds.map((id) => new Types.ObjectId(id));
+
+    const [jobCardDocs, areaDocs] = await Promise.all([
+      this._jobCardRepository.findMany({ _id: { $in: woObjectIds } }),
+      this._areaRepository.findMany({ _id: { $in: areaObjectIds } }),
+    ]);
+
+    return { jobCards: JobCardMapper.toEntities(jobCardDocs), areas: AreaMapper.toEntities(areaDocs) };
+  }
+
+  public async findDevicesWithItemByBinId(binIds: string[]): Promise<Array<DeviceEntity & { item: ItemEntity }>> {
+    const binObjectIds = binIds.map((id) => new Types.ObjectId(id));
+    const docs = await this._deviceRepository.findMany(
+      {
+        binId: { $in: binObjectIds },
+      },
+      {
+        populate: {
+          path: 'itemId',
+          model: 'Item',
+        },
+      },
+    );
+    return docs.map((doc) => {
+      const { item, ...deviceDoc } = doc as any;
+      return {
+        ...DeviceMapper.toEntity(deviceDoc),
+        item: ItemMapper.toEntity(item),
+      } as DeviceEntity & { item: ItemEntity };
+    });
+  }
+
+  public async updateReturnItemWorkingOrder(userId: string, itemId: string, workOrders: any[]): Promise<ReturnItem> {
+    return this._returnItemRepository.updateFirst(
+      {
+        user_id: new Types.ObjectId(userId),
+        item_id: new Types.ObjectId(itemId),
+      },
+      { $set: { workOrders: workOrders } },
+      { returnDocument: 'after' },
+    );
+  }
+
+  public async findClusterIdForProcess(tabletDeviceId: string): Promise<string | null> {
+    const doc = await this._tabletMRepository.findFirst({
+      deviceId: tabletDeviceId,
+    });
+
+    if (!doc || !doc.setting?.clusterId) {
+      return null;
+    }
+    return doc.setting.clusterId;
+  }
+
+  public async findBinItemCombinations(keyword?: string): Promise<BinItemCombinationOutput[]> {
+    const pipeline: PipelineStage[] = [
       {
         $lookup: {
           from: 'bins',
-          let: { binId: '$devices.binId' },
+          localField: 'binId',
+          foreignField: '_id',
           as: 'bin',
-          pipeline: [
-            {
-              $match: {
-                $expr: {
-                  $and: [{ $eq: ['$_id', '$$binId'] }, { $eq: ['$isFailed', false] }, { $eq: ['$isDamage', false] }],
-                },
-              },
-            },
-          ],
         },
       },
       { $unwind: '$bin' },
       {
         $lookup: {
+          from: 'items',
+          localField: 'itemId',
+          foreignField: '_id',
+          as: 'item',
+        },
+      },
+      { $unwind: '$item' },
+      {
+        $lookup: {
           from: 'cabinets',
-          let: { cabinetId: '$bin.cabinetId' },
-          pipeline: [
-            {
-              $match: {
-                $expr: { $eq: ['$_id', '$$cabinetId'] },
-              },
-            },
-          ],
+          localField: 'bin.cabinetId',
+          foreignField: '_id',
           as: 'cabinet',
         },
       },
       { $unwind: '$cabinet' },
       {
-        $lookup: {
-          from: 'binitems',
-          let: {
-            itemId: '$_id',
-            binId: '$bin._id',
-          },
-          pipeline: [
-            {
-              $match: {
-                $expr: {
-                  $and: [
-                    { $eq: ['$itemId', '$$itemId'] },
-                    { $eq: ['$binId', '$$binId'] },
-                    {
-                      $or: [
-                        { $gte: ['$expiryDate', dateThreshold] },
-                        { $eq: ['$expiryDate', null] },
-                        { $not: { $ifNull: ['$expiryDate', false] } },
-                      ],
-                    },
-                  ],
-                },
-              },
-            },
-          ],
-          as: 'validBinItems',
-        },
-      },
-      {
-        $match: {
-          ['validBinItems.0']: { $exists: true },
-        },
-      },
-      {
-        $lookup: {
-          from: 'returnitems',
-          let: {
-            itemId: '$_id',
-            binId: '$bin._id',
-          },
-          pipeline: [
-            {
-              $match: {
-                $expr: {
-                  $and: [{ $eq: ['$userId', new Types.ObjectId(processBy)] }, { $eq: ['$itemId', '$$itemId'] }],
-                },
-              },
-            },
-            {
-              $addFields: {
-                matchingLocation: {
-                  $filter: {
-                    input: '$locations',
-                    cond: {
-                      $eq: ['$$this.bin.id', { $toString: '$$binId' }],
-                    },
-                  },
-                },
-              },
-            },
-            {
-              $project: {
-                location: { $arrayElemAt: ['$matchingLocation', 0] },
-                _id: 0,
-              },
-            },
-            {
-              $match: {
-                location: { $exists: true, $ne: null },
-              },
-            },
-          ],
-          as: 'userReturnData',
-        },
-      },
-      {
-        $group: {
-          _id: '$_id',
-          name: { $first: '$name' },
-          itemTypeId: { $first: '$itemTypeId' },
-          type: { $first: '$type' },
-          partNo: { $first: '$partNo' },
-          materialNo: { $first: '$materialNo' },
-          locations: {
-            $push: {
-              cabinet: {
-                id: '$cabinet._id',
-                name: '$cabinet.name',
-              },
-              bin: {
-                id: '$bin._id',
-                name: '$bin.name',
-                row: '$bin.row',
-              },
-              pre_qty: '$devices.quantity',
-              userReturnLocation: {
-                $arrayElemAt: ['$userReturnData.location', 0],
-              },
-            },
-          },
-        },
-      },
-      {
         $project: {
-          _id: 1,
-          name: 1,
-          itemTypeId: 1,
-          type: 1,
-          partNo: 1,
-          materialNo: 1,
-          image: 1,
-          description: 1,
-          createdAt: 1,
-          updatedAt: 1,
-          locations: 1,
-          binIds: {
-            $map: {
-              input: '$locations',
-              in: '$$this.bin.id',
-            },
-          },
-          locationNames: {
-            $map: {
-              input: '$locations',
-              in: '$$this.bin.name',
-            },
-          },
-          dueDate: {
-            $min: {
-              $map: {
-                input: '$locations',
-                in: '$$this.binItemInfo.expiryDate',
-              },
-            },
+          _id: 0,
+          id: { $concat: [{ $toString: '$bin._id' }, '_', { $toString: '$item._id' }] },
+          name: {
+            $concat: ['$cabinet.name', '_', '$bin.row', '_', '$bin.name', '_', '$item.name', '_', '$item.partNo'],
           },
         },
       },
+      ...(keyword ? [{ $match: { name: { $regex: keyword, $options: 'i' } } }] : []),
+      { $sort: { name: 1 } },
     ];
 
-    const items = await this._repository.aggregate<{
-      _id: Types.ObjectId;
-      name: string;
-      locations: string[];
-    }>(pipeline);
-
-    return items.map((i) => {
-      return {
-        id: i._id.toString(),
-        name: i.name,
-        locations: i.locations,
-      } as any;
-    });
+    return this._binItemRepository.aggregate<BinItemCombinationOutput>(pipeline);
   }
 
-  // public async getReturnItemHistory(userId: number, itemIds: number[]): Promise<Map<string, ReturnItemEntity>> {
-  //   const returnItems = await this._returnItemRepository.findMany({
-  //     userId,
-  //     itemId: { $in: itemIds },
-  //   });
-  //
-  //   const entities = ReturnItemMapper.toEntities(returnItems);
-  //
-  //   const returnHistoryMap = new Map<string, ReturnItemEntity>();
-  //   entities.forEach((item) => {
-  //     returnHistoryMap.set(item.itemId, item);
-  //   });
-  //   return returnHistoryMap;
-  // }
-  //
-  // public async getReturnItem(data: { itemId: string; userId: string; binId: string }): Promise<ReturnItemEntity | null> {
-  //   const doc = await this._returnItemRepository.findFirst({
-  //     id: data.itemId,
-  //     userId: data.userId,
-  //     binId: data.binId,
-  //   });
-  //   return ReturnItemMapper.toEntity(doc);
-  // }
-
-  public async enrichWorkOrder(rawWorkOrders: { woId: string; areaId: string }[]): Promise<any[]> {
-    if (rawWorkOrders.length === 0) {
-      return [];
-    }
-
-    const jobCardIds = new Set<string>();
-    const areaIds = new Set<string>();
-    rawWorkOrders.forEach((item) => {
-      jobCardIds.add(item.woId);
-      areaIds.add(item.areaId);
-    });
-
-    const [jobCardDocs, areaDocs] = await Promise.all([
-      this._jobCardRepository.findMany({
-        _id: { $in: Array.from(jobCardIds) },
-      }),
-      this._areaRepository.findMany({
-        _id: { $in: Array.from(areaIds) },
-      }),
-    ]);
-
-    const jobCardsMap = new Map(jobCardDocs.map((doc) => [doc._id.toString(), doc]));
-    const areasMap = new Map(areaDocs.map((doc) => [doc._id.toString(), doc]));
-
-    return rawWorkOrders
-      .map((item) => {
-        const jobCard = jobCardsMap.get(item.woId);
-        const area = areasMap.get(item.areaId);
-
-        if (!jobCard || !area) {
-          this._logger.warn(`Could not find JobCard for id ${item.woId} or Area for id ${item.areaId}`);
-          return null;
-        }
-
-        return {
-          woId: jobCard._id.toString(),
-          areaId: area._id.toString(),
-          wo: jobCard.wo,
-          vehicleId: jobCard.vehicleId,
-          platform: jobCard.platform,
-          torque: area.torque,
-          area: area.name,
-        };
-      })
-      .filter(Boolean);
-  }
-
-  public async getItemsByType(type: PROCESS_ITEM_TYPE) {
+  //============================= Types ============================================//
+  public async findIssuableItemTypes(): Promise<string[]> {
     const pipeline: PipelineStage[] = [
-      {
-        $match: {
-          ...(type === PROCESS_ITEM_TYPE.ISSUE && { isIssue: true }),
-          ...(type === PROCESS_ITEM_TYPE.RETURN && { isReturn: true }),
-          ...(type === PROCESS_ITEM_TYPE.REPLENISH && { isReplenish: true }),
-        },
-      },
+      { $match: { isIssue: true } },
       {
         $lookup: {
           from: 'items',
@@ -475,194 +708,75 @@ export class ItemImplRepository implements IItemRepository {
           as: 'items',
         },
       },
-      ...(type === PROCESS_ITEM_TYPE.ISSUE
-        ? [
-            {
-              $addFields: {
-                validItems: {
-                  $filter: {
-                    input: '$items',
-                    as: 'item',
-                    cond: {
-                      $gt: [
-                        {
-                          $size: {
-                            $ifNull: ['$$item.binItems', []],
-                          },
-                        },
-                        0,
-                      ],
-                    },
-                  },
-                },
-              },
-            },
-            {
-              $lookup: {
-                from: 'binitems',
-                let: { itemIds: '$items._id' },
-                pipeline: [
-                  {
-                    $match: {
-                      $expr: {
-                        $in: ['$itemId', '$$itemIds'],
-                      },
-                    },
-                  },
-                  {
-                    $group: {
-                      _id: '$itemId',
-                    },
-                  },
-                ],
-                as: 'itemsWithBins',
-              },
-            },
-            {
-              $match: {
-                ['itemsWithBins.0']: { $exists: true },
-              },
-            },
-          ]
-        : type === PROCESS_ITEM_TYPE.RETURN
-          ? [
-              {
-                $lookup: {
-                  from: 'returnitems',
-                  let: { itemIds: '$items._id' },
-                  pipeline: [
-                    {
-                      $match: {
-                        $expr: {
-                          $in: ['$itemId', '$$itemIds'],
-                        },
-                      },
-                    },
-                    {
-                      $group: {
-                        _id: '$itemId',
-                      },
-                    },
-                  ],
-                  as: 'itemsWithReturns',
-                },
-              },
-              {
-                $match: {
-                  ['itemsWithReturns.0']: { $exists: true },
-                },
-              },
-            ]
-          : type === PROCESS_ITEM_TYPE.REPLENISH
-            ? [
-                {
-                  $addFields: {
-                    itemsNeedingReplenish: {
-                      $filter: {
-                        input: '$items',
-                        as: 'item',
-                        cond: {
-                          $let: {
-                            vars: {
-                              totalQty: {
-                                $sum: {
-                                  $map: {
-                                    input: { $ifNull: ['$$item.devices', []] },
-                                    in: { $ifNull: ['$$this.quantity', 0] },
-                                  },
-                                },
-                              },
-                              totalCalcQty: {
-                                $sum: {
-                                  $map: {
-                                    input: { $ifNull: ['$$item.devices', []] },
-                                    in: { $ifNull: ['$$this.calcQuantity', 0] },
-                                  },
-                                },
-                              },
-                            },
-                            in: { $lt: ['$$totalQty', '$$totalCalcQty'] },
-                          },
-                        },
-                      },
-                    },
-                  },
-                },
-                {
-                  $lookup: {
-                    from: 'devices',
-                    let: { itemIds: '$items._id' },
-                    pipeline: [
-                      {
-                        $match: {
-                          $expr: {
-                            $in: ['$itemId', '$$itemIds'],
-                          },
-                        },
-                      },
-                      {
-                        $group: {
-                          _id: '$itemId',
-                          totalQuantity: { $sum: { $ifNull: ['$quantity', 0] } },
-                          totalCalcQuantity: { $sum: { $ifNull: ['$calcQuantity', 0] } },
-                        },
-                      },
-                      {
-                        $match: {
-                          $expr: {
-                            $lt: ['$totalQuantity', '$totalCalcQuantity'],
-                          },
-                        },
-                      },
-                    ],
-                    as: 'itemsNeedingReplenish',
-                  },
-                },
-                {
-                  $match: {
-                    ['itemsNeedingReplenish.0']: { $exists: true },
-                  },
-                },
-              ]
-            : []),
-
+      { $unwind: '$items' },
+      {
+        $lookup: {
+          from: 'binitems',
+          localField: 'items._id',
+          foreignField: 'itemId',
+          as: 'binItemLink',
+        },
+      },
+      { $match: { ['binItemLink.0']: { $exists: true } } },
+      { $group: { _id: '$type' } },
+      { $project: { _id: 0, type: '$_id' } },
+    ];
+    const results = await this._itemTypeRepository.aggregate<{ type: string }>(pipeline);
+    return results.map((r) => r.type);
+  }
+  public async findReturnableItemTypes(): Promise<string[]> {
+    const pipeline: PipelineStage[] = [
+      { $match: { isReturn: true } },
       {
         $lookup: {
           from: 'items',
-          pipeline: [{ $group: { _id: '$type' } }, { $project: { type: '$_id', _id: 0 } }],
-          as: 'existingTypes',
+          localField: '_id',
+          foreignField: 'itemTypeId',
+          as: 'items',
         },
       },
+      { $unwind: '$items' },
       {
-        $addFields: {
-          existingTypesList: {
-            $map: {
-              input: '$existingTypes',
-              in: '$$this.type',
-            },
-          },
+        $lookup: {
+          from: 'return_items',
+          localField: 'items._id',
+          foreignField: 'itemId',
+          as: 'returnItemLink',
         },
       },
-      {
-        $match: {
-          $expr: {
-            $in: ['$type', '$existingTypesList'],
-          },
-        },
-      },
-      {
-        $project: {
-          type: 1,
-          _id: 0,
-        },
-      },
-
-      {
-        $sort: { type: 1 },
-      },
+      { $match: { ['returnItemLink.0']: { $exists: true } } },
+      { $group: { _id: '$type' } },
+      { $project: { _id: 0, type: '$_id' } },
     ];
-
-    const types = await this._itemTypeRepository.aggregate<any>(pipeline);
-    return types;
+    const results = await this._itemRepository.aggregate<{ type: string }>(pipeline);
+    return results.map((r) => r.type);
+  }
+  public async findReplenishableItemTypes(): Promise<string[]> {
+    const pipeline: PipelineStage[] = [
+      { $match: { isReplenish: true } },
+      {
+        $lookup: {
+          from: 'items',
+          localField: '_id',
+          foreignField: 'itemTypeId',
+          as: 'items',
+        },
+      },
+      { $unwind: '$items' },
+      {
+        $lookup: {
+          from: 'devices',
+          localField: 'items._id',
+          foreignField: 'itemId',
+          as: 'deviceInfo',
+        },
+      },
+      { $unwind: '$deviceInfo' },
+      { $match: { $expr: { $lt: ['$deviceInfo.quantity', '$deviceInfo.calcQuantity'] } } },
+      { $group: { _id: '$type' } },
+      { $project: { _id: 0, type: '$_id' } },
+    ];
+    const results = await this._itemTypeRepository.aggregate<{ type: string }>(pipeline);
+    return results.map((r) => r.type);
   }
 }

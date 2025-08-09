@@ -15,3 +15,4 @@ export * from './condition.entity';
 export * from './return-item.entity';
 export * from './port.entity';
 export * from './port-device.entity';
+export * from './transaction.entity';

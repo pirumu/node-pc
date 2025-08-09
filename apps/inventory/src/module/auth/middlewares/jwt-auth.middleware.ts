@@ -17,10 +17,9 @@ export class JwtAuthMiddleware implements NestMiddleware {
 
     try {
       req.user = await this._authService.verify(jwt);
-      next();
+      return next();
     } catch (error) {
       throw AppHttpException.internalServerError({ message: 'Cannot verify JWT auth token', data: { error } });
     }
-    throw AppHttpException.unauthorized();
   }
 }

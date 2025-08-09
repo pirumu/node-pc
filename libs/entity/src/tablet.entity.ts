@@ -4,6 +4,14 @@ import { BaseEntity } from './base.entity';
 
 export type TabletSettings = {
   clusterId: string;
+  username: string;
+  password: string;
+  intervalSyncTime: number;
+  cloudUrl: string;
+  compensationTime: number;
+  torqueWrenchTypeId: number;
+  is2fa: boolean;
+  accessKey?: string;
 };
 
 export class TabletEntity extends BaseEntity {

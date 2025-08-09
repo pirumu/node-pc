@@ -23,9 +23,9 @@ export class CabinetController extends BaseController {
     responseSchema: Array<GetCabinetsResponse>,
   })
   @Get(CABINET_ROUTES.GET_CABINETS)
-  public async getCabinets(): Promise<GetCabinetsResponse[]> {
+  public async getCabinets(): Promise<any> {
     const result = await this._cabinetService.getCabinets();
-    return result.map((cabinet) => this.toDto<GetCabinetsResponse>(GetCabinetsResponse, cabinet));
+    return { rows: result.map((cabinet) => this.toDto<GetCabinetsResponse>(GetCabinetsResponse, cabinet)), count: result.length };
   }
 
   @ApiDocs({

@@ -1,5 +1,5 @@
 import { ModelDefinition, Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Schema as MSchema } from 'mongoose';
+import { Schema as MSchema, Types } from 'mongoose';
 
 import { BaseSchema } from './base.schema';
 import { schemaOptions } from './default.options';
@@ -7,10 +7,10 @@ import { schemaOptions } from './default.options';
 @Schema(schemaOptions)
 export class BinItem extends BaseSchema {
   @Prop({ type: MSchema.Types.ObjectId, ref: 'Bin', required: true })
-  binId: MSchema.Types.ObjectId;
+  binId: Types.ObjectId;
 
   @Prop({ type: MSchema.Types.ObjectId, ref: 'Item', required: true })
-  itemId: MSchema.Types.ObjectId;
+  itemId: Types.ObjectId;
 
   @Prop({ type: MSchema.Types.Number, required: true })
   order: number;
@@ -24,16 +24,16 @@ export class BinItem extends BaseSchema {
   @Prop({ type: MSchema.Types.Number, required: true })
   critical: number;
 
-  @Prop({ type: MSchema.Types.Boolean, required: true })
+  @Prop({ type: MSchema.Types.Boolean, required: false })
   hasChargeTime: boolean;
 
-  @Prop({ type: MSchema.Types.Boolean, required: true })
+  @Prop({ type: MSchema.Types.Boolean, required: false })
   hasCalibrationDue: boolean;
 
-  @Prop({ type: MSchema.Types.Boolean, required: true })
+  @Prop({ type: MSchema.Types.Boolean, required: false })
   hasExpiryDate: boolean;
 
-  @Prop({ type: MSchema.Types.Boolean, required: true })
+  @Prop({ type: MSchema.Types.Boolean, required: false })
   hasLoadHydrostaticTestDue: boolean;
 
   @Prop({ type: MSchema.Types.String, required: false })

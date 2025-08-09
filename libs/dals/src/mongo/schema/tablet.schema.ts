@@ -13,7 +13,7 @@ export class Tablet extends BaseSchema {
   deviceKey: string;
 
   @Prop({ type: mongoose.Schema.Types.Mixed })
-  setting: Record<string, unknown>;
+  setting: Record<string, unknown> & { clusterId: string };
 }
 
 export const TabletSchema = SchemaFactory.createForClass(Tablet);

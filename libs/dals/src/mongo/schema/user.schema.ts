@@ -26,7 +26,7 @@ export class User extends BaseSchema {
   role: string;
 
   @Prop({ type: MSchema.Types.String, default: null })
-  genealogy?: string;
+  genealogy: string | null;
 
   @Prop({ type: MSchema.Types.Mixed, default: {} })
   cloud: Record<string, unknown>;

@@ -25,54 +25,5 @@ export class Migrate implements OnModuleInit {
     @InjectModel(JobCardModel.name) private readonly _jobCard: Model<JobCard>,
   ) {}
 
-  public async onModuleInit(): Promise<void> {
-    const data = [
-      {
-        wo: '654321',
-        platform: 'MBC',
-        vehicleId: 1,
-        status: 1,
-        cardNumber: '123456',
-        vehicleNum: '0001',
-        vehicleType: 'Honda Civic',
-        isSync: true,
-        retryCount: 0,
-      },
-      {
-        wo: '23456',
-        platform: 'MBC',
-        vehicleId: 2,
-        status: 1,
-        cardNumber: '11850528',
-        vehicleNum: '1234',
-        vehicleType: 'Honda Civic',
-        isSync: true,
-        retryCount: 0,
-      },
-      {
-        wo: '123',
-        platform: 'MBC',
-        vehicleId: 2,
-        status: 1,
-        cardNumber: '401456675',
-        vehicleNum: '1234',
-        vehicleType: 'Honda Civic',
-        isSync: true,
-        retryCount: 0,
-      },
-      {
-        wo: '386338266',
-        platform: 'MBC',
-        vehicleId: 1,
-        status: 1,
-        cardNumber: '386338266',
-        vehicleNum: '0001',
-        vehicleType: 'Honda Civic',
-        isSync: true,
-        retryCount: 0,
-      },
-    ];
-
-    await this._jobCard.insertMany(data);
-  }
+  public async onModuleInit(): Promise<void> {}
 }

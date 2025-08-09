@@ -1,16 +1,16 @@
 import { LeanDocument } from '@dals/mongo/base.repository';
 import { Location, ReturnItem } from '@dals/mongo/schema/return-item.schema';
-import { ReturnItemEntity, WorkOrderItem, LocationItem } from '@entity';
-import { HydratedDocument } from 'mongoose';
+import { ReturnItemEntity, LocationItem, WorkingOrderItem } from '@entity';
+import { HydratedDocument, Types } from 'mongoose';
 
 export class ReturnItemMapper {
   public static toModel(entity: ReturnItemEntity): ReturnItem {
     const model = new ReturnItem();
-    model.itemId = entity.itemId;
-    model.userId = entity.userId;
-    model.binId = entity.binId;
+    model.itemId = new Types.ObjectId(entity.itemId);
+    model.userId = new Types.ObjectId(entity.userId);
+    model.binId = new Types.ObjectId(entity.binId);
     model.quantity = entity.quantity;
-    model.workOrders = entity.workOrders;
+    model.workingOrders = entity.workingOrders;
     model.locations = entity.locations.map((l) => {
       const model = new Location();
       model.bin = l.bin;
@@ -32,11 +32,11 @@ export class ReturnItemMapper {
   private static _toEntity(model: ReturnItem): ReturnItemEntity {
     return new ReturnItemEntity({
       id: model._id.toString(),
-      itemId: model.itemId,
-      userId: model.userId,
-      binId: model.binId,
+      itemId: model.itemId.toString(),
+      userId: model.userId.toString(),
+      binId: model.binId.toString(),
       quantity: model.quantity,
-      workOrders: this._mapWorkOrders(model.workOrders),
+      workingOrders: this._mapWorkingOrders(model.workingOrders),
       locations: this._mapLocations(model.locations),
       createdAt: model.createdAt?.toISOString(),
       updatedAt: model.updatedAt?.toISOString(),
@@ -51,12 +51,12 @@ export class ReturnItemMapper {
     return entities.map((entity) => this.toModel(entity));
   }
 
-  private static _mapWorkOrders(listWo?: Array<any>): WorkOrderItem[] {
-    if (!listWo || !listWo.length) {
+  private static _mapWorkingOrders(workingOrders?: Array<any>): WorkingOrderItem[] {
+    if (!workingOrders || !workingOrders.length) {
       return [];
     }
 
-    return listWo.map((wo) => ({
+    return workingOrders.map((wo) => ({
       woId: wo.woId,
       wo: wo.wo,
       vehicleId: wo.vehicleId,
@@ -71,15 +71,19 @@ export class ReturnItemMapper {
     if (!locations || !locations.length) {
       return [];
     }
-    return locations.map((location) => ({
-      bin: {
-        id: location.bin.id?.toString() || location.bin.id,
-        name: location.bin.name,
-        row: location.bin.row,
-      },
-      requestQty: location.requestQty,
-      preQty: location.preQty,
-      quantity: location.quantity,
-    }));
+    return locations.map(
+      (location) =>
+        ({
+          cabinet: location.cabinet,
+          bin: {
+            id: location.bin.id?.toString() || location.bin.id,
+            name: location.bin.name,
+            row: location.bin.row,
+          },
+          requestQty: location.requestQty,
+          preQty: location.preQty,
+          quantity: location.quantity,
+        }) as any,
+    );
   }
 }

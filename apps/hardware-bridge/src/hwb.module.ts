@@ -3,7 +3,7 @@ import * as process from 'node:process';
 
 import { AppConfig, MongoDBConfig } from '@config/contracts';
 import { CONFIG_KEY } from '@config/core';
-import { API_MODELS, API_MONGO_REPOSITORIES, HWB_MODELS, HWB_MONGO_REPOSITORIES, MongoDALModule } from '@dals/mongo';
+import { API_MODELS, API_MONGO_REPOSITORIES, MongoDALModule } from '@dals/mongo';
 import { DEFAULT_CONFIG, FingerprintScanModule } from '@fingerprint-scanner';
 import { TRACING_ID } from '@framework/constants';
 import { AppLoggerModule } from '@framework/logger';

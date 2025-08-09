@@ -1,5 +1,5 @@
 export { AreaMapper } from './area.mapper';
-// export { BinItemMapper } from './bin-item.mapper';
+export { BinItemMapper } from './bin-item.mapper';
 export { BinMapper } from './bin.mapper';
 export { CabinetMapper } from './cabinet.mapper';
 // export { CardShelfMapper } from './card-shelf.mapper';
@@ -19,7 +19,7 @@ export { ReturnItemMapper } from './return-item.mapper';
 // export { ShelfMapper } from './shelf.mapper';
 // export { SiteMapper } from './site.mapper';
 export { TabletMapper } from './tablet.mapper';
-// export { TransactionMapper } from './transaction.mapper';
+export { TransactionMapper } from './transaction.mapper';
 export { UserMapper } from './user.mapper';
 // export { WithdrawMapper } from './withdraw.mapper';
 export { PortMapper } from './port.mapper';

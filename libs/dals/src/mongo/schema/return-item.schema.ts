@@ -1,5 +1,5 @@
 import { ModelDefinition, Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Schema as MSchema } from 'mongoose';
+import { Schema as MSchema, Types } from 'mongoose';
 
 import { BaseSchema } from './base.schema';
 import { schemaOptions, subSchemaOptions } from './default.options';
@@ -28,12 +28,15 @@ export class Location {
 
   @Prop({ type: MSchema.Types.Number, required: false, default: 0 })
   quantity: number;
+
+  @Prop({ type: MSchema.Types.Mixed, required: false })
+  cabinet: any;
 }
 
 const LocationSchema = SchemaFactory.createForClass(Location);
 
 @Schema(subSchemaOptions)
-export class WorkOrder {
+export class WorkingOrder {
   @Prop({ type: MSchema.Types.ObjectId, required: true })
   woId: string;
 
@@ -56,28 +59,26 @@ export class WorkOrder {
   torq: number;
 }
 
-const WorkOrderSchema = SchemaFactory.createForClass(WorkOrder);
-
 @Schema(schemaOptions)
 export class ReturnItem extends BaseSchema {
   @Prop({ type: MSchema.Types.ObjectId, ref: 'Item', required: true })
-  itemId: string;
+  itemId: Types.ObjectId;
 
   @Prop({ type: MSchema.Types.ObjectId, ref: 'User', required: true })
-  userId: string;
+  userId: Types.ObjectId;
 
   @Prop({ type: MSchema.Types.ObjectId, ref: 'Bin', required: false })
-  binId: string;
+  binId: Types.ObjectId;
 
   @Prop({ type: MSchema.Types.Number, required: true })
   quantity: number;
 
   @Prop({
-    type: [WorkOrderSchema],
+    type: [WorkingOrder],
     required: false,
     default: [],
   })
-  workOrders: WorkOrder[];
+  workingOrders: WorkingOrder[];
 
   @Prop({
     type: [LocationSchema],

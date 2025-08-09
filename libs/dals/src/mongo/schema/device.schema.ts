@@ -150,6 +150,30 @@ export class Device extends BaseSchema {
 
 export const DeviceSchema = SchemaFactory.createForClass(Device);
 
+DeviceSchema.virtual('port', {
+  ref: 'Port',
+  localField: 'portId',
+  foreignField: '_id',
+  justOne: true,
+  options: {
+    select: 'path',
+  },
+});
+
+DeviceSchema.virtual('item', {
+  ref: 'Item',
+  localField: 'itemId',
+  foreignField: '_id',
+  justOne: true,
+});
+
+DeviceSchema.virtual('bin', {
+  ref: 'Bin',
+  localField: 'binId',
+  foreignField: '_id',
+  justOne: true,
+});
+
 export const DEVICE_MODEL_TOKEN = Device.name;
 
 export const DeviceModel: ModelDefinition = {

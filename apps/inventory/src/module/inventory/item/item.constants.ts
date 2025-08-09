@@ -4,14 +4,8 @@ export const ITEM_ROUTES = {
   RETURN: 'return',
   REPLENISH: 'replenish',
   TYPES: 'types',
-
+  NEXT_ITEM: 'next-item',
   CONFIGURE: 'configure',
-} as const;
-
-export const PROCESS_ITEM_TYPE = {
-  ISSUE: 'issue',
-  RETURN: 'return',
-  REPLENISH: 'replenish',
 } as const;
 
 export const TRANSACTION_STATUS = {

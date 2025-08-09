@@ -1,5 +1,7 @@
-import { DeviceEntity, PortDeviceEntity } from '@entity';
+import { BinItemMRepository, BinMRepository, CabinetMRepository, ItemMRepository } from '@dals/mongo/repositories';
+import { DeviceEntity, DeviceWithPortEntity, PortDeviceEntity } from '@entity';
 import { Transactional } from '@framework/decorators/database';
+import { AppHttpException } from '@framework/exception';
 import { BadRequestException, Inject, Injectable } from '@nestjs/common';
 
 import { DevicePublisherService } from './device-publisher.service';
@@ -20,149 +22,15 @@ export class DeviceService {
   constructor(
     private readonly _devicePublisherService: DevicePublisherService,
     @Inject(DEVICE_REPOSITORY_TOKEN) private readonly _repository: IDeviceRepository,
+    private readonly _cabinetMRepository: CabinetMRepository,
+    private readonly _binMRepository: BinMRepository,
+    private readonly _itemMRepository: ItemMRepository,
+    private readonly _binItemMRepository: BinItemMRepository,
   ) {}
-
-  // public async update(body: {
-  //   id: string;
-  //   deviceId: number;
-  //   calcWeight: number;
-  //   zeroWeight: number;
-  //   deviceDescription: {
-  //     name: string;
-  //   };
-  // }) {
-  //   const {
-  //     id,
-  //     deviceId,
-  //     zeroWeight,
-  //     calcWeight,
-  //     deviceDescription: { name },
-  //   } = body;
-  //
-  //   let partNumber, materialNo;
-  //
-  //   const device = await this._repository.findById(id);
-  //   if (!device) {
-  //     throw new BadRequestException(`Device id ${id} not found`);
-  //   }
-  //
-  //   try {
-  //     let netWeight = calcWeight - zeroWeight;
-  //
-  //     let dataDeviceUpdated = {
-  //       deviceId,
-  //       zeroWeight,
-  //       calcWeight,
-  //     };
-  //
-  //     let deviceDescriptionData = {
-  //       name,
-  //     };
-  //
-  //     const [cabinetName, binRow, binName, itemName, itemPartNo] = deviceDescriptionData.name.split('_');
-  //
-  //     if (binRow && binName && itemName) {
-  //       const cabinet = await Cabinet.findOne({
-  //         where: {
-  //           name: cabinetName,
-  //         },
-  //       });
-  //
-  //       const bin = await Bin.findOne({
-  //         where: {
-  //           name: binName,
-  //           row: binRow,
-  //           cabinetId: cabinet.id,
-  //         },
-  //       });
-  //       const item = await Item.findOne({
-  //         where: { name: itemName, partNo: itemPartNo },
-  //       });
-  //
-  //       if (item) {
-  //         deviceDescriptionData.partNumber = item.part_no;
-  //         deviceDescriptionData.materialNo = item.material_no;
-  //       }
-  //
-  //       const binItem = await BinItem.findOne({
-  //         where: {
-  //           itemId: item.id,
-  //           binId: bin.id,
-  //         },
-  //       });
-  //       if (binItem) {
-  //         dataDeviceUpdated = {
-  //           ...dataDeviceUpdated,
-  //           binId: binItem.binId,
-  //           itemId: binItem.itemId,
-  //           quantity: binItem.max,
-  //           calcQuantity: binItem.max,
-  //           quantityMinThreshold: binItem.min,
-  //           quantityCritThreshold: binItem.critical,
-  //           changeqty: 0,
-  //           unitWeight: netWeight / binItem.max,
-  //           is_sync: 0,
-  //         };
-  //       }
-  //       await bin.update({
-  //         is_locked: 1,
-  //         is_calibrated: 1,
-  //         new_max: 0,
-  //         max: bin.new_max > 0 ? bin.new_max : bin.max,
-  //       });
-  //       //publish topic bin/close to trigger logic loadcell process
-  //       mqttClient.publish('bin/close', JSON.stringify({}));
-  //     }
-  //
-  //     await device.update(dataDeviceUpdated, { transaction });
-  //
-  //     let deviceDescription = await DeviceDescription.findOne({
-  //       where: { deviceId: device.id },
-  //     });
-  //     if (!deviceDescription) {
-  //       deviceDescription = await DeviceDescription.create(
-  //         {
-  //           ...deviceDescriptionData,
-  //         },
-  //         { transaction },
-  //       );
-  //     } else {
-  //       await deviceDescription.update(
-  //         {
-  //           ...deviceDescriptionData,
-  //         },
-  //         { transaction },
-  //       );
-  //     }
-  //     logger.debug('[DeviceController][update] deviceDescription: %s', JSON.stringify(deviceDescription));
-  //
-  //     const _deviceData = device.get({ plain: true });
-  //     const _deviceDescriptionData = deviceDescription.get({
-  //       attributes: {
-  //         exclude: ['id', 'deviceId', 'updatedAt', 'createdAt'],
-  //       },
-  //     });
-  //
-  //     const newUpdates = {
-  //       ..._deviceData,
-  //       deviceDescription: {
-  //         ..._deviceDescriptionData,
-  //       },
-  //     };
-  //
-  //     logger.debug('[DeviceController][update] newUpdates: %s', JSON.stringify(newUpdates));
-  //
-  //     await transaction.commit();
-  //
-  //     res.send({ success: true });
-  //   } catch (error) {
-  //     throw new InternalServerErrorException('Can not update device', error);
-  //   }
-  // }
 
   public async getDetail(query: GetDeviceDetailRequest): Promise<DeviceEntity | null> {
     const { id } = query;
-    return this._repository.findById(id);
+    return this._repository.findByDeviceNumId(id);
   }
 
   public async getByApp(query: GetDevicesByAppRequest): Promise<DeviceEntity[]> {
@@ -219,4 +87,192 @@ export class DeviceService {
   public async getDevicesByBinAndItem(binId: string, itemId: string): Promise<DeviceEntity[]> {
     return this._repository.findAllByBinIdAndItemId({ binId, itemId });
   }
+
+  public async update(dto: UpdateDeviceRequest): Promise<boolean> {
+    const {
+      id,
+      deviceId,
+      weight,
+      zeroWeight,
+      calcWeight,
+      quantityMinThreshold,
+      quantityCritThreshold,
+      deviceDescription: {
+        name,
+        supplierEmail,
+        matlGrp,
+        criCode,
+        jom,
+        itemAcct,
+        field1,
+        // bag1
+        expiryBag,
+        quantityBag,
+        batchNoBag,
+        // bag2
+        expiryBag2,
+        quantityBag2,
+        batchNoBag2,
+        // bag3
+        quantityBag3,
+        expiryBag3,
+        batchNoBag3,
+      },
+    } = dto;
+
+    let partNumber: string | undefined, materialNo: string | undefined;
+
+    const device = await this._repository.findByDeviceNumId(id);
+    if (!device) {
+      throw AppHttpException.badRequest({ message: `Device ${id} not found` });
+    }
+
+    const netWeight = calcWeight - zeroWeight;
+
+    const deviceDescriptionData = {
+      name,
+      partNumber,
+      materialNo,
+      supplierEmail,
+      matlGrp,
+      criCode,
+      jom,
+      itemAcct,
+      field1,
+      // bag1
+      expiryBag,
+      quantityBag,
+      batchNoBag,
+      // bag2
+      expiryBag2,
+      quantityBag2,
+      batchNoBag2,
+      // bag3
+      quantityBag3,
+      expiryBag3,
+      batchNoBag3,
+    };
+
+    let dataDeviceUpdated: Record<string, any> = {
+      deviceNumId: deviceId,
+      weight,
+      zeroWeight,
+      calcWeight,
+      quantityMinThreshold,
+      quantityCritThreshold,
+      description: deviceDescriptionData,
+    };
+
+    const [cabinetName, binRow, binName, itemName, itemPartNo] = name.split('_');
+
+    if (binRow && binName && itemName) {
+      // Find cabinet
+      const cabinet = await this._cabinetMRepository.findFirst(
+        {
+          name: cabinetName,
+        },
+        {},
+      );
+
+      if (!cabinet) {
+        throw AppHttpException.badRequest({ message: `Cabinet ${cabinetName} not found` });
+      }
+
+      // Find bin
+      const bin = await this._binMRepository.findFirst({
+        name: binName,
+        row: binRow,
+        cabinetId: cabinet._id,
+      });
+
+      if (!bin) {
+        throw new Error(`Bin ${binName} not found`);
+      }
+
+      // Find item
+      const item = await this._itemMRepository.findFirst({
+        name: itemName,
+        partNo: itemPartNo,
+      });
+
+      if (item) {
+        deviceDescriptionData.partNumber = item.partNo;
+        deviceDescriptionData.materialNo = item.materialNo;
+
+        // Find bin item
+        const binItem = await this._binItemMRepository.findFirst({
+          itemId: item._id,
+          binId: bin._id,
+        });
+
+        if (binItem) {
+          dataDeviceUpdated = {
+            ...dataDeviceUpdated,
+            binId: binItem.binId,
+            itemId: binItem.itemId,
+            quantity: binItem.max,
+            calcQuantity: binItem.max,
+            quantityMinThreshold: binItem.min,
+            quantityCritThreshold: binItem.critical,
+            changeQty: 0,
+            unitWeight: netWeight / binItem.max,
+            isSync: false,
+          };
+        }
+      }
+
+      // Update bin
+      await this._binMRepository.updateFirst(
+        {},
+        {
+          $set: {
+            isLocked: true,
+            isCalibrated: true,
+            newMax: 0,
+            max: (bin.newMax || 0) > 0 ? bin.newMax : bin.max,
+          },
+        },
+        {},
+      );
+
+      // Publish MQTT topic
+      // mqttClient.publish('bin/close', JSON.stringify({}));
+    }
+
+    // Update device
+    await this._repository.update(device.id, dataDeviceUpdated);
+
+    return true;
+  }
 }
+
+type UpdateDeviceRequest = {
+  id: number;
+  deviceId: number;
+  weight: number;
+  zeroWeight: number;
+  calcWeight: number;
+  quantityMinThreshold: number;
+  quantityCritThreshold: number;
+  deviceDescription: {
+    name: string;
+    supplierEmail?: string;
+    matlGrp?: string;
+    criCode?: string;
+    jom?: string;
+    itemAcct?: string;
+    field1?: string;
+    // bag1
+    expiryBag?: Date;
+    quantityBag?: number;
+    batchNoBag?: string;
+    // bag2
+    expiryBag2?: Date;
+    quantityBag2?: number;
+    batchNoBag2?: string;
+    // bag3
+    quantityBag3?: number;
+    expiryBag3?: Date;
+    batchNoBag3?: string;
+  };
+};

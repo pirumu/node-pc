@@ -50,7 +50,7 @@ export class Application {
     const appConfig = configService.getOrThrow<AppConfig>(CONFIG_KEY.APP);
 
     app.setGlobalPrefix(appConfig.apiPrefix);
-    app.useGlobalPipes(setupValidation(app, WorkerModule));
+    // app.useGlobalPipes(setupValidation(app, WorkerModule));
     app.useGlobalFilters(new GlobalExceptionFilter(appConfig.debug));
     app.useGlobalFilters(new GlobalRpcExceptionFilter(appConfig.debug));
     app.enableShutdownHooks(Object.values(ShutdownSignal));

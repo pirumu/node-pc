@@ -62,7 +62,7 @@ export class UserEntity extends BaseEntity {
   cardNumber: string;
 
   twoFactorEnabled?: boolean;
-  genealogy?: string;
+  genealogy: string | null;
   cloud: UserCloudInfo;
 
   constructor(props: Properties<UserEntity>) {

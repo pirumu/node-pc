@@ -90,7 +90,7 @@ export const ControllerDocs = (options: ControllerDocs) => {
         );
         break;
       case 'b-h':
-        decorators.push(ApiSecurity('authorization'));
+        decorators.push(ApiBearerAuth());
         decorators.push(
           ApiHeader({
             name: options.securityKey || 'x-auth-key',

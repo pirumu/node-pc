@@ -6,6 +6,7 @@ export interface IDeviceRepository {
   findAll(filter: { portId?: string }): Promise<DeviceEntity[]>;
   findAllByBinIdAndItemId(filter: { binId: string; itemId: string }): Promise<DeviceEntity[]>;
   findById(id: string): Promise<DeviceEntity | null>;
+  findByDeviceNumId(id: number): Promise<DeviceEntity | null>;
   findPortDevices(portId?: string): Promise<PortDeviceEntity[]>;
   create(data: Partial<DeviceEntity>): Promise<DeviceEntity | null>;
   update(id: string, data: Partial<DeviceEntity>): Promise<DeviceEntity | null>;

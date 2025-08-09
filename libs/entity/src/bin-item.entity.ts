@@ -3,8 +3,8 @@ import { Properties } from '@framework/types';
 import { BaseEntity } from './base.entity';
 
 export class BinItemEntity extends BaseEntity {
-  binId?: string;
-  itemId?: string;
+  binId: string;
+  itemId: string;
   order: number;
   batchNo?: string;
   serialNo?: string;
@@ -20,6 +20,11 @@ export class BinItemEntity extends BaseEntity {
   hasLoadHydrostaticTestDue: boolean; // 0 | 1
   loadHydrostaticTestDue?: string;
   description?: string;
+
+  constructor(props: Properties<BinItemEntity>) {
+    super();
+    Object.assign(this, props);
+  }
 }
 
 export class BinItemWithIdAndName {

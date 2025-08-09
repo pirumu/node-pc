@@ -6,7 +6,7 @@ import { InjectSerialManager, ISerialAdapter, SerialPortState } from '@serialpor
 
 import { DETECT_CU_PORT_MESSAGE, DETECT_SCU_PORT_MESSAGE } from './control-unit-lock.constants';
 import { CuLockRequest } from './dto';
-import { BaseResponse, Command, IProtocol, LOCK_STATUS, ProtocolFactory, ProtocolType } from './protocols';
+import { BaseResponse, IProtocol, LOCK_STATUS, ProtocolFactory, ProtocolType } from './protocols';
 
 @Injectable()
 export class ControlUnitLockService implements OnModuleInit {

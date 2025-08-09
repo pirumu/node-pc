@@ -15,7 +15,7 @@ import { ClsModule } from 'nestjs-cls';
 import { configs } from './config';
 import { AuthConfig } from './config/auth.config';
 import { MqttConfig } from './config/mqtt.config';
-import { AuthModule } from './module/auth';
+import { AuthModule, JwtAuthMiddleware } from './module/auth';
 import { DeviceKeyAuthMiddleware } from './module/auth/middlewares';
 import { INVENTORY_MODULES } from './module/inventory';
 import { SYSTEM_MODULES } from './module/system';
@@ -96,8 +96,8 @@ import { WsModule } from './module/ws';
           tcp: {
             enabled: true,
             options: {
-              host: '127.0.0.1',
-              port: 3000,
+              host: '192.168.0.103',
+              port: 3001,
             },
           },
           mqtt: {
@@ -131,5 +131,6 @@ import { WsModule } from './module/ws';
 export class AppModule implements NestModule {
   public configure(consumer: MiddlewareConsumer): void {
     // consumer.apply(DeviceKeyAuthMiddleware).forRoutes(...['/ports']);
+    consumer.apply(JwtAuthMiddleware).forRoutes(...['/items']);
   }
 }

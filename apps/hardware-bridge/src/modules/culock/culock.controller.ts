@@ -1,3 +1,5 @@
+import { CuLockRequest } from '@culock/dto';
+import { BaseResponse } from '@culock/protocols';
 import { Controller } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
 
@@ -12,17 +14,17 @@ export class CulockController {
   ) {}
 
   @MessagePattern('cu/open')
-  public async open(@Payload() cuOpenRequest: any) {
+  public async open(@Payload() cuOpenRequest: CuLockRequest): Promise<BaseResponse> {
     return this._culockService.open(cuOpenRequest);
   }
 
   @MessagePattern('cu/status')
-  public async status(@Payload() cuOpenRequest: any) {
+  public async status(@Payload() cuOpenRequest: CuLockRequest): Promise<BaseResponse> {
     return this._culockService.status(cuOpenRequest);
   }
 
   @MessagePattern('lock/track')
-  public async track(@Payload() cuOpenRequest: any) {
+  public async track(@Payload() cuOpenRequest: CuLockRequest): Promise<void> {
     return this._lockMonitoringService.track(cuOpenRequest);
   }
 }

@@ -95,7 +95,6 @@ export default defineConfig([
         {
           selector: 'parameter',
           format: ['camelCase'],
-
           filter: {
             regex: '^_$',
             match: false,
@@ -141,7 +140,6 @@ export default defineConfig([
       ],
       '@typescript-eslint/no-explicit-any': 'off',
       '@typescript-eslint/explicit-module-boundary-types': 'warn',
-      '@typescript-eslint/explicit-function-return-type': 'warn',
       'import/no-duplicates': 'error',
 
       'import/order': [

@@ -19,12 +19,13 @@ export class MQTTPublisher implements IPublisher {
   }
 
   public publish(channel: string, data: Record<string, unknown>, metadata?: Record<string, string | string[]>, options?: any): any {
+    const requestId = ClsServiceManager.getClsService().getId();
     const record = new MqttRecordBuilder(data)
-      .setProperties({ userProperties: { [TRACING_ID]: new SnowflakeId().id(), ...(metadata || {}) } })
+      .setProperties({ userProperties: { [TRACING_ID]: requestId || new SnowflakeId().id(), ...(metadata || {}) } })
       .setQoS(0)
       .build();
 
-    return this._client.emit(channel, record).subscribe({
+    return this._client[options?.mode === 'event' ? 'emit' : 'send'](channel, record).subscribe({
       complete: () => {
         this._logger.log('MQTTPublisher published successfully', {
           event: record,
