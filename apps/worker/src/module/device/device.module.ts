@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 
-import { DeviceWorkerService } from './device.service';
 import { DeviceController } from './device.controller';
+import { DeviceWorkerService } from './device.service';
 
 @Module({
   controllers: [DeviceController],

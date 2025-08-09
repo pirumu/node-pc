@@ -9,4 +9,5 @@ export enum CONFIG_KEY {
   HID = 'hid',
   LOADCELL_MONITORING = 'loadCellMonitoring',
   SERIALPORT = 'serialport',
+  TCP = 'tcp',
 }

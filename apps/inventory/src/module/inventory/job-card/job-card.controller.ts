@@ -1,10 +1,11 @@
 import { JobCardEntity } from '@entity';
+import { BaseController } from '@framework/controller';
 import { Body, Controller, Get, Inject, Injectable, Post } from '@nestjs/common';
 
-import { IJobCardRepository, JOB_CARD_REPOSITORY_TOKEN } from './repositories';
-import { BaseController } from '@framework/controller';
-import { JobCardResponse } from './dtos/response';
 import { WsGateway } from '../../ws';
+
+import { JobCardResponse } from './dtos/response';
+import { IJobCardRepository, JOB_CARD_REPOSITORY_TOKEN } from './repositories';
 
 @Controller('job-cards')
 export class JobCardController extends BaseController {

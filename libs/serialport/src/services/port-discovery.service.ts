@@ -1,9 +1,9 @@
 import { Injectable, Logger, OnModuleInit, OnModuleDestroy, Inject } from '@nestjs/common';
+import { DISCOVERY_CONFIG } from '@serialport/serialport.constants';
 import { Observable, BehaviorSubject, Subject, timer, EMPTY, from, of } from 'rxjs';
 import { map, switchMap, distinctUntilChanged, takeUntil, tap, catchError, debounceTime, mergeMap, concatMap } from 'rxjs/operators';
 
 import { InjectSerialManager, ISerialAdapter, SerialOptions, SerialPortInfo, SerialPortState } from '../serial';
-import { DISCOVERY_CONFIG } from '@serialport/serialport.constants';
 
 export type DiscoveryConfig = {
   enabled: boolean;

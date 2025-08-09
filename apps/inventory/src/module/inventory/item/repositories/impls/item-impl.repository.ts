@@ -18,6 +18,7 @@ import { AreaMapper, BinMapper, CabinetMapper, DeviceMapper, ItemMapper, JobCard
 import { Injectable, Logger } from '@nestjs/common';
 import { PipelineStage, Types } from 'mongoose';
 
+import { IItemRepository } from '../item.repository';
 import {
   BinItemCombinationOutput,
   FindIssuableItemsArgs,
@@ -34,7 +35,6 @@ import {
   PaginatedReplenishableItemsOutput,
   PaginatedReturnableItemsOutput,
 } from '../item.types';
-import { IItemRepository } from '../item.repository';
 
 @Injectable()
 export class ItemImplRepository implements IItemRepository {

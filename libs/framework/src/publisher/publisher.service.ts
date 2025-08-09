@@ -29,7 +29,13 @@ export class PublisherService {
       this._logger.log(`Successfully published to ${transport}:${channel}`);
       return response as unknown as T;
     } catch (error) {
-      this._logger.error(`Failed to publish to ${transport}:${channel}`, error);
+      this._logger.error(`Failed to publish to ${transport}:${channel}`, {
+        name: error.name,
+        message: error.message,
+        stack: error.stack,
+        cause: error.cause,
+        code: error.code,
+      });
       throw error;
     }
   }

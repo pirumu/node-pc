@@ -15,6 +15,7 @@ export type BasePublishOptions = {
   priority?: Priority;
   timeout?: number;
   retries?: number;
+  async?: boolean;
 };
 
 export type PublishOptions = Record<string, unknown> & BasePublishOptions;

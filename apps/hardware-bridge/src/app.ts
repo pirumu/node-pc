@@ -1,20 +1,21 @@
 import { AppConfig, SwaggerConfig } from '@config/contracts';
 import { CONFIG_KEY } from '@config/core';
-import { setupSwagger, setupValidation } from '@framework/bootstrap';
+import { setupSwagger } from '@framework/bootstrap';
 import { GlobalExceptionFilter, GlobalRpcExceptionFilter } from '@framework/filter';
 import { APP_LOGGER } from '@framework/logger';
 import { INestApplication, Logger } from '@nestjs/common';
 import { ShutdownSignal } from '@nestjs/common/enums/shutdown-signal.enum';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
-import { MqttOptions, Transport } from '@nestjs/microservices';
+import { MqttOptions, TcpOptions, Transport } from '@nestjs/microservices';
 
 import { MqttConfig } from './config/mqtt.config';
+import { TcpConfig } from './config/tcp.config';
 import { HwbModule } from './hwb.module';
 
 export class Application {
   private static async _bootstrapMicroservices(app: INestApplication, configService: ConfigService): Promise<void> {
-    await this._connectMqtt(app, configService);
+    await Promise.all([this._connectMqtt(app, configService), this._connectTcp(app, configService)]);
     await app.startAllMicroservices();
   }
 
@@ -27,6 +28,21 @@ export class Application {
           ...mqttConfig.consumer,
           resubscribe: true,
           reschedulePings: true,
+        },
+      },
+      { inheritAppConfig: true },
+    );
+  }
+
+  private static async _connectTcp(app: INestApplication, configService: ConfigService): Promise<void> {
+    const tcpConfig = configService.getOrThrow<TcpConfig>(CONFIG_KEY.TCP);
+    app.connectMicroservice<TcpOptions>(
+      {
+        transport: Transport.TCP,
+        options: {
+          ...tcpConfig.consumer,
+          retryAttempts: 3,
+          retryDelay: 1000,
         },
       },
       { inheritAppConfig: true },
@@ -50,7 +66,7 @@ export class Application {
     const appConfig = configService.getOrThrow<AppConfig>(CONFIG_KEY.APP);
 
     app.setGlobalPrefix(appConfig.apiPrefix);
-    app.useGlobalPipes(setupValidation(app, HwbModule));
+    // app.useGlobalPipes(setupValidation(app, HwbModule));
     app.useGlobalFilters(new GlobalExceptionFilter(appConfig.debug));
     app.useGlobalFilters(new GlobalRpcExceptionFilter(appConfig.debug));
     app.enableShutdownHooks(Object.values(ShutdownSignal));

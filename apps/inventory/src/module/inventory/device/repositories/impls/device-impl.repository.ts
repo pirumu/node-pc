@@ -3,9 +3,9 @@ import { BinMRepository, DeviceMRepository, PortMRepository } from '@dals/mongo/
 import { Device } from '@dals/mongo/schema/device.schema';
 import { DeviceEntity, DevicePortEntity, PortDeviceEntity } from '@entity';
 import { DeviceMapper } from '@mapper';
+import { Injectable } from '@nestjs/common';
 
 import { IDeviceRepository } from '../device.repository';
-import { Injectable } from '@nestjs/common';
 
 @Injectable()
 export class DeviceImplRepository implements IDeviceRepository {

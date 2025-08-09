@@ -97,7 +97,7 @@ import { WsModule } from './module/ws';
             enabled: true,
             options: {
               host: '192.168.0.103',
-              port: 3001,
+              port: 3002,
             },
           },
           mqtt: {

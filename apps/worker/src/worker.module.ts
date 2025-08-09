@@ -11,11 +11,11 @@ import { Request } from 'express';
 import { ClsModule } from 'nestjs-cls';
 
 import { configs } from './config';
+import { MqttConfig } from './config/mqtt.config';
 import { DeviceModule } from './module/device/device.module';
 import { MonitoringModule } from './module/monitoring/monitoring.module';
 import { NotificationModule } from './module/notification/notification.module';
 import { SyncModule } from './module/sync/sync.module';
-import { MqttConfig } from './config/mqtt.config';
 
 @Module({
   imports: [

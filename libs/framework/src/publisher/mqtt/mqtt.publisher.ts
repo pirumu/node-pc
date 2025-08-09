@@ -1,11 +1,12 @@
 import { TRACING_ID } from '@framework/constants';
 import { MQTTPublishOptions } from '@framework/publisher/mqtt/mqtt.types';
+import { SnowflakeId } from '@framework/snowflake';
 import { Logger } from '@nestjs/common';
 import { ClientProxy, ClientProxyFactory, MqttRecordBuilder, Transport } from '@nestjs/microservices';
 import { ClsServiceManager } from 'nestjs-cls';
 
 import { IPublisher } from '../publisher.types';
-import { SnowflakeId } from '@framework/snowflake';
+import { firstValueFrom, lastValueFrom } from 'rxjs';
 
 export class MQTTPublisher implements IPublisher {
   private readonly _logger = new Logger(MQTTPublisher.name);
@@ -25,18 +26,10 @@ export class MQTTPublisher implements IPublisher {
       .setQoS(0)
       .build();
 
-    return this._client[options?.mode === 'event' ? 'emit' : 'send'](channel, record).subscribe({
-      complete: () => {
-        this._logger.log('MQTTPublisher published successfully', {
-          event: record,
-        });
-      },
-      error: (e) => {
-        this._logger.error('MQTTPublisher published failed with error', {
-          error: e,
-          event: record,
-        });
-      },
-    });
+    const isSync = options?.async === undefined ? true : options?.async;
+    if (isSync) {
+      return this._client.send(channel, record);
+    }
+    return this._client.emit(channel, record);
   }
 }

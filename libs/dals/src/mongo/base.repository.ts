@@ -115,12 +115,12 @@ export abstract class BaseRepository<M extends SoftDeleteDocument> {
     return docs as HydratedDocument<M>[];
   }
 
-  // eslint-disable-next-line @typescript-eslint/explicit-function-return-type,@typescript-eslint/explicit-module-boundary-types
+  // eslint-disable-next-line @typescript-eslint/explicit-module-boundary-types
   public async updateFirst(filter: FilterQuery<M>, update: UpdateQuery<M> | UpdateWithAggregationPipeline, options: QueryOptions<M>) {
     return this.model.updateOne(filter, update, options).exec();
   }
 
-  // eslint-disable-next-line @typescript-eslint/explicit-function-return-type,@typescript-eslint/explicit-module-boundary-types
+  // eslint-disable-next-line @typescript-eslint/explicit-module-boundary-types
   public async updateMany(
     filter: FilterQuery<M>,
     update: UpdateQuery<M> | UpdateWithAggregationPipeline,

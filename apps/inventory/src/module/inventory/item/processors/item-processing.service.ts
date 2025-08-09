@@ -336,8 +336,8 @@ export class ItemProcessingService {
         command: Command.OPEN_LOCK,
       });
 
-      const response = await this._publisherService.publish<CuResponse>(Transport.MQTT, MQTT_TOPICS.CU_OPEN, request);
-
+      const response = await this._publisherService.publish<CuResponse>(Transport.MQTT, MQTT_TOPICS.CU_OPEN, request, {}, { async: false });
+      console.log('response', response);
       this._logger.log(`Lock API response for bin ${item.bin.id}:`, response);
 
       return {

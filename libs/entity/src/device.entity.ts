@@ -1,7 +1,7 @@
-import { PortEntity } from './port.entity';
 import { Properties } from '@framework/types';
 
 import { BaseEntity } from './base.entity';
+import { PortEntity } from './port.entity';
 
 export class DeviceDescriptionEntity {
   name?: string;

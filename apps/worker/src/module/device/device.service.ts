@@ -1,9 +1,9 @@
 import { WeightCalculatedEvent } from '@common/business/events';
+import { EVENT_TYPE } from '@common/constants';
 import { BinItemMRepository, BinMRepository, DeviceMRepository, PortMRepository } from '@dals/mongo/repositories';
+import { PublisherService, Transport } from '@framework/publisher';
 import { Injectable, Logger } from '@nestjs/common';
 import { differenceInDays } from 'date-fns';
-import { PublisherService, Transport } from '@framework/publisher';
-import { EVENT_TYPE } from '@common/constants';
 
 @Injectable()
 export class DeviceWorkerService {

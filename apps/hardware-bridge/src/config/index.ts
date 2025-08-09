@@ -8,6 +8,7 @@ import { getMongoDBConfig } from './mongo.config';
 import { getMqttConfig, MqttConfig } from './mqtt.config';
 import { getSerialportConfig } from './serial-port.config';
 import { getSwaggerConfig } from './swagger.config';
+import { getTcpConfig } from './tcp.config';
 
 interface IConfiguration {
   [CONFIG_KEY.APP]: AppConfig;
@@ -17,6 +18,7 @@ interface IConfiguration {
   [CONFIG_KEY.FINGERPRINT]: FingerprintConfig;
   [CONFIG_KEY.HID]: HidDeviceConfig;
   [CONFIG_KEY.SERIALPORT]: any;
+  [CONFIG_KEY.TCP]: any;
 }
 
 export const configs = (): IConfiguration => ({
@@ -27,4 +29,5 @@ export const configs = (): IConfiguration => ({
   [CONFIG_KEY.FINGERPRINT]: getFingerprintConfig(),
   [CONFIG_KEY.HID]: getHidDeviceConfig(),
   [CONFIG_KEY.SERIALPORT]: getSerialportConfig(),
+  [CONFIG_KEY.TCP]: getTcpConfig(),
 });
