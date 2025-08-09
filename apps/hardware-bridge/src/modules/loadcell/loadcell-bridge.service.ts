@@ -51,7 +51,7 @@ export class LoadcellBridgeService implements OnModuleInit, OnModuleDestroy {
         // Start monitoring
         await this._startLoadcells();
 
-        await this.mock();
+        // await this.mock();
       } catch (error) {
         this._logger.error('Failed to initialize LoadCell service:', error);
       }

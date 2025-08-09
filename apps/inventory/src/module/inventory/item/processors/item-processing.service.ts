@@ -155,7 +155,11 @@ export class ItemProcessingService {
       // Complete transaction
       await this._completeTransaction(transactionId);
     } catch (error) {
-      this._logger.error(`Transaction processing failed:`, error);
+      this._logger.error(`Transaction processing failed:`, {
+        name: error.name,
+        message: error.message,
+        stack: error.stack,
+      });
 
       if (transactionId) {
         await this._failTransaction(transactionId, error.message);
@@ -429,14 +433,14 @@ export class ItemProcessingService {
     // Publish lock open success
     // todo: refactor it.
     const mqttData = {
-      deviceType: 'culock',
+      protocol: 'culock',
       deviceId: item.bin.cuId,
       lockId: item.bin.lockId,
       user: ctx.user,
       type: ctx.transactionType,
       data: item,
-      transId: ctx.transaction?.id,
-      is_final: isFinalItem,
+      transactionId: ctx.transaction?.id,
+      isFinal: isFinalItem,
     };
 
     await this._publisherService.publish(Transport.MQTT, MQTT_TOPICS.LOCK_OPEN_SUCCESS, mqttData);

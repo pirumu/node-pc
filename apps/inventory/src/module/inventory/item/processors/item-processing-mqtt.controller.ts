@@ -18,7 +18,7 @@ export class ItemProcessingMqttController {
 
   @EventPattern('bin/openFail')
   public async onBinOpenFail(@TracingID() tracingId: string, @Payload() payload: NotifyBinOpenErrorPayload): Promise<void> {
-    this._logger.debug('[onBinOpenFail]', {
+    this._logger.log('[onBinOpenFail]', {
       tracingId,
       payload,
     });
@@ -28,7 +28,7 @@ export class ItemProcessingMqttController {
 
   @EventPattern('process-item/status')
   public async onProcessStatusChange(@TracingID() tracingId: string, @Payload() payload: ChangeProcessStatusPayload): Promise<void> {
-    this._logger.debug('[onProcessStatusChange]', {
+    this._logger.log('[onProcessStatusChange]', {
       tracingId,
       payload,
     });
@@ -38,7 +38,7 @@ export class ItemProcessingMqttController {
 
   @EventPattern('process-item/error')
   public async onProcessError(@TracingID() tracingId: string, @Payload() payload: NotifyProcessErrorPayload): Promise<void> {
-    this._logger.debug('[onProcessError]', {
+    this._logger.log('[onProcessError]', {
       tracingId,
       payload,
     });
@@ -49,7 +49,7 @@ export class ItemProcessingMqttController {
 
   @EventPattern('lock/openSuccess')
   public async onLockOpenSuccess(@TracingID() tracingId: string, @Payload() payload: ProcessItemPayload): Promise<void> {
-    this._logger.debug('[onLockOpenSuccess]', {
+    this._logger.log('[onLockOpenSuccess]', {
       tracingId,
       payload,
     });
