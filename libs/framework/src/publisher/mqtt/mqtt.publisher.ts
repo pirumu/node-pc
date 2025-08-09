@@ -28,7 +28,7 @@ export class MQTTPublisher implements IPublisher {
 
     const isSync = options?.async === undefined ? true : options?.async;
     if (isSync) {
-      return this._client.send(channel, record);
+      return this._client.send(channel, record).subscribe((data) => console.log(data));
     }
     return this._client.emit(channel, record);
   }

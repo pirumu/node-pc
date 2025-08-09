@@ -9,6 +9,7 @@ import { catchError, retry } from 'rxjs/operators';
 import { IPublisher, PublishOptions } from '../publisher.types';
 
 import { TCPPublishOptions } from './tcp.types';
+import { SnowflakeId } from '@framework/snowflake';
 
 @Injectable()
 export class TCPPublisher implements IPublisher {
@@ -28,7 +29,8 @@ export class TCPPublisher implements IPublisher {
     options?: PublishOptions,
   ): Promise<any> {
     try {
-      const requestInfo = { [TRACING_ID]: ClsServiceManager.getClsService().getId(), ...metadata };
+      const requestId = ClsServiceManager.getClsService().getId();
+      const requestInfo = { [TRACING_ID]: requestId || new SnowflakeId().id(), ...metadata };
       return await lastValueFrom(
         this._client.send(channel, { ...data, metadata: requestInfo }).pipe(
           timeout(options?.timeout ?? 3000),

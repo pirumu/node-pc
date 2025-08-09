@@ -6,7 +6,7 @@ import { InjectSerialManager, ISerialAdapter, SerialPortState } from '@serialpor
 
 import { DETECT_CU_PORT_MESSAGE, DETECT_SCU_PORT_MESSAGE } from './control-unit-lock.constants';
 import { CuLockRequest } from './dto';
-import { BaseResponse, IProtocol, LOCK_STATUS, ProtocolFactory, ProtocolType } from './protocols';
+import { BaseResponse, Command, IProtocol, LOCK_STATUS, ProtocolFactory, ProtocolType } from './protocols';
 
 @Injectable()
 export class ControlUnitLockService implements OnModuleInit {
@@ -63,6 +63,16 @@ export class ControlUnitLockService implements OnModuleInit {
 
     await this._serialManager.write(port, msg);
 
+    if (request.command === Command.OPEN_LOCK) {
+      const msg = protocol.createMessage({
+        command: Command.GET_STATUS,
+        deviceId: request.deviceId,
+        lockId: 0,
+      });
+
+      await this._serialManager.write(port, msg);
+    }
+
     const response = await this._serialManager.onData(port);
     return protocol.parseResponse(request.deviceId, request.lockIds, Buffer.from(response)) as ScuResponse;
   }
@@ -82,6 +92,19 @@ export class ControlUnitLockService implements OnModuleInit {
     for (const msg of messages) {
       await this._serialManager.write(port, msg);
       await sleep(250);
+    }
+
+    if (request.command === Command.OPEN_LOCK) {
+      const messages = protocol.createMessages({
+        command: Command.GET_STATUS,
+        deviceId: request.deviceId,
+        lockIds: request.lockIds,
+      });
+
+      for (const msg of messages) {
+        await this._serialManager.write(port, msg);
+        await sleep(250);
+      }
     }
     const response = await this._serialManager.onData(port);
     const result = protocol.parseResponse(request.deviceId, request.lockIds, Buffer.from(response)) as CuResponse;

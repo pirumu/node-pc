@@ -16,7 +16,7 @@ export const getTcpConfig = (): TcpConfig => {
       ),
     },
     consumer: {
-      host: resolve('CONSUMER_TCP_HOST', String, { default: '127.0.0.1' }),
+      host: resolve('CONSUMER_TCP_HOST', String, { default: '0.0.0.0' }),
       port: resolve(
         'CONSUMER_TCP_PORT',
         (value) => {

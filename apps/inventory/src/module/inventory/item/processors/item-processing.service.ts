@@ -5,7 +5,7 @@ import { CuResponse } from '@culock/protocols/cu';
 import { TransactionEntity } from '@entity';
 import { PublisherService, Transport } from '@framework/publisher';
 import { sleep } from '@framework/time/sleep';
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 
 import { ProcessItemRequest } from '../item.types';
 import { IItemRepository, IProcessItemRepository, ITEM_REPOSITORY_TOKEN, PROCESS_ITEM_REPOSITORY_TOKEN } from '../repositories';
@@ -336,7 +336,7 @@ export class ItemProcessingService {
         command: Command.OPEN_LOCK,
       });
 
-      const response = await this._publisherService.publish<CuResponse>(Transport.MQTT, MQTT_TOPICS.CU_OPEN, request, {}, { async: false });
+      const response = await this._publisherService.publish<CuResponse>(Transport.TCP, MQTT_TOPICS.CU_OPEN, request);
       console.log('response', response);
       this._logger.log(`Lock API response for bin ${item.bin.id}:`, response);
 
