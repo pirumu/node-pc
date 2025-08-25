@@ -1,2 +1,2 @@
 export * from './get-ports.response';
-export * from './get-port.response';
+export * from './get-ports-loadcells.response';

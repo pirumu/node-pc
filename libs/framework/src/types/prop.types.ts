@@ -3,3 +3,5 @@ export type PropertyKeys<T> = {
 }[keyof T];
 
 export type Properties<T> = Pick<T, PropertyKeys<T>>;
+
+export type PartialProperties<T> = Partial<Pick<T, PropertyKeys<T>>>;

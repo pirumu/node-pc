@@ -1,35 +1,29 @@
-import { TracingID, Transport } from '@framework/decorators';
-import { ApiDocs, ControllerDocs } from '@framework/swagger';
-import { Body, Controller, Post } from '@nestjs/common';
-import { instanceToPlain } from 'class-transformer';
+import { CLIENT_ID_KEY } from '@common/constants';
+import { PaginationResponse } from '@common/dto';
+import { BaseController } from '@framework/controller';
+import { AppHttpException } from '@framework/exception';
+import { ApiDocs, ApiSignatureSecurity, ControllerDocs } from '@framework/swagger';
+import { Body, Controller, Headers, Param, Post, Query, UseGuards } from '@nestjs/common';
 
 import { WsGateway } from '../ws';
 
 import { AUTH_ROUTES } from './auth.constants';
-import { LoginByPinRequest } from './dtos';
-import { LoginRequest } from './dtos/request';
-import { JwtAuthResponse } from './dtos/response';
-import { AuthService, FingerprintAuthService } from './services';
+import { LoginByPinRequest, GetFacialRecognitionRequest, LoginByFaceRequest, LoginRequest } from './dtos/request';
+import { GetFacialRecognitionResponse, JwtAuthResponse } from './dtos/response';
+import { SignatureGuard } from './guards';
+import { AuthService } from './services';
+import { RefHelper } from '@dals/mongo/helpers';
 
 @ControllerDocs({
   tag: 'Authorization',
 })
 @Controller(AUTH_ROUTES.PATH)
-export class AuthController {
+export class AuthController extends BaseController {
   constructor(
     private readonly _authService: AuthService,
-    private readonly _fingerprintAuthService: FingerprintAuthService,
     private readonly _wsGateway: WsGateway,
-  ) {}
-
-  @ApiDocs({
-    summary: 'Login via login id and password',
-    responseSchema: JwtAuthResponse,
-    body: LoginRequest,
-  })
-  @Post(AUTH_ROUTES.LOGIN)
-  public async login(@Body() payload: LoginRequest): Promise<JwtAuthResponse> {
-    return this._authService.login(payload);
+  ) {
+    super();
   }
 
   @ApiDocs({
@@ -37,40 +31,90 @@ export class AuthController {
     responseSchema: JwtAuthResponse,
     body: LoginByPinRequest,
   })
+  @ApiSignatureSecurity()
+  @UseGuards(SignatureGuard)
   @Post(AUTH_ROUTES.LOGIN_BY_PIN_PASS)
-  public async loginByPin(@Body() payload: LoginByPinRequest): Promise<Record<string, any>> {
-    const result = await this._authService.loginByPin(payload);
-    // Backward compatible
-    return instanceToPlain(result);
+  public async loginByPin(@Headers(CLIENT_ID_KEY) clientId: string, @Body() payload: LoginByPinRequest): Promise<JwtAuthResponse> {
+    return this._authService.loginByPin(clientId, payload);
+  }
+
+  // @ApiDocs({
+  //   summary: 'Fingerprint authentication',
+  //   responseSchema: JwtAuthResponse,
+  //   body: LoginByPinRequest,
+  // })
+  // @ApiSignatureSecurity()
+  // @UseGuards(SignatureGuard)
+  // @Post(AUTH_ROUTES.LOGIN_BY_FINGERPRINT)
+  // public async loginViaFingerprint(@TracingID({ transport: Transport.HTTP }) tracingId: string): Promise<Record<string, any>> {
+  //   return this._fingerprintAuthService.authenticate(tracingId);
+  // }
+
+  @ApiDocs({
+    summary: 'get facial recognitions data',
+    paginatedResponseSchema: GetFacialRecognitionResponse,
+  })
+  @ApiSignatureSecurity()
+  @UseGuards(SignatureGuard)
+  @Post(AUTH_ROUTES.FACIAL_RECOGNITION)
+  public async getFacialRecognitions(
+    @Query() query: GetFacialRecognitionRequest,
+  ): Promise<PaginationResponse<GetFacialRecognitionResponse>> {
+    const { rows, meta } = await this._authService.getFacialRecognitions(query.page || 1, query.limit || 100);
+    const data = rows.map((row) => {
+      const pojo = row.toPOJO();
+      const user = RefHelper.getRequired(row.user, 'UserEntity');
+      return this.toDto<GetFacialRecognitionResponse>(GetFacialRecognitionResponse, {
+        userId: user.id,
+        data: pojo.data,
+        hik: pojo.hik,
+      });
+    });
+
+    return new PaginationResponse<GetFacialRecognitionResponse>(data, meta);
   }
 
   @ApiDocs({
-    summary: 'Fingerprint authentication',
+    summary: 'Face authentication',
     responseSchema: JwtAuthResponse,
     body: LoginByPinRequest,
   })
-  @Post(AUTH_ROUTES.LOGIN_BY_FINGERPRINT)
-  public async loginViaFingerprint(@TracingID({ transport: Transport.HTTP }) tracingId: string): Promise<Record<string, any>> {
-    return this._fingerprintAuthService.authenticate(tracingId);
+  @ApiSignatureSecurity()
+  @UseGuards(SignatureGuard)
+  @Post(AUTH_ROUTES.LOGIN_BY_FACE)
+  public async loginByFaceData(
+    @Headers(CLIENT_ID_KEY) clientId: string,
+    @Body()
+    payload: LoginByFaceRequest,
+  ): Promise<JwtAuthResponse> {
+    return this._authService.loginByFaceData(clientId, payload);
   }
 
   @ApiDocs({
-    summary: 'Fake scan card login',
+    summary: '[Test only] Login via login id and password',
+    responseSchema: JwtAuthResponse,
+    body: LoginRequest,
+  })
+  @Post(AUTH_ROUTES.LOGIN)
+  public async login(@Body() payload: LoginRequest): Promise<JwtAuthResponse> {
+    if (process.env.NODE_ENV === 'production') {
+      throw AppHttpException.forbidden();
+    }
+
+    return this._authService.login(payload);
+  }
+
+  @ApiDocs({
+    summary: '[Test only] Fake scan card login',
     responseSchema: JwtAuthResponse,
   })
   @Post(AUTH_ROUTES.SCAN_CARD)
-  public async loginByCard(@TracingID({ transport: Transport.HTTP }) tracingId: string): Promise<any> {
-    const res = await this._authService.loginByCard();
-    this._wsGateway.sendMessage('scan-employee' as any, {
-      success: true,
-      data: {
-        access_token: res.accessToken,
-        username: 'admin',
-        userRole: 'admin',
-        isIssue: 1,
-        isReturn: 1,
-        isReplenish: 1,
-      },
-    });
+  public async loginByCard(@Param('cardId') cardId: string): Promise<any> {
+    if (process.env.NODE_ENV === 'production') {
+      throw AppHttpException.forbidden();
+    }
+    const res = await this._authService.loginByCard(cardId);
+    this._wsGateway.sendMessage('scan-employee' as any, res);
+    return { msg: 'emitted' };
   }
 }

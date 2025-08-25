@@ -1,14 +1,16 @@
+import { PaginationRequest } from '@common/dto';
+import { PORT_STATUS, PortStatus } from '@dals/mongo/entities';
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsEnum } from 'class-validator';
+import { IsEnum, IsOptional } from 'class-validator';
 
-import { PORT_STATUS } from '../../port.constants';
-
-export class GetPortsRequest {
+export class GetPortsRequest extends PaginationRequest {
   @ApiProperty({
     enum: PORT_STATUS,
+    required: false,
   })
   @Type(() => String)
   @IsEnum(PORT_STATUS)
-  status: string;
+  @IsOptional()
+  status?: PortStatus;
 }

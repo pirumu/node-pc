@@ -1,10 +1,12 @@
-import { AppConfig } from '@config/contracts';
+import { AppConfig, buildSSLConfig, MongoDBConfig } from '@config/contracts';
 import { CONFIG_KEY } from '@config/core';
-import { API_MODELS, API_MONGO_REPOSITORIES, MongoDALModule } from '@dals/mongo';
+import { MongoDALModule, ALL_ENTITIES } from '@dals/mongo';
 import { TRACING_ID } from '@framework/constants';
 import { AppLoggerModule } from '@framework/logger';
 import { PublisherModule } from '@framework/publisher';
 import { snowflakeId } from '@framework/snowflake';
+import { MongoHighlighter } from '@mikro-orm/mongo-highlighter';
+import { MongoDriver } from '@mikro-orm/mongodb';
 import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
@@ -16,7 +18,6 @@ import { configs } from './config';
 import { AuthConfig } from './config/auth.config';
 import { MqttConfig } from './config/mqtt.config';
 import { AuthModule, JwtAuthMiddleware } from './module/auth';
-import { DeviceKeyAuthMiddleware } from './module/auth/middlewares';
 import { INVENTORY_MODULES } from './module/inventory';
 import { SYSTEM_MODULES } from './module/system';
 import { WsModule } from './module/ws';
@@ -64,9 +65,9 @@ import { WsModule } from './module/ws';
     }),
     MongoDALModule.forRootAsync({
       useFactory: (configService: ConfigService) => {
-        const mongoConfig = configService.get(CONFIG_KEY.MONGO);
-        return {
-          uri: mongoConfig.uri,
+        const mongoConfig = configService.getOrThrow<MongoDBConfig>(CONFIG_KEY.MONGO);
+        const sslConfig = buildSSLConfig(mongoConfig.ssl);
+        const driverOptions: Record<string, any> = {
           maxPoolSize: mongoConfig.maxPoolSize,
           minPoolSize: mongoConfig.minPoolSize,
           serverSelectionTimeoutMS: mongoConfig.serverSelectionTimeoutMS,
@@ -75,18 +76,34 @@ import { WsModule } from './module/ws';
           heartbeatFrequencyMS: mongoConfig.heartbeatFrequencyMS,
           retryWrites: mongoConfig.retryWrites,
           retryReads: mongoConfig.retryReads,
-          bufferCommands: mongoConfig.bufferCommands,
-          ssl: mongoConfig.ssl,
-          ...(mongoConfig.sslCA && { sslCA: mongoConfig.sslCA }),
-          ...(mongoConfig.sslCert && {
-            sslCert: mongoConfig.sslCert,
-          }),
-          ...(mongoConfig.sslKey && { sslKey: mongoConfig.sslKey }),
+        };
+
+        if (sslConfig) {
+          driverOptions.connection.ssl = sslConfig;
+          driverOptions.connection.tls = true;
+        }
+
+        return {
+          driver: MongoDriver,
+          entities: ALL_ENTITIES,
+          clientUrl: mongoConfig.uri,
+          driverOptions,
+          serialization: {
+            forceObject: true,
+          },
+          debug: mongoConfig.debug,
+          logLevel: mongoConfig.logLevel,
+          highlighter: new MongoHighlighter(),
+          discovery: {
+            checkDuplicateFieldNames: true,
+            checkDuplicateEntities: true,
+            checkNonPersistentCompositeProps: true,
+          },
         };
       },
       inject: [ConfigService],
-      models: [...API_MODELS],
-      repositories: [...API_MONGO_REPOSITORIES],
+      driver: MongoDriver,
+      entities: [...ALL_ENTITIES],
     }),
     PublisherModule.forRootAsync({
       global: true,
@@ -96,7 +113,7 @@ import { WsModule } from './module/ws';
           tcp: {
             enabled: true,
             options: {
-              host: '192.168.0.103',
+              host: '192.168.0.107',
               port: 3002,
             },
           },
@@ -108,19 +125,6 @@ import { WsModule } from './module/ws';
       },
       inject: [ConfigService],
     }),
-    // FingerprintScanModule.forRootAsync({
-    //   useFactory: (configService: ConfigService) => {
-    //     const config = configService.getOrThrow<FingerprintConfig>(CONFIG_KEY.FINGERPRINT);
-    //     return {
-    //       ...DEFAULT_CONFIG,
-    //       binaryPath: config.binaryPath,
-    //       devicePort: config.defaultPort,
-    //       maxCommandAge: 30000, // 30s
-    //       logLevel: 'debug',
-    //     };
-    //   },
-    //   inject: [ConfigService],
-    // }),
     ServicesModule,
     AuthModule,
     ...INVENTORY_MODULES,
@@ -131,6 +135,6 @@ import { WsModule } from './module/ws';
 export class AppModule implements NestModule {
   public configure(consumer: MiddlewareConsumer): void {
     // consumer.apply(DeviceKeyAuthMiddleware).forRoutes(...['/ports']);
-    consumer.apply(JwtAuthMiddleware).forRoutes(...['/items']);
+    // consumer.apply(JwtAuthMiddleware).forRoutes(...['/items']);
   }
 }

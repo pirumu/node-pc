@@ -1,53 +1,19 @@
-export const ITEM_ROUTES = {
-  GROUP: 'items',
-  ISSUE: 'issue',
-  RETURN: 'return',
-  REPLENISH: 'replenish',
-  TYPES: 'types',
-  NEXT_ITEM: 'next-item',
-  CONFIGURE: 'configure',
-} as const;
-
-export const TRANSACTION_STATUS = {
-  PROCESSING: 'processing',
-  COMPLETED: 'completed',
-  ERROR: 'error',
-} as const;
-
-export enum ProcessState {
-  IDLE = 'IDLE',
-  MQTT_CONNECTING = 'MQTT_CONNECTING',
-  READY = 'READY',
-  OPENING_BIN = 'OPENING_BIN',
-  BIN_OPEN = 'BIN_OPEN',
-  WAITING_USER_ACTION = 'WAITING_USER_ACTION',
-  CLOSING_BIN = 'CLOSING_BIN',
-  UPDATING_TRANSACTION = 'UPDATING_TRANSACTION',
-  PROCESSING_NEXT = 'PROCESSING_NEXT',
-  COMPLETED = 'COMPLETED',
-  ERROR = 'ERROR',
-  BIN_FAILED = 'BIN_FAILED',
+export enum ITEM_ROUTES {
+  GROUP = 'items',
+  ISSUE = 'issue',
+  RETURN = 'return',
+  REPLENISH = 'replenish',
+  TYPES = 'types',
+  NEXT_ITEM = 'next-item',
+  CONFIGURE = 'configure',
 }
 
-export enum ProcessEvent {
-  START = 'START',
-  MQTT_CONNECTED = 'MQTT_CONNECTED',
-  PROCESS_ITEM = 'PROCESS_ITEM',
-  LOCK_OPEN_SUCCESS = 'LOCK_OPEN_SUCCESS',
-  LOCK_OPEN_FAIL = 'LOCK_OPEN_FAIL',
-  USER_ACTION_COMPLETE = 'USER_ACTION_COMPLETE',
-  WARNING_POPUP_CLOSED = 'WARNING_POPUP_CLOSED',
-  BIN_CLOSED = 'BIN_CLOSED',
-  TRANSACTION_UPDATED = 'TRANSACTION_UPDATED',
-  SKIP_ITEM = 'SKIP_ITEM',
-  ALL_ITEMS_PROCESSED = 'ALL_ITEMS_PROCESSED',
-  ERROR_OCCURRED = 'ERROR_OCCURRED',
+export enum PROCESSING_ITEM_ROUTES {
+  GROUP = 'processing-items',
+  FORCE_NEXT_ITEM = 'force-next',
 }
 
-export const QUEUE_NAMES = {
-  PROCESS_ITEM: 'process-item',
-} as const;
-
-export const JOB_NAMES = {
-  [QUEUE_NAMES.PROCESS_ITEM]: 'process-item-job',
-} as const;
+export enum ITEM_TYPE_ROUTES {
+  GROUP = 'item-types',
+  GET_ITEM_TYPES = '/',
+}

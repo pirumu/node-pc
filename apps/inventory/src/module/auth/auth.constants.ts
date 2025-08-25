@@ -8,8 +8,10 @@ export enum AuthType {
 
 export enum AUTH_ROUTES {
   PATH = 'auth',
-  LOGIN_BY_PIN_PASS = 'login-by-pin-pass',
+  LOGIN_BY_PIN_PASS = '2fa',
   LOGIN = 'login',
   LOGIN_BY_FINGERPRINT = 'login/finger',
-  SCAN_CARD = 'scan/card',
+  LOGIN_BY_FACE = 'login/face',
+  FACIAL_RECOGNITION = 'facial-recognition',
+  SCAN_CARD = 'scan/:cardId',
 }

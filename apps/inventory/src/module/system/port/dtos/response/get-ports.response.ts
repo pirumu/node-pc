@@ -16,17 +16,13 @@ export class GetPortsResponse {
 
   @ApiProperty()
   @Expose()
-  heartbeat?: number;
-
-  @ApiProperty()
-  @Expose()
   status: string;
 
   @ApiProperty()
   @Expose()
-  createdAt: Date;
+  createdAt: string;
 
   @ApiProperty()
   @Expose()
-  updatedAt: Date;
+  updatedAt: string;
 }

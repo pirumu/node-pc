@@ -1,79 +1,118 @@
-export enum EVENT_TYPE {
-  TRACE_CU_LOCK_OPEN = 'cu/lockOpen',
-  DEVICE_ACTIVATED = 'device/active',
+export const EVENT_TYPE = {
+  CARD: {
+    SCAN: 'card/scan',
+    SCANNED: 'card/scanned',
+  },
+  LOADCELL: {
+    // request
+    START_READING: 'loadcell/start',
+    STOP_READING: 'loadcell/stop',
+    ACTIVATE: 'loadcell/activate',
 
-  BIN_OPENED = 'bin/open',
-  BIN_CLOSED = 'bin/close',
+    // response
+    ACTIVATED: 'loadcell/activated',
+    STATUS_CHANGED: 'loadcell/status-changed',
+    ALL_COMPUTED: 'loadcell/all-computed',
+    WEIGHT_CALCULATED: 'loadcell/weight-calculated',
+    ERROR: 'loadcell/error',
+  },
 
-  ISSUE_SUCCESS = 'processItem/success',
-  ISSUE_PROCESSING = 'lock/openSuccess',
+  BIN: {
+    OPENED: 'bin/opened',
+    CLOSED: 'bin/closed',
+  },
 
-  /**Listen realtime CU lock, loadcells ... */
-  // RFID_DEVICE = 'rfid/connect',
-  CU_DEVICE = 'cu/connect',
-  LOAD_CELLS = 'loadcell/connect',
-  CLOUD_CONNECT = 'cloud/connect',
+  LOCK: {
+    OPEN: 'lock/open',
+    STATUS: 'lock/status',
+    OPEN_SUCCESS: 'lock/open-success',
+    OPEN_FAIL: 'lock/open-fail',
+    STATUS_CHANGED: 'lock/status-changed',
+    FAILED_ATTEMPTS_EXCEEDED: 'lock/failed-attempts-exceeded',
+  },
 
-  /**Listen all device realtime */
-  BIN_DEVICES = 'device/computed',
+  /** Events related to core business processes (Issue, Return, Replenish) */
+  PROCESS: {
+    QTY_CHANGED: 'process/item-qty-changed',
+    INSTRUCTION: 'process/instruction',
+    CALCULATE_ITEM: 'process/calculate-item',
+    ISSUE_STEP_SUCCESS: 'process/step/issue-success',
+    ISSUE_STEP_ERROR: 'process/issue-error',
+    ISSUE_STEP_WARNING: 'process/issue-warning',
 
-  BINS_TOTAL = 'bin/computed',
+    ISSUE_SUCCESS: 'process/issue-success',
+    ISSUE_ERROR: 'process/issue-error',
+    ISSUE_WARNING: 'process/issue-warning',
 
-  BIN_LOCK_STATUS = 'lock/status',
+    FORCE_NEXT_ITEM: 'process/force-next-item',
 
-  // DEVICE_STATUS = 'device/status',
+    RETURN_STEP_SUCCESS: 'process/step/return-success',
+    RETURN_STEP_ERROR: 'process/return-error',
+    RETURN_STEP_WARNING: 'process/return-warning',
 
-  OPEN_BIN_FAIL = 'lock/openFail',
+    RETURN_SUCCESS: 'process/return-success',
+    RETURN_ERROR: 'process/return-error',
+    RETURN_WARNING: 'process/return-warning',
 
-  ISSUE_ERROR = 'issue/error',
-  REPLENISH_ERROR = 'replenish/error',
-  RETURN_ERROR = 'return/error',
+    REPLENISH_SUCCESS: 'process/replenish-success',
+    REPLENISH_ERROR: 'process/replenish-error',
+    REPLENISH_WARNING: 'process/replenish-warning',
 
-  ISSUE_WARNING = 'issue/warning',
+    REPLENISH_STEP_SUCCESS: 'process/step/replenish-success',
+    REPLENISH_STEP_ERROR: 'process/replenish-error',
+    REPLENISH_STEP_WARNING: 'process/replenish-warning',
 
-  RETURN_WARNING = 'return/warning',
-  REPLENISH_WARNING = 'replenish/warning',
+    ITEM_SCANNED: 'process/item-scanned',
+    TRANSACTION_STARTED: 'process/transaction-started',
+    TRANSACTION_COMPLETED: 'process/transaction-completed',
+    TRANSACTION_FAILED: 'process/transaction-failed',
+  },
 
-  SCAN_ITEM = 'scan-item',
+  /** Events related to network/service connections */
+  CONNECTION: {
+    CLOUD: 'connection/cloud',
+    RFID_DEVICE: 'connection/rfid-device',
+    CU_DEVICE: 'connection/cu-device',
+    LOAD_CELL: 'connection/load-cell',
+    MQTT_CONNECTED: 'connection/mqtt-connected',
+    MQTT_DISCONNECTED: 'connection/mqtt-disconnected',
+  },
 
-  CONFIRM_PROCESS = 'process-item/error',
+  /** System and maintenance events */
+  SYSTEM: {
+    STARTUP: 'system/startup',
+    SHUTDOWN: 'system/shutdown',
+    ERROR: 'system/error',
+    WARNING: 'system/warning',
+    MAINTENANCE_MODE: 'system/maintenance-mode',
+    CALIBRATION_MODE: 'system/calibration-mode',
+  },
 
-  CARD_SCAN = 'card/scan',
-  CARD_DEVICE_CONNECTED = 'rfid/connect',
-  LOAD_CELLS_WEIGHT_CALCULATED = 'device/weight',
+  /** User and authentication events */
+  USER: {
+    LOGIN: 'user/login',
+    LOGOUT: 'user/logout',
+    ACCESS_GRANTED: 'user/access-granted',
+    ACCESS_DENIED: 'user/access-denied',
+    RFID_SCANNED: 'user/rfid-scanned',
+  },
+} as const;
 
-  LOAD_CELLS_HEARTBEAT = 'device/status',
-}
+export type LoadcellEventType = (typeof EVENT_TYPE.LOADCELL)[keyof typeof EVENT_TYPE.LOADCELL];
+export type CardEventType = (typeof EVENT_TYPE.CARD)[keyof typeof EVENT_TYPE.CARD];
+export type BinEventType = (typeof EVENT_TYPE.BIN)[keyof typeof EVENT_TYPE.BIN];
+export type LockEventType = (typeof EVENT_TYPE.LOCK)[keyof typeof EVENT_TYPE.LOCK];
+export type ProcessEventType = (typeof EVENT_TYPE.PROCESS)[keyof typeof EVENT_TYPE.PROCESS];
+export type ConnectionEventType = (typeof EVENT_TYPE.CONNECTION)[keyof typeof EVENT_TYPE.CONNECTION];
+export type SystemEventType = (typeof EVENT_TYPE.SYSTEM)[keyof typeof EVENT_TYPE.SYSTEM];
+export type UserEventType = (typeof EVENT_TYPE.USER)[keyof typeof EVENT_TYPE.USER];
 
-// using both FE and BE
-export enum ShareEvents {
-  ISSUE_SUCCESS = 'processItem/success',
-  ISSUE_PROCESSING = 'lock/openSuccess',
-
-  /**Listen realtime CU lock, loadcells ... */
-  RFID_DEVICE = 'rfid/connect',
-  CU_DEVICE = 'cu/connect',
-  LOAD_CELLS = 'loadcell/connect',
-  CLOUD_CONNECT = 'cloud/connect',
-
-  /**Listen all device realtime */
-  BIN_DEVICES = 'device/computed',
-
-  BINS_TOTAL = 'bin/computed',
-
-  BIN_LOCK_STATUS = 'lock/status',
-
-  DEVICE_STATUS = 'device/status',
-
-  OPEN_BIN_FAIL = 'lock/openFail',
-
-  ISSUE_ERROR = 'issue/error',
-  REPLENISH_ERROR = 'replenish/error',
-  RETURN_ERROR = 'return/error',
-
-  ISSUE_WARNING = 'issue/warning',
-  RETURN_WARNING = 'return/warning',
-  REPLENISH_WARNING = 'replenish/warning',
-
-  SCAN_ITEM = 'scan-item',
-}
+export type AnyEventType =
+  | LoadcellEventType
+  | BinEventType
+  | LockEventType
+  | ProcessEventType
+  | ConnectionEventType
+  | SystemEventType
+  | UserEventType
+  | CardEventType;

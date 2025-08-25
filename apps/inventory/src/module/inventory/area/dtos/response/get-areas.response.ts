@@ -15,18 +15,14 @@ export class GetAreasResponse {
   torque: number;
 
   @ApiProperty()
-  @Expose({
-    name: 'created_at',
-  })
+  @Expose()
   @Type(() => String)
   createdAt: string;
 
   @ApiProperty({
     required: false,
   })
-  @Expose({
-    name: 'updated_at',
-  })
+  @Expose()
   @Type(() => String)
   updatedAt?: string;
 }

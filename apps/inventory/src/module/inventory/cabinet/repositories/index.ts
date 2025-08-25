@@ -1,1 +1,1 @@
-export * from './cabinet.repository';
+// export * from './cabinet.repository';

@@ -1,6 +1,7 @@
 import { AuthClaimsDto, AuthUserDto } from '@common/dto';
-import { UserEntity } from '@entity';
-import { Injectable, InternalServerErrorException } from '@nestjs/common';
+import { UserEntity } from '@dals/mongo/entities';
+import { AppHttpException } from '@framework/exception';
+import { Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 
 @Injectable()
@@ -11,12 +12,10 @@ export class JwtAuthService {
     const claims = await this._jwtService.verifyAsync<AuthClaimsDto>(jwt);
     return {
       id: claims.id,
-      loginId: claims.loginId,
-      userCloudId: claims.userCloudId,
+      username: claims.username,
       employeeId: claims.employeeId,
-      cardNumber: claims.cardNumber,
+      cardId: claims.cardId,
       role: claims.role,
-      genealogy: claims.genealogy,
     };
   }
 
@@ -24,20 +23,21 @@ export class JwtAuthService {
     try {
       return await this._jwtService.signAsync({
         id: user.id,
-        userCloudId: user.cloud.id,
+        cardId: user.cardId,
         employeeId: user.employeeId,
-        cardNumber: user.cardNumber,
-        role: user.role,
-        genealogy: user.genealogy,
-        loginId: user.loginId,
-        // backward compatible
-        userLogin: user.loginId,
-        userRole: user.role,
-        treeCode: user.genealogy,
-        ['user_cloud_id']: user.cloud.id,
+        username: user.username,
+        role: user.role.id,
       });
     } catch (error) {
-      throw new InternalServerErrorException('Failed to generate token', error);
+      throw AppHttpException.internalServerError({
+        message: 'Failed to generate token',
+        data: {
+          error: {
+            name: error.name,
+            message: error.message,
+          },
+        },
+      });
     }
   }
 }

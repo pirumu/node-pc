@@ -1,0 +1,185 @@
+import { WeightCalculatedEvent } from '@common/business/events';
+import { LOADCELL_STATUS, LoadcellEntity, PORT_STATUS, PortEntity } from '@dals/mongo/entities';
+import { CreateRequestContext, EntityManager } from '@mikro-orm/core';
+import { Injectable, Logger } from '@nestjs/common';
+
+@Injectable()
+export class LoadcellService {
+  private readonly _logger = new Logger(LoadcellService.name);
+
+  constructor(private readonly _em: EntityManager) {}
+
+  /**
+   * Main handler to process a batch of payloads.
+   * It iterates through payloads and delegate processing, ensuring one failure does not stop others.
+   */
+  public async onWeighCalculated(payloads: WeightCalculatedEvent[]): Promise<void> {
+    const processingPromises = payloads.map(async (payload) => this._processSinglePayload(payload));
+    const results = await Promise.allSettled(processingPromises);
+
+    results.forEach((result, index) => {
+      if (result.status === 'rejected') {
+        this._logger.error(
+          `Failed to process payload for path ${payloads[index].portPath} and hardwareId ${payloads[index].hardwareId}`,
+          result.reason,
+        );
+      }
+    });
+  }
+
+  @CreateRequestContext()
+  private async _processSinglePayload(payload: WeightCalculatedEvent): Promise<void> {
+    if (payload.status !== LOADCELL_STATUS.RUNNING) {
+      this._logger.warn('Skipping. Loadcell not running');
+      return;
+    }
+
+    try {
+      // Part 1: Auto-detect and create the loadcell if it doesn't exist.
+      const loadcell = await this._provisionOrGetLoadcell(payload);
+
+      // Part 2: Update business logic for the existing loadcell.
+      await this._processLoadcellUpdate(loadcell, payload.weight);
+    } catch (error) {
+      this._logger.error(`An unexpected error occurred while processing hardwareId ${payload.hardwareId}`, error.stack);
+      throw error;
+    }
+  }
+
+  // =================================================================
+  // PART 1: AUTO-DETECT AND CREATE (PROVISIONING)
+  // =================================================================
+
+  private async _provisionOrGetLoadcell(payload: WeightCalculatedEvent): Promise<LoadcellEntity> {
+    const { hardwareId, portPath } = payload;
+    const loadcell = await this._em.findOne(LoadcellEntity, { hardwareId }, { populate: ['port'] });
+
+    if (loadcell) {
+      if (!loadcell.port || loadcell.port.path !== portPath) {
+        loadcell.port = await this._findOrCreatePort(portPath);
+      }
+      loadcell.port.heartbeat = Date.now();
+      loadcell.port.status = PORT_STATUS.CONNECTED;
+      return loadcell;
+    }
+
+    this._logger.log(`New loadcell detected. Provisioning hardwareId ${hardwareId} on port ${portPath}.`);
+
+    const port = await this._findOrCreatePort(portPath);
+
+    const newLoadcell = new LoadcellEntity({
+      hardwareId,
+      port,
+      code: `RAW-${hardwareId}`,
+    });
+
+    await this._em.persistAndFlush(newLoadcell);
+    return newLoadcell;
+  }
+
+  private async _findOrCreatePort(path: string): Promise<PortEntity> {
+    let port = await this._em.findOne(PortEntity, { path });
+    if (!port) {
+      port = new PortEntity({ path, name: path, status: PORT_STATUS.CONNECTED });
+    }
+    port.heartbeat = Date.now();
+    port.status = PORT_STATUS.CONNECTED;
+    this._em.persist(port);
+    return port;
+  }
+
+  // =================================================================
+  // PART 2: BUSINESS LOGIC UPDATE (PROCESSING)
+  // =================================================================
+
+  private async _processLoadcellUpdate(loadcell: LoadcellEntity, newWeight: number): Promise<void> {
+    loadcell.heartbeat = Date.now();
+
+    if (!loadcell.state.isCalibrated) {
+      this._logger.debug(`Skipping weight update for uncalibrated loadcell with hardwareId: ${loadcell.hardwareId}`, {
+        hardwareId: loadcell.hardwareId,
+        newWeight: newWeight,
+      });
+      loadcell.reading.currentWeight = newWeight;
+      await this._em.flush();
+      return;
+    }
+
+    // Step 1: Handle initial state: setting the zero-weight for the first time.
+    if (!loadcell.state.isCalibrated && !loadcell.state.isUpdatedWeight) {
+      this._logger.log(`Performing initial zero-weight set for loadcell ${loadcell.id}.`);
+      loadcell.calibration.zeroWeight = newWeight;
+      loadcell.reading.currentWeight = newWeight;
+      loadcell.state.isUpdatedWeight = true;
+      await this._em.flush();
+      return;
+    }
+
+    // Step 2: Check if the associated Bin is locked. This dictates the entire logic flow.
+    await this._em.populate(loadcell, ['bin']); // Ensure bin.state is loaded
+    if (loadcell.bin.unwrap().state.isLocked) {
+      await this._handleLockedBinUpdate(loadcell, newWeight);
+      return;
+    }
+
+    // Step 3: Main Logic for Unlocked Bins.
+    const { zeroWeight, unitWeight } = loadcell.calibration;
+    const oldWeight = loadcell.reading.currentWeight;
+    let changeInQuantity = 0;
+
+    if (unitWeight > 0) {
+      // Calculate quantities "on-the-fly" without storing th_em.
+      const oldNetWeight = oldWeight - zeroWeight;
+      const oldCalculatedQuantity = this._calculateRoundedQuantity(oldNetWeight / unitWeight);
+
+      const newNetWeight = newWeight - zeroWeight;
+      const newCalculatedQuantity = this._calculateRoundedQuantity(newNetWeight / unitWeight);
+
+      changeInQuantity = newCalculatedQuantity - oldCalculatedQuantity;
+    }
+
+    // Step 4: Update the persistent reading object with the latest data.
+    loadcell.reading.currentWeight = newWeight;
+    if (changeInQuantity !== 0) {
+      loadcell.reading.pendingChange += changeInQuantity;
+      loadcell.state.isSync = false;
+      this._logger.log(
+        `Detected change of ${changeInQuantity} for loadcell ${loadcell.id}. Pending change is now ${loadcell.reading.pendingChange}.`,
+      );
+    }
+
+    await this._em.flush();
+  }
+
+  /**
+   * Handles the specific update logic when a bin is locked.
+   * This "commits" the pending changes to the official `calibration.quantity`.
+   */
+  private async _handleLockedBinUpdate(loadcell: LoadcellEntity, newWeight: number): Promise<void> {
+    this._logger.log(`Handling update for LOCKED bin associated with loadcell ${loadcell.id}.`);
+    const pendingChange = loadcell.reading.pendingChange;
+
+    if (pendingChange !== 0) {
+      loadcell.calibration.quantity += pendingChange;
+      loadcell.state.isSync = false;
+    }
+
+    loadcell.reading.pendingChange = 0;
+    loadcell.reading.currentWeight = newWeight;
+
+    await this._em.flush();
+  }
+
+  /**
+   * A helper function to encapsulate the specific rounding logic from the original system.
+   * This creates an asymmetric dead-zone to prevent minor fluctuations from being registered as changes.
+   * @param calculatedQuantity The raw calculated quantity (a float).
+   * @returns The rounded quantity according to the specific business rule.
+   */
+  private _calculateRoundedQuantity(calculatedQuantity: number): number {
+    if (!isFinite(calculatedQuantity)) {
+      return 0;
+    }
+    return calculatedQuantity > 0 ? Math.round(calculatedQuantity - 0.3) : Math.round(calculatedQuantity + 0.29);
+  }
+}

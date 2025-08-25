@@ -1,10 +1,8 @@
 import { Prop, Schema } from '@nestjs/mongoose';
 import { Schema as MSchema, Types } from 'mongoose';
 
-import { SoftDeleteDocument } from '../plugins/soft-delete';
-
 @Schema()
-export class BaseSchema implements SoftDeleteDocument {
+export class BaseSchema {
   _id: Types.ObjectId;
 
   id: string;

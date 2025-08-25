@@ -1,11 +1,7 @@
 export const PORT_ROUTES = {
   GROUP: 'ports',
-  GET_PORTS: 'list',
-  UPDATE_PORT_NAME: 'update',
-  RESET_PORT_NAME: 'refresh-name',
+  GET_PORTS: '/',
+  GET_PORTS_LOADCELLS: '/loadcells',
+  UPDATE_PORT_NAME: ':id',
+  RESET_PORT_NAME: ':id/reset',
 };
-
-export enum PORT_STATUS {
-  CONNECTED = 'connected',
-  DISCONNECTED = 'disconnected',
-}

@@ -70,10 +70,16 @@ export const getMongoDBConfig = (): MongoDBConfig => {
     }),
 
     // SSL/TLS Settings
-    ssl: resolve('MONGO_SSL', (v) => v === 'true', { default: false }),
-    sslCA: resolve('MONGO_SSL_CA', String, { default: undefined }),
-    sslCert: resolve('MONGO_SSL_CERT', String, { default: undefined }),
-    sslKey: resolve('MONGO_SSL_KEY', String, { default: undefined }),
+    ssl: {
+      enabled: resolve('MONGO_SSL', (v) => v === 'true', { default: false }),
+      ca: resolve('MONGO_SSL_CA', String, { default: undefined }),
+      cert: resolve('MONGO_SSL_CERT', String, { default: undefined }),
+      key: resolve('MONGO_SSL_KEY', String, { default: undefined }),
+
+      caData: resolve('MONGO_SSL_CA_DATA', String, { default: undefined }),
+      certData: resolve('MONGO_SSL_CERT_DATA', String, { default: undefined }),
+      keyData: resolve('MONGO_SSL_KEY_DATA', String, { default: undefined }),
+    },
 
     // Debug Settings
     debug: resolve('MONGO_DEBUG', (v) => v === 'true', { default: false }),

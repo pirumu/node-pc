@@ -1,5 +1,4 @@
 import { FingerprintVerifyCommand } from '@common/commands/auth';
-import { UserEntity } from '@entity';
 import { FINGERPRINT_RESPONSE_ID, IContextualResponse } from '@fingerprint-scanner';
 import { TRACING_ID } from '@framework/constants';
 import { PublisherService, Transport } from '@framework/publisher';

@@ -1,16 +1,17 @@
+import { PaginationResponse, StatusResponse } from '@common/dto';
 import { BaseController } from '@framework/controller';
 import { ApiDocs, ControllerDocs } from '@framework/swagger';
-import { Body, Controller, Get, Param, Post, Put } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Put, Query } from '@nestjs/common';
 
 import { HEADER_KEYS } from '../../../common';
 
 import { BIN_ROUTES } from './bin.constants';
 import { BinService } from './bin.service';
-import { ConfirmProcessRequest, OpenAllBinRequest } from './dtos/request';
-import { GetBinsResponse, GetBinResponse } from './dtos/response';
+import { OpenCabinetBinRequest, GetBinsRequest, GetBinRequest } from './dtos/request';
+import { GetBinResponse } from './dtos/response';
 
 @ControllerDocs({
-  tag: '[INVENTORY] Bin',
+  tag: 'Bin',
   securitySchema: 'header',
   securityKey: HEADER_KEYS.DEVICE_KEY,
 })
@@ -21,81 +22,63 @@ export class BinController extends BaseController {
   }
 
   @ApiDocs({
-    responseSchema: [GetBinsResponse],
+    summary: 'Get bins',
+    paginatedResponseSchema: GetBinResponse,
   })
   @Get(BIN_ROUTES.GET_BINS)
-  public async getBins(): Promise<GetBinsResponse[]> {
-    // const result = await this._binService.getBins();
-    // return result.map((bin) => this.toDto<GetBinsResponse>(GetBinsResponse, bin));
-    return [];
+  public async getBins(@Query() query: GetBinsRequest): Promise<PaginationResponse<GetBinResponse>> {
+    const { rows, meta } = await this._binService.getBins(query.page || 1, query.limit || 10, query.cabinetId);
+    const data = rows.map((row) => this.toDto<GetBinResponse>(GetBinResponse, row.toPOJO()));
+    return new PaginationResponse(data, meta);
   }
 
   @ApiDocs({
+    summary: 'Get bin by id',
     responseSchema: GetBinResponse,
   })
   @Get(BIN_ROUTES.GET_BIN_BY_ID)
-  public async getBinById(@Param('id') id: string): Promise<GetBinResponse | null> {
-    return null;
-    // const result = await this._binService.getBinById(id);
-    // if (!result) {
-    //   return null;
-    // }
-    // return this.toDto<GetBinResponse>(GetBinResponse, result);
+  public async getBinById(@Param('id') id: string, @Query() query: GetBinRequest): Promise<GetBinResponse> {
+    const result = await this._binService.getBinById(id, query.enrich);
+    return this.toDto<GetBinResponse>(GetBinResponse, result.toPOJO());
   }
 
   @ApiDocs({
-    responseSchema: Boolean,
+    summary: 'Open bin by id',
+    responseSchema: StatusResponse,
   })
   @Post(BIN_ROUTES.OPEN_BIN)
-  public async open(@Param('id') id: string): Promise<boolean> {
-    return this._binService.open(id);
+  public async openBinById(@Param('id') id: string): Promise<StatusResponse> {
+    const isSuccess = await this._binService.open(id);
+    return this.toDto<StatusResponse>(StatusResponse, { status: isSuccess });
   }
 
   @ApiDocs({
-    responseSchema: Boolean,
+    summary: "Open cabinet's bins",
+    responseSchema: StatusResponse,
   })
-  @Post(BIN_ROUTES.OPEN_ALL)
-  public async openAll(@Body() body: OpenAllBinRequest): Promise<boolean> {
-    return this._binService.openAll(body);
+  @Post(BIN_ROUTES.OPEN_BINS)
+  public async openCabinetBins(@Body() body: OpenCabinetBinRequest): Promise<StatusResponse> {
+    const isSuccess = await this._binService.openCabinetBins(body);
+    return this.toDto<StatusResponse>(StatusResponse, { status: isSuccess });
   }
 
   @ApiDocs({
-    responseSchema: Boolean,
+    summary: 'Activate Bin',
+    responseSchema: StatusResponse,
   })
   @Put(BIN_ROUTES.ACTIVATE_BIN)
-  public async active(@Param('id') id: string): Promise<boolean> {
-    return this._binService.activate(id);
+  public async activateBin(@Param('id') id: string): Promise<StatusResponse> {
+    const isSuccess = await this._binService.activate(id);
+    return this.toDto<StatusResponse>(StatusResponse, { status: isSuccess });
   }
 
   @ApiDocs({
-    responseSchema: Boolean,
+    summary: 'Deactivate Bin',
+    responseSchema: StatusResponse,
   })
   @Put(BIN_ROUTES.DEACTIVATE_BIN)
-  public async deactivate(@Param('id') id: string): Promise<boolean> {
-    return this._binService.deactivate(id);
+  public async deactivateBin(@Param('id') id: string): Promise<StatusResponse> {
+    const isSuccess = await this._binService.deactivate(id);
+    return this.toDto<StatusResponse>(StatusResponse, { status: isSuccess });
   }
-
-  @ApiDocs({
-    responseSchema: Boolean,
-  })
-  @Post('confirm')
-  public async confirm(@Body() dto: ConfirmProcessRequest): Promise<boolean> {
-    return this._binService.confirm(dto.isNextRequestItem);
-  }
-
-  @ApiDocs({
-    responseSchema: null, // Define response schema as needed
-  })
-  @Post('replace-item/:id')
-  public async replaceItem(@Param('id') id: string) {
-    // return this._binService.replaceItem(id);
-  }
-
-  // @ApiDocs({
-  //   responseSchema: null, // Define response schema as needed
-  // })
-  // @Post('remove-item/:id')
-  // public async removeItem(@Param('id') id: string) {
-  //   return this._binService.removeItem(id);
-  // }
 }

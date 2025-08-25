@@ -1,25 +1,31 @@
+import { PaginationResponse } from '@common/dto';
+import { BaseController } from '@framework/controller';
 import { ApiDocs, ControllerDocs } from '@framework/swagger';
-import { Controller, Post, Query } from '@nestjs/common';
+import { Controller, Get, Query } from '@nestjs/common';
 
-import { GetUsersDto } from './dtos/request';
+import { GetUsersRequest } from './dtos/request';
 import { GetUsersResponse } from './dtos/response';
 import { USER_ROUTES } from './user.constants';
 import { UserService } from './user.service';
 
 @ControllerDocs({
-  tag: 'User',
+  tag: 'Users',
   securitySchema: 'bearer',
 })
 @Controller(USER_ROUTES.GROUP)
-export class UserController {
-  constructor(private readonly _userService: UserService) {}
+export class UserController extends BaseController {
+  constructor(private readonly _userService: UserService) {
+    super();
+  }
 
   @ApiDocs({
-    responseSchema: GetUsersResponse,
+    summary: 'Get all users',
+    paginatedResponseSchema: GetUsersResponse,
   })
-  @Post(USER_ROUTES.GET_USERS)
-  public async getUsers(@Query() queries: GetUsersDto): Promise<GetUsersResponse> {
-    const result = await this._userService.findAll(queries);
-    return GetUsersResponse.toLegacyResponse(result.total, result.entities);
+  @Get(USER_ROUTES.GET_USERS)
+  public async getUsers(@Query() query: GetUsersRequest): Promise<PaginationResponse<GetUsersResponse>> {
+    const { rows, meta } = await this._userService.findAll(query.page || 1, query.limit || 10);
+    const data = rows.map((row) => this.toDto<GetUsersResponse>(GetUsersResponse, row.toPOJO()));
+    return new PaginationResponse(data, meta);
   }
 }

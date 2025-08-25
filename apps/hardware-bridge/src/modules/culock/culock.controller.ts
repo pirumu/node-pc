@@ -1,5 +1,6 @@
+import { EVENT_TYPE } from '@common/constants';
 import { CuLockRequest } from '@culock/dto';
-import { BaseResponse } from '@culock/protocols';
+import { BaseResponse, Command } from '@culock/protocols';
 import { Controller } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
 
@@ -13,13 +14,15 @@ export class CulockController {
     private readonly _lockMonitoringService: LockMonitoringService,
   ) {}
 
-  @MessagePattern('cu/open')
+  @MessagePattern(EVENT_TYPE.LOCK.OPEN)
   public async open(@Payload() cuOpenRequest: CuLockRequest): Promise<BaseResponse> {
+    cuOpenRequest.command = Command.OPEN_LOCK;
     return this._culockService.open(cuOpenRequest);
   }
 
-  @MessagePattern('cu/status')
+  @MessagePattern(EVENT_TYPE.LOCK.STATUS)
   public async status(@Payload() cuOpenRequest: CuLockRequest): Promise<BaseResponse> {
+    cuOpenRequest.command = Command.GET_STATUS;
     return this._culockService.status(cuOpenRequest);
   }
 

@@ -1,40 +1,17 @@
+import { AnyEntity } from '@mikro-orm/core';
+import { EntityName, MikroOrmModule, MikroOrmModuleAsyncOptions } from '@mikro-orm/nestjs';
 import { DynamicModule, Global, Module } from '@nestjs/common';
-import { ModelDefinition, MongooseModule, MongooseModuleAsyncOptions } from '@nestjs/mongoose';
-import { Connection } from 'mongoose';
 
-import mongooseSoftDelete from './plugins/soft-delete/plugin';
+type MongoDALModuleOptions = MikroOrmModuleAsyncOptions & { entities: EntityName<AnyEntity>[] };
 
-type MongoDALModuleOptions = MongooseModuleAsyncOptions & { models: ModelDefinition[]; repositories: any[] };
 @Global()
 @Module({})
 export class MongoDALModule {
   public static forRootAsync(options: MongoDALModuleOptions): DynamicModule {
-    const moduleOptions = {
-      ...options,
-      useFactory: async (...args: any[]): Promise<any> => {
-        if (!options.useFactory) {
-          throw new Error('MongoDALModule requires options.useFactory');
-        }
-        const mongooseOptions = await options.useFactory(...args);
-        return {
-          ...mongooseOptions,
-          connectionFactory: (connection: Connection): Connection => {
-            connection.plugin(mongooseSoftDelete, {
-              overrideMethods: 'all',
-              deletedAt: true,
-              deletedBy: false,
-              deletedByType: String,
-            });
-            return connection;
-          },
-        };
-      },
-    };
     return {
       module: MongoDALModule,
-      imports: [MongooseModule.forRootAsync(moduleOptions), MongooseModule.forFeature(options.models)],
-      providers: [...options.repositories],
-      exports: [MongooseModule, ...options.repositories],
+      imports: [MikroOrmModule.forRootAsync(options), MikroOrmModule.forFeature(options.entities)],
+      exports: [MikroOrmModule],
     };
   }
 }

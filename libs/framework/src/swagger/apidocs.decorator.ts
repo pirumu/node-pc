@@ -1,47 +1,59 @@
 import { applyDecorators } from '@nestjs/common';
-import { ApiBearerAuth, ApiBody, ApiHeader, ApiOkResponse, ApiOperation, ApiSecurity, ApiTags } from '@nestjs/swagger';
-import { ApiProperty } from '@nestjs/swagger/dist/decorators/api-property.decorator';
-import { isArray } from 'class-validator';
-
-class ResponseDto {
-  success: true;
-  data?: object | Array<any>;
-}
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiExtraModels,
+  ApiHeader,
+  ApiHeaders,
+  ApiOkResponse,
+  ApiOperation,
+  ApiSecurity,
+  ApiTags,
+  getSchemaPath,
+} from '@nestjs/swagger';
+import { PaginationResponse } from '@common/dto';
 
 type ApiDocOptions = {
   summary?: string;
+  description?: string;
   responseSchema?: any;
+  paginatedResponseSchema?: any;
   body?: any;
 };
 
 function getSwaggerSchema(dto: any): any {
-  dto = dto ?? {};
-
-  class TemplateSchema extends ResponseDto {
-    @ApiProperty({ type: dto })
-    declare data: any;
-  }
-
-  const generateClass = (name: any) =>
-    ({
-      [name]: class extends TemplateSchema {},
-    })[name];
-
-  const dtoName = isArray(dto) ? dto[0].name : dto.name;
-
-  const uniqueClassName = (isArray(dto) ? 'ArrayResponseSchema' : 'ResponseSchema') + dtoName;
-
-  return generateClass(uniqueClassName);
+  return dto;
 }
 
 export const ApiDocs = (options: ApiDocOptions) => {
   const decorators: any = [];
 
-  decorators.push(
-    ApiOkResponse({
-      type: getSwaggerSchema(options.responseSchema),
-    }),
-  );
+  if (options.paginatedResponseSchema) {
+    decorators.push(
+      ApiExtraModels(PaginationResponse, options.paginatedResponseSchema),
+      ApiOkResponse({
+        schema: {
+          allOf: [
+            { $ref: getSchemaPath(PaginationResponse) },
+            {
+              properties: {
+                data: {
+                  type: 'array',
+                  items: { $ref: getSchemaPath(options.paginatedResponseSchema) },
+                },
+              },
+            },
+          ],
+        },
+      }),
+    );
+  } else {
+    decorators.push(
+      ApiOkResponse({
+        type: getSwaggerSchema(options.responseSchema),
+      }),
+    );
+  }
 
   if (options.body) {
     decorators.push(
@@ -51,8 +63,8 @@ export const ApiDocs = (options: ApiDocOptions) => {
     );
   }
 
-  if (options.summary) {
-    decorators.push(ApiOperation({ summary: options.summary }));
+  if (options.summary || options.description) {
+    decorators.push(ApiOperation({ summary: options.summary, description: options.description }));
   }
 
   return applyDecorators(...decorators);
@@ -106,3 +118,18 @@ export const ControllerDocs = (options: ControllerDocs) => {
   }
   return applyDecorators(...decorators);
 };
+
+export const ApiSignatureSecurity = () =>
+  applyDecorators(
+    ApiHeaders([
+      {
+        name: 'x-client-id',
+      },
+      {
+        name: 'x-timestamp',
+      },
+      {
+        name: 'x-signature',
+      },
+    ]),
+  );

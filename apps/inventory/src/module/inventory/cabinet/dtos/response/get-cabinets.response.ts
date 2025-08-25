@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { Expose, Transform, Type } from 'class-transformer';
+import { Expose, Type } from 'class-transformer';
 import { IsEnum, IsNumber, IsOptional } from 'class-validator';
 
 export enum CabinetType {
@@ -9,13 +9,7 @@ export enum CabinetType {
 
 export class GetCabinetsResponse {
   @ApiProperty()
-  @Type(() => Number)
-  @Transform(({ value, obj }) => {
-    if (typeof value === 'string') {
-      return parseInt(value.slice(-8), 16); // backward compatible. because client validate response data.
-    }
-    return value;
-  })
+  @Type(() => String)
   id: number;
 
   @ApiProperty()

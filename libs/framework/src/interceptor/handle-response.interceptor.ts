@@ -8,14 +8,10 @@ type SuccessResponseServer = {
 
 @Injectable()
 export class HandleResponseInterceptor<T> implements NestInterceptor<T, SuccessResponseServer> {
-  public intercept(_context: ExecutionContext, next: CallHandler): Observable<SuccessResponseServer> {
+  public intercept(_: ExecutionContext, next: CallHandler): Observable<SuccessResponseServer> {
     return next.handle().pipe(
       map((data) => {
-        const successResponse: SuccessResponseServer = {
-          success: true,
-          data,
-        };
-        return successResponse;
+        return data;
       }),
     );
   }

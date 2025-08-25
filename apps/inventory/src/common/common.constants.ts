@@ -1,6 +1,5 @@
-// todo: rename key
-export const DEVICE_ID_KEY = 'UniqueId';
+export const DEVICE_ID_KEY = 'x-client-id';
 
 export const HEADER_KEYS = {
-  DEVICE_KEY: 'PrivateKey',
+  DEVICE_KEY: 'x-device-key',
 } as const;

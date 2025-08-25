@@ -1,0 +1,27 @@
+import { PartialProperties } from '@framework/types';
+import { Entity, ManyToOne, Property, Ref } from '@mikro-orm/core';
+
+import { AbstractEntity } from './abstract.entity';
+import { ClusterEntity } from './cluster.entity';
+
+@Entity({ collection: 'tablets' })
+export class TabletEntity extends AbstractEntity {
+  @Property({ unique: true })
+  clientId!: string;
+
+  @Property()
+  publicKey!: string;
+
+  @ManyToOne(() => ClusterEntity, { fieldName: 'clusterId', ref: true })
+  cluster!: Ref<ClusterEntity>;
+
+  @Property({ default: false })
+  isMfaEnabled = false;
+
+  constructor(data?: PartialProperties<TabletEntity>) {
+    super();
+    if (data) {
+      Object.assign(this, data);
+    }
+  }
+}

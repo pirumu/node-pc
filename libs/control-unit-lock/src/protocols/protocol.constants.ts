@@ -1,5 +1,5 @@
 export enum LOCK_STATUS {
-  OPEN = 'OPEN',
+  OPENED = 'OPENED',
   CLOSED = 'CLOSED',
   UNKNOWN = 'UNKNOWN',
 }

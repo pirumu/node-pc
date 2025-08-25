@@ -1,9 +1,19 @@
 import { AreaModule } from './area';
 import { BinModule } from './bin';
-import { BinItemModule } from './bin-item';
+import { CabinetModule } from './cabinet';
+import { ClusterModule } from './cluster';
 import { ConditionModule } from './condition';
-import { DeviceModule } from './device';
 import { ItemModule } from './item';
-import { JobCardModule } from './job-card';
+import { LoadcellModule } from './loadcell';
+// import { JobCardModule } from './working-order';
 
-export const INVENTORY_MODULES = [AreaModule, DeviceModule, BinModule, ConditionModule, ItemModule, BinItemModule, JobCardModule];
+export const INVENTORY_MODULES = [
+  AreaModule,
+  BinModule,
+  CabinetModule,
+  ClusterModule,
+  ConditionModule,
+  ItemModule,
+  // JobCardModule,
+  LoadcellModule,
+];

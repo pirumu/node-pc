@@ -1,22 +1,22 @@
 import { Properties } from '@framework/types';
 
-import { EVENT_TYPE } from '../../../constants';
+import { EVENT_TYPE, CardEventType } from '../../../constants';
 import { IAppEvent } from '../../../interfaces';
 
-export class CardScanEvent implements IAppEvent {
-  public readonly cardNumber: string;
+export class CardScannedEvent implements IAppEvent {
+  public readonly value: string;
 
-  constructor(props: Properties<CardScanEvent>) {
+  constructor(props: Properties<CardScannedEvent>) {
     Object.assign(this, props);
   }
 
-  public getChannel(): string {
-    throw EVENT_TYPE.CARD_SCAN;
+  public getChannel(): CardEventType {
+    throw EVENT_TYPE.CARD.SCANNED;
   }
 
-  public getPayload(): { cardNumber: string } {
+  public getPayload(): Properties<CardScannedEvent> {
     return {
-      cardNumber: this.cardNumber,
+      value: this.value,
     };
   }
 }

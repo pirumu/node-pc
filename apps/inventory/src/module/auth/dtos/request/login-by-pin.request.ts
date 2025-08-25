@@ -3,11 +3,11 @@ import { Expose } from 'class-transformer';
 import { IsNotEmpty, IsString } from 'class-validator';
 
 export class LoginByPinRequest {
-  @ApiProperty({ name: 'username' })
+  @ApiProperty()
   @IsNotEmpty()
   @IsString()
-  @Expose({ name: 'username' })
-  loginId: string;
+  @Expose()
+  signature: string;
 
   @ApiProperty()
   @IsNotEmpty()

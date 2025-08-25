@@ -1,17 +1,29 @@
-import { AreaEntity, JobCardEntity } from '@entity';
-import { Inject, Injectable } from '@nestjs/common';
-
-import { AREA_REPOSITORY_TOKEN, IAreaRepository } from './repositories';
+import { PaginatedResult, PaginationMeta } from '@common/dto';
+import { AreaEntity } from '@dals/mongo/entities';
+import { EntityRepository } from '@mikro-orm/mongodb';
+import { InjectRepository } from '@mikro-orm/nestjs';
+import { Injectable } from '@nestjs/common';
 
 @Injectable()
 export class AreaService {
-  constructor(@Inject(AREA_REPOSITORY_TOKEN) private readonly _repository: IAreaRepository) {}
+  constructor(@InjectRepository(AreaEntity) private readonly _areaRepository: EntityRepository<AreaEntity>) {}
 
-  public async getAreas(): Promise<AreaEntity[]> {
-    return this._repository.findAll();
-  }
+  public async getAreas(page: number, limit: number): Promise<PaginatedResult<AreaEntity>> {
+    const [rows, count] = await Promise.all([
+      this._areaRepository.findAll({
+        limit,
+        offset: (page - 1) * limit,
+      }),
+      this._areaRepository.count(),
+    ]);
 
-  public async getAreasByIds(ids: string[]): Promise<AreaEntity[]> {
-    return this._repository.findByIds(ids);
+    return new PaginatedResult<AreaEntity>(
+      rows,
+      new PaginationMeta({
+        page: page,
+        limit: limit,
+        total: count,
+      }),
+    );
   }
 }

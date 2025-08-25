@@ -1,27 +1,35 @@
-import { UserEntity } from '@entity';
-import { QueryCondition, QueryOperator } from '@framework/types';
-import { Inject, Injectable } from '@nestjs/common';
-
-import { GetUsersDto } from './dtos/request';
-import { USER_REPOSITORY_TOKEN, IUserRepository } from './repositories';
+import { PaginationMeta } from '@common/dto';
+import { UserEntity } from '@dals/mongo/entities';
+import { EntityRepository } from '@mikro-orm/mongodb';
+import { InjectRepository } from '@mikro-orm/nestjs';
+import { Injectable } from '@nestjs/common';
 
 @Injectable()
 export class UserService {
-  constructor(@Inject(USER_REPOSITORY_TOKEN) private readonly _userRepository: IUserRepository) {}
+  constructor(@InjectRepository(UserEntity) private readonly _userRepository: EntityRepository<UserEntity>) {}
 
-  public async findByLoginId(loginId: string): Promise<UserEntity | null> {
-    return this._userRepository.findByLoginId(loginId);
-  }
+  public async findAll(
+    page: number,
+    limit: number,
+  ): Promise<{
+    rows: UserEntity[];
+    meta: PaginationMeta;
+  }> {
+    const [rows, count] = await Promise.all([
+      this._userRepository.findAll({
+        limit,
+        offset: (page - 1) * limit,
+      }),
+      this._userRepository.count(),
+    ]);
 
-  public async findAll(dto: GetUsersDto) {
-    const { limit = 10, page = 1 } = dto;
-    const filters: QueryCondition[] = [
-      {
-        field: 'loginId',
-        operator: QueryOperator.NOT_EQUAL,
-        value: 'drk_admin',
-      },
-    ];
-    return this._userRepository.findAll(filters, { limit, page });
+    return {
+      rows,
+      meta: new PaginationMeta({
+        limit,
+        page,
+        total: count,
+      }),
+    };
   }
 }

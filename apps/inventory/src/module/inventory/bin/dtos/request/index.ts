@@ -1,2 +1,2 @@
-export * from './open-all-bin.request';
-export * from './confirm-process.request';
+export * from './open-cabinet-bin.request';
+export * from './get-bins.request';

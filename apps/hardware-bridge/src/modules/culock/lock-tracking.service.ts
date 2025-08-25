@@ -69,7 +69,7 @@ export class LockMonitoringService {
         }
         if (request.protocol === ProtocolType.CU) {
           const lockStatuses = (result as unknown as CuResponse).lockStatuses;
-          const isClosed = Object.values(lockStatuses).every((status) => status !== LOCK_STATUS.OPEN);
+          const isClosed = Object.values(lockStatuses).every((status) => status !== LOCK_STATUS.OPENED);
           if (isClosed) {
             this._logger.log(`Lock ${request.lockIds} is now closed`);
             return of(true);
@@ -78,7 +78,7 @@ export class LockMonitoringService {
 
         if (request.protocol === ProtocolType.SCU) {
           const lockStatuses = (result as unknown as ScuResponse).lockStatus;
-          const isClosed = lockStatuses !== LOCK_STATUS.OPEN;
+          const isClosed = lockStatuses !== LOCK_STATUS.OPENED;
           if (isClosed) {
             this._logger.log(`Lock ${request.lockIds} is now closed`);
             return of(true);

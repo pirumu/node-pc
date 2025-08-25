@@ -1,1 +1,1 @@
-export * from './loadcell-mqtt.request';
+export * from './loadcell.request';

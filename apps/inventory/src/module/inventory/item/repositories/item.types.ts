@@ -1,49 +1,8 @@
-import { AreaEntity, BinEntity, CabinetEntity, DeviceEntity, ItemEntity, JobCardEntity, LocationItem, ReturnItemEntity } from '@entity';
-
-import { RequestIssueItemDto, WorkingOrder } from '../dtos/request';
-
-export type IssuedItem = {
-  id: string;
-  name: string;
-  itemTypeId: string;
-  type: string;
-  partNo: string;
-  materialNo: string;
-  locations: LocationItem[];
-  listWO: FormattedWO[];
-};
-
-export type FormattedWO = {
-  woId: string;
-  wo: string;
-  vehicleId: string;
-  platform: string;
-  areaId: string;
-  torq: number;
-  area: string;
-};
-
-export type FormattedData = {
-  cabinet: { id: string; name: string };
-  bin: { id: string; name: string; row: number };
-  requestItems: any[];
-  storageItems: any[];
-};
-
-export type ItemsByBin = {
-  [binId: string]: FormattedData & { requestedItemIds: Set<string> };
-};
-
-export type RequestIssueItem = RequestIssueItemDto;
-export type RequestReturnItem = RequestIssueItem;
-export type RequestWorkOrderItem = WorkingOrder;
-// ============ //
-// issue
-export type FindIssuableItemsArgs = {
+export type FindIssuableItemsParams = {
   page: number;
   limit: number;
   keyword?: string;
-  type?: string;
+  itemTypeId?: string;
   expiryDate: number;
 };
 
@@ -57,10 +16,11 @@ export type IssuableItemRecord = {
   image?: string;
   description?: string;
   totalQuantity: number;
-  totalCalcQuantity: number;
+  totalCalcQuantity?: number;
   binId: string;
   binName: string;
-  dueDate?: Date;
+  dueDate: Date | null;
+  canIssue: boolean;
 };
 
 export type PaginatedIssuableItemsOutput = {
@@ -68,23 +28,15 @@ export type PaginatedIssuableItemsOutput = {
   total: number;
 };
 
-export type ItemsForIssueInput = { expiryDate: number; userId: string; pairs: Array<{ itemId: string; binId: string }> };
-
-export type ItemsForIssueOutput = Array<{
-  item: ItemEntity;
-  bin: BinEntity;
-  cabinet: CabinetEntity;
-  devices: DeviceEntity[];
-  returnItem: ReturnItemEntity | null;
-}>;
+export type ItemsForIssueInput = { expiryDate: number; itemIds: string[] };
 
 // return
-export type FindReturnableItemsArgs = {
+export type FindReturnableItemsParams = {
   userId: string;
   page: number;
   limit: number;
   keyword?: string;
-  type?: string;
+  itemTypeId?: string;
 };
 
 export type ReturnableItemRecord = {
@@ -96,15 +48,16 @@ export type ReturnableItemRecord = {
   type: string;
   image?: string;
   description?: string;
-  totalQuantity: number;
-  totalCalcQuantity: number;
-  issueQuantity: number;
+  issuedQuantity: number;
   locations: string[];
-  binId: string;
-  batchNo?: string;
-  serialNo?: string;
-  dueDate?: Date | null;
-  listWo?: any[];
+  itemInfo: Array<{
+    issuedQuantity: number;
+    binId: string;
+    batchNumber: string;
+    serialNumber: string;
+    dueDate?: Date;
+  }>;
+  workingOrders?: any[];
 };
 
 export type PaginatedReturnableItemsOutput = {
@@ -112,22 +65,15 @@ export type PaginatedReturnableItemsOutput = {
   total: number;
 };
 
-export type ItemsForReturnArgs = { userId: string; pairs: Array<{ itemId: string; binId: string }> };
-
-export type ItemsForReturnOutput = Array<{
-  item: ItemEntity;
-  returnItem: ReturnItemEntity;
-  devices: DeviceEntity[];
-}>;
+export type ItemsForReturnParams = { userId: string; pairs: Array<{ itemId: string; binId: string }> };
 
 // replenish
 
-export type FindReplenishableItemsArgs = {
+export type FindReplenishableItemsParams = {
   page: number;
   limit: number;
   keyword?: string;
-  type?: string;
-  replenishableTypes?: string[];
+  itemTypeId?: string;
 };
 
 export type ReplenishableItemRecord = {
@@ -141,8 +87,8 @@ export type ReplenishableItemRecord = {
   description?: string;
   totalQuantity: number;
   totalCalcQuantity: number;
-  locations: string[];
   binId: string;
+  canReplenish: boolean;
 };
 
 export type PaginatedReplenishableItemsOutput = {
@@ -150,15 +96,9 @@ export type PaginatedReplenishableItemsOutput = {
   total: number;
 };
 
-export type ItemsForReplenishArgs = { pairs: Array<{ itemId: string; binId: string }> };
-
-export type ItemsForReplenishOutput = Array<{
-  item: ItemEntity;
-  devices: (DeviceEntity & { bin: BinEntity; cabinet: CabinetEntity })[];
-}>;
+export type ItemsForReplenishParams = { pairs: Array<{ itemId: string; binId: string }> };
 
 // working order
-export type FindJobCardsAndAreasOutput = { jobCards: JobCardEntity[]; areas: AreaEntity[] };
 
 export type BinItemCombinationOutput = {
   id: string;

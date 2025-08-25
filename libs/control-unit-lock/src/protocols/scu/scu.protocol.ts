@@ -126,7 +126,7 @@ export class ScuProtocol implements IProtocol<ScuResponse> {
 
     // Extract lock status from bit 0 of byte 7
     const lockStatusBit = data[7] & 0x01;
-    const lockStatus = lockStatusBit ? LOCK_STATUS.CLOSED : LOCK_STATUS.OPEN;
+    const lockStatus = lockStatusBit ? LOCK_STATUS.CLOSED : LOCK_STATUS.OPENED;
 
     return {
       deviceId,

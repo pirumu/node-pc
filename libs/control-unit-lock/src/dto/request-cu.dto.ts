@@ -3,7 +3,7 @@ import { Properties } from '@framework/types';
 import { Command, ProtocolType } from '../protocols';
 
 export class CuLockRequest {
-  public command: Command;
+  public command?: Command;
 
   public deviceId: number;
 

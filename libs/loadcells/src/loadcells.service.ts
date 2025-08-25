@@ -1,140 +1,56 @@
 import { Injectable, Logger, OnModuleInit, OnModuleDestroy, Inject } from '@nestjs/common';
 import { InjectSerialManager, ISerialAdapter } from '@serialport/serial';
-import { Observable, Subject, BehaviorSubject, timer, EMPTY, from, forkJoin, of, interval, timeout } from 'rxjs';
-import { map, takeUntil, tap, catchError, switchMap, filter, retry, distinctUntilChanged, debounceTime, concatMap } from 'rxjs/operators';
+import { Observable, Subject, BehaviorSubject, timer, EMPTY, from, of, Subscription, forkJoin } from 'rxjs';
+import { map, takeUntil, catchError, switchMap, concatMap, repeat, delay } from 'rxjs/operators';
 
 import { ALL_MESSAGES, LOADCELLS_SERVICE_CONFIG } from './loadcells.contants';
-import { LoadCellConfig, LoadCellDevice, LoadCellHooks, LoadCellReading, LoadCellStats } from './loadcells.types';
-
-export type LoadCellPerformanceStats = {
-  messagesPerSecond: number;
-  errorRate: number;
-  avgResponseTime: number;
-  lastActivityTime: Date;
-  portStatistics: Map<
-    string,
-    {
-      messagesReceived: number;
-      errors: number;
-      lastMessage: Date;
-    }
-  >;
-};
-
-export type LoadCellConnectionHealth = {
-  port: string;
-  isHealthy: boolean;
-  issues: string[];
-  lastReading?: LoadCellReading;
-  connectionDuration: number;
-};
+import { LoadCellConfig, LoadCellDevice, LoadCellHooks, LoadCellReading } from './loadcells.types';
 
 @Injectable()
 export class LoadcellsService implements OnModuleInit, OnModuleDestroy {
   private readonly _logger = new Logger(LoadcellsService.name);
   private readonly _destroy$ = new Subject<void>();
+  private _pollingSubscription: Subscription | null = null;
 
-  private _activeMessages: LoadCellDevice[] = [];
-
-  // State management
+  // --- State Management ---
   private readonly _isRunning$ = new BehaviorSubject<boolean>(false);
   private readonly _onlineDevices$ = new BehaviorSubject<number[]>([]);
-  private readonly _stats$ = new BehaviorSubject<LoadCellStats>(this._createInitialStats());
-  private readonly _performanceStats$ = new BehaviorSubject<LoadCellPerformanceStats>(this._createInitialPerformanceStats());
-  private readonly _connectionHealth$ = new BehaviorSubject<LoadCellConnectionHealth[]>([]);
+  private readonly _activeMessages$ = new BehaviorSubject<LoadCellDevice[]>([]);
+  private _activeDeviceIds = new Set<number>();
 
-  // Hooks registry
+  // --- Hooks Registry ---
   private readonly _hooks = new Map<string, LoadCellHooks>();
   private _globalHooks: LoadCellHooks = {};
 
-  // Internal state
+  // --- Internal State ---
   private _connectedPorts: string[] = [];
-  private _discoveryPhase = true;
-  private _readingsCount = 0;
-  private _errorsCount = 0;
-  private _startTime = Date.now();
-  private _lastReadingTime = Date.now();
-  private _portStats = new Map<string, { messagesReceived: number; errors: number; lastMessage: Date }>();
-
-  private readonly _allMessages: LoadCellDevice[] = ALL_MESSAGES;
-  private readonly _messageAddresses: number[];
-
-  // Data stream callbacks for Promise-based adapter
-  private _dataStreamCallbacks = new Map<string, (data: Buffer) => void>();
-
-  // Track callback unsubscribe functions
-  private _callbackUnsubscribers = new Map<string, (() => void)[]>();
-
   private _portStates = new Map<string, 'connecting' | 'connected' | 'disconnecting' | 'disconnected'>();
   private _reconnectAttempts = new Map<string, number>();
-  private readonly _maxReconnectAttempts = 3;
+  private _callbackUnsubscribers = new Map<string, (() => void)[]>();
+
+  private readonly _allDiscoveryMessages: LoadCellDevice[] = ALL_MESSAGES;
+  private readonly _deviceMessageMap = new Map<number, LoadCellDevice>();
 
   constructor(
     @Inject(LOADCELLS_SERVICE_CONFIG) private readonly _config: LoadCellConfig,
-    @InjectSerialManager()
-    private readonly _serialAdapter: ISerialAdapter,
+    @InjectSerialManager() private readonly _serialAdapter: ISerialAdapter,
   ) {
-    this._messageAddresses = this._allMessages.map((msg) => parseInt(this._getBufferContent(msg.data).slice(0, 2), 16));
-    this._activeMessages = [...this._allMessages];
-
-    // Start performance monitoring
-    this._startPerformanceMonitoring();
+    this._allDiscoveryMessages.forEach((msg) => {
+      const buffer = this._bufferFromBufferString(msg.data);
+      const deviceId = buffer[0];
+      this._deviceMessageMap.set(deviceId, msg);
+    });
   }
 
   public onModuleInit(): void {
     this._logger.log('Initializing Hardwired LoadCell Service');
   }
 
-  public onModuleDestroy(): void {
+  public async onModuleDestroy(): Promise<void> {
     this._logger.log('Shutting down Hardwired LoadCell Service');
-    this.stop();
+    await this.stop();
     this._destroy$.next();
     this._destroy$.complete();
-  }
-
-  public registerGlobalHooks(hooks: LoadCellHooks): void {
-    this._globalHooks = { ...this._globalHooks, ...hooks };
-    this._logger.log('Global hooks registered');
-  }
-
-  public registerHooks(contextId: string, hooks: LoadCellHooks): void {
-    this._hooks.set(contextId, hooks);
-    this._logger.log(`Hooks registered for context: ${contextId}`);
-  }
-
-  public unregisterHooks(contextId: string): void {
-    this._hooks.delete(contextId);
-    this._logger.log(`Hooks unregistered for context: ${contextId}`);
-  }
-
-  public clearAllHooks(): void {
-    this._hooks.clear();
-    this._globalHooks = {};
-    this._logger.log('All hooks cleared');
-  }
-
-  public get onlineDevices$(): Observable<number[]> {
-    return this._onlineDevices$.pipe(takeUntil(this._destroy$));
-  }
-
-  public get isRunning$(): Observable<boolean> {
-    return this._isRunning$.pipe(takeUntil(this._destroy$));
-  }
-
-  public get currentMessages(): LoadCellDevice[] {
-    return this._activeMessages;
-  }
-
-  public get stats$(): Observable<LoadCellStats> {
-    return this._stats$.pipe(takeUntil(this._destroy$));
-  }
-
-  public get performanceStats$(): Observable<LoadCellPerformanceStats> {
-    return this._performanceStats$.pipe(takeUntil(this._destroy$));
-  }
-
-  public get connectionHealth$(): Observable<LoadCellConnectionHealth[]> {
-    return this._connectionHealth$.pipe(takeUntil(this._destroy$));
   }
 
   public async start(ports: string[]): Promise<void> {
@@ -142,190 +58,224 @@ export class LoadcellsService implements OnModuleInit, OnModuleDestroy {
       this._logger.warn('Service is already running');
       return;
     }
-
     this._connectedPorts = ports;
     if (ports.length === 0) {
       throw new Error('No ports provided for monitoring');
     }
 
     this._logger.log(`Starting monitoring on ports: ${ports.join(', ')}`);
-
-    // Reset statistics
-    this._readingsCount = 0;
-    this._errorsCount = 0;
-    this._startTime = Date.now();
-    this._portStats.clear();
-
-    // Initialize port statistics
-    ports.forEach((port) => {
-      this._portStats.set(port, {
-        messagesReceived: 0,
-        errors: 0,
-        lastMessage: new Date(),
-      });
-    });
-
     await this._connectToPorts();
-    this._scheduleDiscoveryTimeout();
-    this._startConnectionHealthMonitoring();
-
     this._isRunning$.next(true);
     this._callStatusChangeHooks(true);
+    this._runDiscoveryCycle();
   }
 
   public async stop(): Promise<void> {
     if (!this._isRunning$.value) {
       return;
     }
-
     this._logger.log('Stopping loadcells service');
-
-    // Clean up callbacks
-    this._cleanupCallbacks();
-
-    // Close all ports
+    this._stopDataPolling();
     await this._disconnectFromPorts();
-
     this._isRunning$.next(false);
     this._connectedPorts = [];
-    this._discoveryPhase = true;
     this._onlineDevices$.next([]);
-    this._activeMessages = [...this._allMessages];
-    this._connectionHealth$.next([]);
-
+    this._activeMessages$.next([]);
+    this._activeDeviceIds.clear();
     this._callStatusChangeHooks(false);
   }
 
-  public setActiveDevices(deviceIds: number[]): void {
-    this._activeMessages = this._allMessages.filter((msg) => {
-      const buffer = this._bufferFromBufferString(msg.data);
-      return deviceIds.includes(buffer[0]);
-    });
-    this._updateStats();
-    this._logger.log(`Active devices set: ${deviceIds.join(', ')}`);
-  }
-
-  public resetToOnlineDevices(): void {
+  public addActiveDevices(deviceIds: number[]): void {
+    let isChanged = false;
     const onlineDevices = this._onlineDevices$.value;
-    this.setActiveDevices(onlineDevices);
-    this._logger.log('Reset to online devices');
+    deviceIds.forEach((id) => {
+      if (!onlineDevices.includes(id)) {
+        this._logger.warn(`Attempted to add device ${id}, but it was not found during discovery. Skipping.`);
+        return;
+      }
+      if (!this._activeDeviceIds.has(id)) {
+        this._activeDeviceIds.add(id);
+        isChanged = true;
+      }
+    });
+    if (isChanged) {
+      this._logger.log(`Adding devices. New active set: [${Array.from(this._activeDeviceIds).join(', ')}]`);
+      this._updateAndRestartPolling();
+    }
   }
 
-  public getCurrentStats(): LoadCellStats {
-    return this._stats$.value;
+  public removeActiveDevices(deviceIds: number[]): void {
+    let isChanged = false;
+    deviceIds.forEach((id) => {
+      if (this._activeDeviceIds.has(id)) {
+        this._activeDeviceIds.delete(id);
+        isChanged = true;
+      }
+    });
+    if (isChanged) {
+      this._logger.log(`Removing devices. New active set: [${Array.from(this._activeDeviceIds).join(', ')}]`);
+      this._updateAndRestartPolling();
+    }
   }
 
-  public getCurrentPerformanceStats(): LoadCellPerformanceStats {
-    return this._performanceStats$.value;
+  /**
+   * Set active loadcells , previous active loadcell will be remove
+   * @param {number[]} deviceIds
+   */
+  public setActiveDevices(deviceIds: number[]): void {
+    const onlineDevices = this._onlineDevices$.value;
+    const validDeviceIds = deviceIds.filter((id) => {
+      const isValid = onlineDevices.includes(id);
+      if (!isValid) {
+        this._logger.warn(`Device ${id} in setActiveDevices list was not found during discovery. It will be ignored.`);
+      }
+      return isValid;
+    });
+    this._logger.log(`Setting active devices to: [${validDeviceIds.join(', ')}].`);
+    this._activeDeviceIds = new Set(validDeviceIds);
+    this._updateAndRestartPolling();
   }
 
-  public refreshStats(): void {
-    this._updateStats();
-    this._updatePerformanceStats();
+  // --- Getters for State Observables ---
+  public get onlineDevices$(): Observable<number[]> {
+    return this._onlineDevices$.pipe(takeUntil(this._destroy$));
+  }
+  public get isRunning$(): Observable<boolean> {
+    return this._isRunning$.pipe(takeUntil(this._destroy$));
   }
 
-  public getPortHealth(port: string): Observable<LoadCellConnectionHealth> {
-    return this._connectionHealth$.pipe(
-      map((healthArray) => healthArray.find((h) => h.port === port)),
-      filter(Boolean),
+  // --- Hooks Management ---
+  public registerGlobalHooks(hooks: LoadCellHooks): void {
+    this._globalHooks = { ...this._globalHooks, ...hooks };
+  }
+  public registerHooks(contextId: string, hooks: LoadCellHooks): void {
+    this._hooks.set(contextId, hooks);
+  }
+  public unregisterHooks(contextId: string): void {
+    this._hooks.delete(contextId);
+  }
+  public clearAllHooks(): void {
+    this._hooks.clear();
+    this._globalHooks = {};
+  }
+
+  // --- Core Logic ---
+  private _updateAndRestartPolling(): void {
+    const newActiveMessages: LoadCellDevice[] = [];
+    this._activeDeviceIds.forEach((id) => {
+      const messageData = this._deviceMessageMap.get(id);
+      if (messageData) {
+        newActiveMessages.push(messageData);
+      }
+    });
+    this._activeMessages$.next(newActiveMessages);
+    this._stopDataPolling();
+    if (this._activeDeviceIds.size > 0) {
+      this._startDataPolling();
+    } else {
+      this._logger.log('No active devices left. Polling stopped.');
+    }
+  }
+
+  private _startDataPolling(): void {
+    if (this._pollingSubscription) {
+      return;
+    }
+    const messagesToPoll = this._activeMessages$.value;
+    if (messagesToPoll.length === 0) {
+      return;
+    }
+    this._logger.log(`Starting continuous polling for ${messagesToPoll.length} devices.`);
+    this._pollingSubscription = this._createPollingObservable(messagesToPoll).subscribe({
+      error: (err) => this._logger.error('Polling loop encountered a fatal error.', err),
+    });
+  }
+
+  private _stopDataPolling(): void {
+    if (this._pollingSubscription) {
+      this._pollingSubscription.unsubscribe();
+      this._pollingSubscription = null;
+      this._logger.log('Data polling stopped.');
+    }
+  }
+
+  private _createPollingObservable(messages: LoadCellDevice[]): Observable<any> {
+    return from(messages).pipe(
+      concatMap((message, index) =>
+        of(message).pipe(
+          delay(index === 0 ? this._config.pollingInterval : this._config.initTimer),
+          switchMap((msg) => this._sendMessage(msg)),
+        ),
+      ),
+      repeat(),
       takeUntil(this._destroy$),
     );
   }
 
-  public getAllPortsHealth(): Observable<LoadCellConnectionHealth[]> {
-    return this._connectionHealth$.pipe(takeUntil(this._destroy$));
-  }
-
-  // Get connection states for all ports
-  public async getPortConnectionStates(): Promise<Map<string, any>> {
-    const states = new Map();
-
-    for (const port of this._connectedPorts) {
-      try {
-        const state = await this._serialAdapter.getConnectionState(port);
-        states.set(port, state);
-      } catch (error) {
-        this._logger.debug(`Failed to get state for ${port}:`, error);
-        states.set(port, { isOpen: false, error: error.message });
-      }
-    }
-
-    return states;
-  }
-
-  // ENHANCED: Connect to ports with proper opening
-  private async _connectToPorts(): Promise<void> {
-    if (this._connectedPorts.length === 0) {
-      return;
-    }
-
-    const connectionPromises = this._connectedPorts.map(async (port) => this._connectToSinglePort(port));
-
-    // Connect to all ports in parallel
-    const results = await Promise.allSettled(connectionPromises);
-
-    // Log results
-    results.forEach((result, index) => {
-      const port = this._connectedPorts[index];
-      if (result.status === 'fulfilled') {
-        this._logger.log(`Successfully connected to ${port}`);
-      } else {
-        this._logger.error(`Failed to connect to ${port}:`, result.reason);
-        // Continue with other ports even if one fails
-      }
+  private _runDiscoveryCycle(): void {
+    this._logger.log('Starting one-time device discovery cycle...');
+    this._onlineDevices$.next([]);
+    const discoveryObservable = from(this._allDiscoveryMessages).pipe(
+      concatMap((message, index) => timer(index * this._config.initTimer).pipe(switchMap(() => this._sendMessage(message)))),
+      takeUntil(this._destroy$),
+    );
+    discoveryObservable.subscribe({
+      complete: () => {
+        this._logger.log(
+          `Discovery phase ended. Found ${this._onlineDevices$.value.length} online devices: [${this._onlineDevices$.value.join(', ')}]`,
+        );
+      },
+      error: (error) => this._logger.error('An error occurred during the discovery cycle.', error),
     });
   }
 
+  private _processReading(reading: LoadCellReading): void {
+    if (this._config.logLevel > 0) {
+      this._logger.debug(`Device ${reading.rawDeviceId}: ${reading.weight}kg [${reading.status}]`);
+    }
+    const isAlreadyOnline = this._onlineDevices$.value.includes(reading.rawDeviceId);
+    if (!isAlreadyOnline && reading.status === 'running') {
+      const newOnline = [...this._onlineDevices$.value, reading.rawDeviceId];
+      this._onlineDevices$.next(newOnline);
+      this._callDeviceDiscoveryHooks(reading.rawDeviceId, true);
+      this._logger.log(`Device ${reading.rawDeviceId} discovered (${newOnline.length} total)`);
+    }
+    this._callDataHooks(reading);
+  }
+
+  private async _connectToPorts(): Promise<void> {
+    const connectionPromises = this._connectedPorts.map(async (port) => this._connectToSinglePort(port));
+    await Promise.allSettled(connectionPromises);
+  }
+
   private async _connectToSinglePort(port: string): Promise<void> {
-    // Prevent concurrent connection attempts
     if (this._portStates.get(port) === 'connecting') {
-      this._logger.warn(`Port ${port} already connecting, skipping`);
       return;
     }
-
     this._portStates.set(port, 'connecting');
     this._logger.log(`Connecting to port: ${port}`);
-
     try {
-      try {
-        const currentState = await this._serialAdapter.getConnectionState(port);
-        if (currentState.isOpen) {
-          this._logger.log(`Port ${port} already open, closing first`);
-          await this._serialAdapter.close(port);
-          // Wait a bit for port to fully close
-          await new Promise((resolve) => setTimeout(resolve, 500));
-        }
-      } catch (error) {
-        // Ignore close errors for already closed ports
-        this._logger.debug(`Port ${port} close check error (likely already closed):`, error.message);
+      const currentState = await this._serialAdapter.getConnectionState(port);
+      if (currentState.isOpen) {
+        await this._serialAdapter.close(port);
+        await new Promise((resolve) => setTimeout(resolve, 500));
       }
-
-      // 2. OPEN PORT with validation
+    } catch (error) {
+      this._logger.debug(`Port ${port} close check error:`, error.message);
+    }
+    try {
       const state = await this._serialAdapter.open(port, this._config.serialOptions);
-
       if (!state.isOpen) {
         throw new Error(`Failed to open port ${port}: ${state.lastError || 'Unknown error'}`);
       }
-
-      // 3. WAIT for port to stabilize before setting up callbacks
       await new Promise((resolve) => setTimeout(resolve, 200));
-
-      // 4. VERIFY port is still open after stabilization
       const verifyState = await this._serialAdapter.getConnectionState(port);
       if (!verifyState.isOpen) {
         throw new Error(`Port ${port} closed unexpectedly after opening`);
       }
-
-      this._logger.log(`Port ${port} opened and verified successfully`);
-
-      // 5. Setup callbacks ONLY after port is stable
       await this._setupPortCallbacks(port);
-
-      // 6. Start monitoring ONLY after everything is setup
-      this._startPortMonitoring(port);
-
       this._portStates.set(port, 'connected');
-      this._reconnectAttempts.set(port, 0); // Reset reconnect attempts
+      this._reconnectAttempts.set(port, 0);
       this._logger.log(`Port ${port} setup completed successfully`);
     } catch (error) {
       this._portStates.set(port, 'disconnected');
@@ -336,642 +286,94 @@ export class LoadcellsService implements OnModuleInit, OnModuleDestroy {
 
   private async _setupPortCallbacks(port: string): Promise<void> {
     const comId = this._extractComId(port);
-
-    // Data callback
     const dataCallback = (data: Buffer) => {
       try {
         const reading = this._parseRawData(port, data, comId);
         if (reading) {
           this._processReading(reading);
-          this._callDataHooks(reading);
-          this._updateStats();
-          this._updatePortStats(port, false);
         }
       } catch (error) {
         this._logger.error(`Data callback error for ${port}:`, error);
-        this._updatePortStats(port, true);
       }
     };
-
-    // Error callback
     const errorCallback = (error: Error) => {
       this._logger.error(`Serial error on ${port}:`, error);
-      this._errorsCount++;
-      this._updatePortStats(port, true);
       this._callErrorHooks(error, `Serial port ${port}`);
-      this._updateStats();
-
-      // Handle critical errors that might require reconnection
       if (this._isCriticalError(error)) {
         this._handleCriticalPortError(port, error);
       }
     };
-
-    // Store callbacks
-    this._dataStreamCallbacks.set(port, dataCallback);
-
     try {
-      // Setup data stream
-      const unsubscribeData = this._serialAdapter.onDataStream(port, dataCallback);
-
-      // Setup error stream if available
-      let unsubscribeError: () => void = () => {};
+      const unsubData = this._serialAdapter.onDataStream(port, dataCallback);
+      let unsubError: () => void = () => {};
       if (typeof this._serialAdapter.onErrorStream === 'function') {
-        unsubscribeError = this._serialAdapter.onErrorStream(port, errorCallback);
+        unsubError = this._serialAdapter.onErrorStream(port, errorCallback);
       }
-
-      // Store unsubscribe functions
-      const unsubscribers = [unsubscribeData, unsubscribeError].filter(Boolean);
-      this._callbackUnsubscribers.set(port, unsubscribers);
-
-      this._logger.debug(`Callbacks setup for ${port} with ${unsubscribers.length} handlers`);
+      this._callbackUnsubscribers.set(port, [unsubData, unsubError].filter(Boolean));
     } catch (error) {
       this._logger.error(`Failed to setup callbacks for ${port}:`, error);
       throw error;
     }
   }
 
-  private _startPortMonitoring(port: string): void {
-    // Monitor every 15 seconds instead of 5 (less aggressive)
-    interval(15000)
-      .pipe(
-        takeUntil(this._destroy$),
-        filter(() => this._isRunning$.value && this._portStates.get(port) === 'connected'),
-        switchMap(() =>
-          from(this._serialAdapter.isPortConnected(port)).pipe(
-            timeout(5000), // Add timeout to prevent hanging
-            catchError((error) => {
-              this._logger.debug(`Connection check failed for ${port}:`, error);
-              return of(false); // Assume disconnected on error
-            }),
-          ),
-        ),
-        distinctUntilChanged(),
-        tap((isConnected) => {
-          if (!isConnected && this._portStates.get(port) === 'connected') {
-            this._logger.warn(`Port ${port} disconnected unexpectedly`);
-            this._handlePortDisconnection(port);
-          }
-        }),
-      )
-      .subscribe({
-        error: (error) => {
-          this._logger.error(`Connection monitoring failed for ${port}:`, error);
-        },
-      });
-  }
-
-  // Disconnect from all ports
-  private async _disconnectFromPorts(): Promise<void> {
-    if (this._connectedPorts.length === 0) {
-      return;
-    }
-
-    this._logger.log(`Disconnecting from ${this._connectedPorts.length} ports`);
-
-    const disconnectionPromises = this._connectedPorts.map(async (port) => this._disconnectFromSinglePort(port));
-
-    // Disconnect from all ports in parallel
-    const results = await Promise.allSettled(disconnectionPromises);
-
-    // Log results
-    results.forEach((result, index) => {
-      const port = this._connectedPorts[index];
-      if (result.status === 'fulfilled') {
-        this._logger.log(`Successfully disconnected from ${port}`);
-      } else {
-        this._logger.error(`Failed to disconnect from ${port}:`, result.reason);
-      }
-    });
-
-    // Clear port arrays
-    this._connectedPorts = [];
-    this._dataStreamCallbacks.clear();
-    this._callbackUnsubscribers.clear();
-  }
-
-  // Disconnect from single port
-  private async _disconnectFromSinglePort(port: string): Promise<void> {
-    if (this._portStates.get(port) === 'disconnecting') {
-      this._logger.warn(`Port ${port} already disconnecting`);
-      return;
-    }
-
-    this._portStates.set(port, 'disconnecting');
-
-    try {
-      this._logger.debug(`Starting disconnection for ${port}`);
-
-      // 1. Stop monitoring first (prevent interference)
-      // (monitoring will stop due to state change to 'disconnecting')
-
-      // 2. Unsubscribe callbacks with error handling
-      const unsubscribers = this._callbackUnsubscribers.get(port);
-      if (unsubscribers && unsubscribers.length > 0) {
-        this._logger.debug(`Unsubscribing ${unsubscribers.length} callbacks for ${port}`);
-
-        await Promise.allSettled(
-          unsubscribers.map(async (unsub: () => void | Promise<void>) => {
-            try {
-              // Some unsubscribe functions might be async
-              const result = unsub();
-              if (result instanceof Promise) {
-                await result;
-              }
-            } catch (error) {
-              this._logger.debug(`Callback unsubscribe error for ${port}:`, error);
-            }
-          }),
-        );
-
-        this._callbackUnsubscribers.delete(port);
-      }
-
-      // 3. Wait a bit for callbacks to fully cleanup
-      await new Promise((resolve) => setTimeout(resolve, 100));
-
-      // 4. Close port with retry logic
-      let closeAttempts = 0;
-      const maxCloseAttempts = 3;
-
-      while (closeAttempts < maxCloseAttempts) {
-        try {
-          await this._serialAdapter.close(port);
-
-          // Verify port is closed
-          const state = await this._serialAdapter.getConnectionState(port);
-          if (!state.isOpen) {
-            break; // Successfully closed
-          }
-
-          closeAttempts++;
-          if (closeAttempts < maxCloseAttempts) {
-            this._logger.debug(`Port ${port} still open after close attempt ${closeAttempts}, retrying...`);
-            await new Promise((resolve) => setTimeout(resolve, 200));
-          }
-        } catch (error) {
-          closeAttempts++;
-          if (closeAttempts >= maxCloseAttempts) {
-            this._logger.warn(`Failed to close ${port} after ${maxCloseAttempts} attempts:`, error);
-            break; // Give up, but continue cleanup
-          }
-          await new Promise((resolve) => setTimeout(resolve, 200));
-        }
-      }
-
-      // 5. Clean up references
-      this._dataStreamCallbacks.delete(port);
-      this._portStates.set(port, 'disconnected');
-
-      this._logger.debug(`Port ${port} disconnected and cleaned up`);
-    } catch (error) {
-      this._logger.error(`Error during disconnection of ${port}:`, error);
-      this._portStates.set(port, 'disconnected'); // Set state anyway
-      throw error;
-    }
-  }
-
-  // Clean up callbacks
-  private _cleanupCallbacks(): void {
-    // Unsubscribe all callbacks
-    this._callbackUnsubscribers.forEach((unsubscribers, port) => {
-      unsubscribers.forEach((unsub) => {
-        try {
-          unsub();
-        } catch (error) {
-          this._logger.debug(`Error unsubscribing callback for ${port}:`, error);
-        }
-      });
-    });
-
-    this._callbackUnsubscribers.clear();
-    this._dataStreamCallbacks.clear();
-  }
-
-  // Check if all ports are connected
-  public async areAllPortsConnected(): Promise<boolean> {
-    if (this._connectedPorts.length === 0) {
-      return false;
-    }
-
-    const connectionChecks = this._connectedPorts.map(async (port) => {
-      try {
-        return await this._serialAdapter.isPortConnected(port);
-      } catch {
-        return false;
-      }
-    });
-
-    const results = await Promise.all(connectionChecks);
-    return results.every((connected) => connected);
-  }
-
-  // Reconnect to failed ports
-  public async reconnectFailedPorts(): Promise<void> {
-    const reconnectPromises = this._connectedPorts.map(async (port) => {
-      try {
-        const isConnected = await this._serialAdapter.isPortConnected(port);
-        if (!isConnected) {
-          this._logger.log(`Reconnecting to failed port: ${port}`);
-          await this._connectToSinglePort(port);
-        }
-      } catch (error) {
-        this._logger.error(`Failed to reconnect to ${port}:`, error);
-      }
-    });
-
-    await Promise.all(reconnectPromises);
-  }
-
-  private _monitorPortConnection(port: string): void {
-    interval(5000)
-      .pipe(
-        // Check every 5 seconds
-        takeUntil(this._destroy$),
-        filter(() => this._isRunning$.value),
-        switchMap(() => from(this._serialAdapter.isPortConnected(port))),
-        distinctUntilChanged(),
-        tap((isConnected) => {
-          if (!isConnected) {
-            this._logger.warn(`Port ${port} disconnected`);
-            this._updatePortStats(port, true);
-          }
-        }),
-      )
-      .subscribe({
-        error: (error) => {
-          this._logger.error(`Connection monitoring failed for ${port}:`, error);
-        },
-      });
-  }
-
-  private _startConnectionHealthMonitoring(): void {
-    timer(0, 10000)
-      .pipe(
-        // Update every 10 seconds
-        takeUntil(this._destroy$),
-        filter(() => this._isRunning$.value),
-        switchMap(() => this._updateConnectionHealth()),
-      )
-      .subscribe({
-        error: (error) => {
-          this._logger.error('Connection health monitoring error:', error);
-        },
-      });
-  }
-
-  private _updatePortStats(port: string, isError: boolean): void {
-    const stats = this._portStats.get(port);
-    if (stats) {
-      if (isError) {
-        stats.errors++;
-      } else {
-        stats.messagesReceived++;
-      }
-      stats.lastMessage = new Date();
-      this._portStats.set(port, stats);
-    }
-  }
-
-  private _startPerformanceMonitoring(): void {
-    interval(5000)
-      .pipe(
-        // Update every 5 seconds
-        takeUntil(this._destroy$),
-        tap(() => this._updatePerformanceStats()),
-      )
-      .subscribe({
-        error: (error) => {
-          this._logger.error('Performance monitoring error:', error);
-        },
-      });
-  }
-
-  private _updatePerformanceStats(): void {
-    const now = Date.now();
-    const timeDiff = (now - this._lastReadingTime) / 1000; // seconds
-    const messagesPerSecond = timeDiff > 0 ? this._readingsCount / timeDiff : 0;
-    const errorRate = this._readingsCount > 0 ? this._errorsCount / this._readingsCount : 0;
-    const avgResponseTime = this._connectedPorts.length > 0 ? this._config.initTimer : 0;
-
-    const performanceStats: LoadCellPerformanceStats = {
-      messagesPerSecond,
-      errorRate,
-      avgResponseTime,
-      lastActivityTime: new Date(this._lastReadingTime),
-      portStatistics: new Map(this._portStats),
-    };
-
-    this._performanceStats$.next(performanceStats);
-  }
-
-  private _extractComId(portPath: string): number {
-    const comMatch = portPath.match(/COM(\d+)/i);
-    const ttyMatch = portPath.match(/ttyS(\d+)/);
-
-    if (comMatch) {
-      return parseInt(comMatch[1]);
-    }
-    if (ttyMatch) {
-      return parseInt(ttyMatch[1]);
-    }
-
-    return 0;
-  }
-
-  public startDataPolling(): void {
-    interval(this._config.pollingInterval)
-      .pipe(
-        takeUntil(this._destroy$),
-        filter(() => this._isRunning$.value && this._activeMessages.length > 0),
-        debounceTime(100), // Debounce rapid changes
-        switchMap(() => this._executePollingCycle()),
-      )
-      .subscribe();
-  }
-
-  public stopDataPolling(): void {
-    this._activeMessages = [];
-    this._updateStats();
-  }
-
-  private _executePollingCycle(): Observable<void> {
-    return from(this._activeMessages).pipe(
-      concatMap((message, index) =>
-        timer(index * this._config.initTimer).pipe(
-          switchMap(() => this._sendMessage(message)),
-          catchError((error) => {
-            this._logger.error(`Failed to send message ${message.no}:`, error);
-            this._callErrorHooks(error, `Message ${message.no}`);
-            return EMPTY;
-          }),
-        ),
-      ),
-      map(() => void 0),
-    );
-  }
-
   private _sendMessage(message: LoadCellDevice): Observable<void> {
     if (this._connectedPorts.length === 0) {
       return EMPTY;
     }
-
     const buffer = this._bufferFromBufferString(message.data);
-
-    // Send to ALL ports using Promise-based adapter
-    const sendOperations = this._connectedPorts.map((port) =>
+    const sendOps = this._connectedPorts.map((port) =>
       from(this._serialAdapter.write(port, buffer)).pipe(
-        tap(() => {
-          if (this._config.logLevel > 0) {
-            this._logger.debug(`Sent message ${message.no} to ${port}`);
-          }
-        }),
-        retry({ count: 2, delay: 500 }),
         catchError((error) => {
           this._logger.error(`Failed to send to ${port}:`, error);
-          this._updatePortStats(port, true);
-          return of(false); // Return false instead of EMPTY to continue
+          return of(false);
         }),
       ),
     );
-
-    // Send to all ports in parallel
-    return forkJoin(sendOperations).pipe(
-      map(() => void 0),
-      catchError((error) => {
-        this._logger.error('Failed to send message to all ports:', error);
-        return of(void 0);
-      }),
-    );
+    return from(forkJoin(sendOps)).pipe(map(() => void 0));
   }
 
   private _parseRawData(port: string, buffer: Buffer, comId: number): LoadCellReading | null {
-    try {
-      const rawPayload = Array.from(buffer);
-
-      // Validate data
-      if (!this._validateRawData(rawPayload)) {
-        return null;
-      }
-
-      const rawDeviceId = rawPayload[1];
-
-      // Handle special case for device ID 1
-      if (rawDeviceId === 1) {
-        rawPayload[2] = 0x3d;
-      }
-
-      // CRC validation
-      const crcData = rawPayload.slice(1);
-      if (this._crc16Validation(crcData) !== 0) {
-        this._logger.warn(`CRC validation failed for device ${rawDeviceId}`);
-        this._errorsCount++;
-
-        return {
-          path: port,
-          deviceId: comId * 100 + rawDeviceId,
-          rawDeviceId,
-          weight: 0,
-          status: 'error',
-          timestamp: new Date(),
-          rawData: rawPayload,
-        };
-      }
-
-      // Calculate weight value (32-bit little endian)
-      const value = (rawPayload[8] << 24) | (rawPayload[7] << 16) | (rawPayload[6] << 8) | rawPayload[5];
-
-      this._readingsCount++;
-      this._lastReadingTime = Date.now();
-
+    const rawPayload = Array.from(buffer);
+    if (!this._validateRawData(rawPayload)) {
+      return null;
+    }
+    const rawDeviceId = rawPayload[1];
+    if (rawDeviceId === 1) {
+      rawPayload[2] = 0x3d;
+    }
+    if (this._crc16Validation(rawPayload.slice(1)) !== 0) {
+      this._logger.warn(`CRC validation failed for device ${rawDeviceId}`);
       return {
         path: port,
         deviceId: comId * 100 + rawDeviceId,
         rawDeviceId,
-        weight: value / this._config.precision,
-        status: 'running',
+        weight: 0,
+        status: 'error',
         timestamp: new Date(),
         rawData: rawPayload,
       };
-    } catch (error) {
-      this._logger.error('Failed to parse raw data:', error);
-      this._errorsCount++;
-      this._callErrorHooks(error as Error, 'Data parsing');
-      return null;
     }
+    const value = (rawPayload[8] << 24) | (rawPayload[7] << 16) | (rawPayload[6] << 8) | rawPayload[5];
+    return {
+      path: port,
+      deviceId: comId * 100 + rawDeviceId,
+      rawDeviceId,
+      weight: value / this._config.precision,
+      status: 'running',
+      timestamp: new Date(),
+      rawData: rawPayload,
+    };
   }
 
   private _validateRawData(rawPayload: number[]): boolean {
+    const messageAddresses = Array.from(this._deviceMessageMap.keys());
     if (!rawPayload.length || rawPayload.length < this._config.messageLength) {
-      this._logger.warn('Data invalid: insufficient length');
       return false;
     }
-
-    if (!this._messageAddresses.includes(rawPayload[1])) {
-      this._logger.warn(`Invalid device address: ${rawPayload[1]}`);
+    if (!messageAddresses.includes(rawPayload[1])) {
       return false;
     }
-
-    if (rawPayload[0] !== this._config.charStart) {
-      this._logger.warn(`Invalid start character: ${rawPayload[0]}`);
-      return false;
-    }
-
-    return true;
-  }
-
-  private _processReading(reading: LoadCellReading): void {
-    if (this._config.logLevel > 0) {
-      this._logger.debug(`Device ${reading.rawDeviceId}: ${reading.weight}kg [${reading.status}]`);
-    }
-
-    if (this._discoveryPhase && reading.status === 'running') {
-      const currentOnline = this._onlineDevices$.value;
-      if (!currentOnline.includes(reading.rawDeviceId)) {
-        const newOnline = [...currentOnline, reading.rawDeviceId];
-        this._onlineDevices$.next(newOnline);
-        this._callDeviceDiscoveryHooks(reading.rawDeviceId, true);
-        this._logger.log(`Device ${reading.rawDeviceId} discovered (${newOnline.length} total)`);
-      }
-    }
-  }
-
-  private _scheduleDiscoveryTimeout(): void {
-    timer(this._config.discoveryTimeout)
-      .pipe(
-        takeUntil(this._destroy$),
-        filter(() => this._discoveryPhase),
-      )
-      .subscribe(() => {
-        this._endDiscoveryPhase();
-      });
-  }
-
-  private _endDiscoveryPhase(): void {
-    const onlineDevices = this._onlineDevices$.value;
-
-    if (onlineDevices.length > 0) {
-      this._discoveryPhase = false;
-      this.setActiveDevices(onlineDevices);
-      this._logger.log(`Discovery phase ended. Found ${onlineDevices.length} online devices: [${onlineDevices.join(', ')}]`);
-    } else {
-      this._logger.warn('No devices discovered, continuing discovery...');
-    }
-  }
-
-  private _updateStats(): void {
-    const onlineDevices = this._onlineDevices$.value;
-
-    const stats: LoadCellStats = {
-      totalMessages: this._allMessages.length,
-      onlineDevices,
-      activeMessages: this._activeMessages.length,
-      readingsCount: this._readingsCount,
-      errorsCount: this._errorsCount,
-      lastReading: new Date(this._lastReadingTime),
-    };
-
-    this._stats$.next(stats);
-  }
-
-  private _createInitialStats(): LoadCellStats {
-    return {
-      totalMessages: this._allMessages?.length || 0,
-      onlineDevices: [],
-      activeMessages: this._allMessages?.length || 0,
-      readingsCount: 0,
-      errorsCount: 0,
-    };
-  }
-
-  private _createInitialPerformanceStats(): LoadCellPerformanceStats {
-    return {
-      messagesPerSecond: 0,
-      errorRate: 0,
-      avgResponseTime: 0,
-      lastActivityTime: new Date(),
-      portStatistics: new Map(),
-    };
-  }
-
-  private _callDataHooks(reading: LoadCellReading): void {
-    if (this._globalHooks.onData) {
-      try {
-        this._globalHooks.onData(reading);
-      } catch (error) {
-        this._logger.error('Error in global data hook:', error);
-      }
-    }
-
-    for (const [contextId, hooks] of this._hooks) {
-      if (hooks.onData) {
-        try {
-          hooks.onData(reading);
-        } catch (error) {
-          this._logger.error(`Error in data hook for ${contextId}:`, error);
-        }
-      }
-    }
-  }
-
-  private _callErrorHooks(error: Error, context?: string): void {
-    if (this._globalHooks.onError) {
-      try {
-        this._globalHooks.onError(error, context);
-      } catch (err) {
-        this._logger.error('Error in global error hook:', err);
-      }
-    }
-
-    for (const [contextId, hooks] of this._hooks) {
-      if (hooks.onError) {
-        try {
-          hooks.onError(error, context);
-        } catch (err) {
-          this._logger.error(`Error in error hook for ${contextId}:`, err);
-        }
-      }
-    }
-  }
-
-  private _callDeviceDiscoveryHooks(deviceId: number, isOnline: boolean): void {
-    if (this._globalHooks.onDeviceDiscovery) {
-      try {
-        this._globalHooks.onDeviceDiscovery(deviceId, isOnline);
-      } catch (error) {
-        this._logger.error('Error in global device discovery hook:', error);
-      }
-    }
-
-    for (const [contextId, hooks] of this._hooks) {
-      if (hooks.onDeviceDiscovery) {
-        try {
-          hooks.onDeviceDiscovery(deviceId, isOnline);
-        } catch (error) {
-          this._logger.error(`Error in device discovery hook for ${contextId}:`, error);
-        }
-      }
-    }
-  }
-
-  private _callStatusChangeHooks(isRunning: boolean): void {
-    if (this._globalHooks.onStatusChange) {
-      try {
-        this._globalHooks.onStatusChange(isRunning);
-      } catch (error) {
-        this._logger.error('Error in global status change hook:', error);
-      }
-    }
-
-    for (const [contextId, hooks] of this._hooks) {
-      if (hooks.onStatusChange) {
-        try {
-          hooks.onStatusChange(isRunning);
-        } catch (error) {
-          this._logger.error(`Error in status change hook for ${contextId}:`, error);
-        }
-      }
-    }
+    return rawPayload[0] === this._config.charStart;
   }
 
   private _bufferFromBufferString(bufferStr: string): Buffer {
@@ -984,149 +386,112 @@ export class LoadcellsService implements OnModuleInit, OnModuleDestroy {
     );
   }
 
-  private _getBufferContent(message: string): string {
-    return message.replace(/[<>]/g, '').split(' ').slice(1).join('');
-  }
-
   private _crc16Validation(arr: number[]): number {
-    let crc = 65535; // 0xFFFF
-
-    for (let i = 0; i < arr.length; i++) {
-      crc = crc ^ arr[i];
-      for (let j = 8; j > 0; j--) {
-        if ((crc & 1) !== 0) {
-          crc = crc >> 1;
-          crc = crc ^ 40961; // 0xA001
-        } else {
-          crc = crc >> 1;
-        }
+    let crc = 0xffff;
+    for (const byte of arr) {
+      crc ^= byte;
+      for (let i = 0; i < 8; i++) {
+        crc = (crc & 1) !== 0 ? (crc >> 1) ^ 0xa001 : crc >> 1;
       }
     }
-
     return crc;
   }
 
-  private _isCriticalError(error: Error): boolean {
-    const criticalMessages = [
-      'ENOENT', // Device not found
-      'EACCES', // Permission denied
-      'EBUSY', // Device busy
-      'device disconnected',
-      'port not open',
-    ];
+  private _extractComId(portPath: string): number {
+    const match = portPath.match(/(?:COM|ttyS)(\d+)/i);
+    return match ? parseInt(match[1]) : 0;
+  }
 
+  private _isCriticalError(error: Error): boolean {
+    const criticalMessages = ['ENOENT', 'EACCES', 'EBUSY', 'device disconnected', 'port not open'];
     return criticalMessages.some((msg) => error.message.toLowerCase().includes(msg.toLowerCase()));
   }
 
-  // 7. Handle port disconnection with smart reconnection
-  private async _handlePortDisconnection(port: string): Promise<void> {
-    this._portStates.set(port, 'disconnected');
-    this._updatePortStats(port, true);
-
-    const reconnectCount = this._reconnectAttempts.get(port) || 0;
-
-    if (reconnectCount < this._maxReconnectAttempts) {
-      this._reconnectAttempts.set(port, reconnectCount + 1);
-      this._logger.log(`Attempting to reconnect to ${port} (attempt ${reconnectCount + 1}/${this._maxReconnectAttempts})`);
-
-      // Wait before reconnecting (exponential backoff)
-      const backoffDelay = Math.min(1000 * Math.pow(2, reconnectCount), 10000);
-      await new Promise((resolve) => setTimeout(resolve, backoffDelay));
-
-      try {
-        await this._connectToSinglePort(port);
-      } catch (error) {
-        this._logger.error(`Reconnection failed for ${port}:`, error);
-
-        if (reconnectCount + 1 >= this._maxReconnectAttempts) {
-          this._logger.error(`Max reconnection attempts reached for ${port}, giving up`);
-          this._callErrorHooks(new Error(`Port ${port} permanently disconnected`), 'Connection lost');
-        }
-      }
-    }
-  }
-
-  // 8. Handle critical errors that might need immediate action
   private async _handleCriticalPortError(port: string, error: Error): Promise<void> {
     this._logger.warn(`Critical error on ${port}, attempting recovery:`, error.message);
-
     try {
-      // Force disconnect and reconnect
       await this._disconnectFromSinglePort(port);
-      await new Promise((resolve) => setTimeout(resolve, 1000)); // Wait 1 second
+      await new Promise((resolve) => setTimeout(resolve, 1000));
       await this._connectToSinglePort(port);
     } catch (recoveryError) {
       this._logger.error(`Recovery failed for ${port}:`, recoveryError);
     }
   }
 
-  // 9. IMPROVED: Better health monitoring
-  private _updateConnectionHealth(): Observable<void> {
-    const healthChecks = this._connectedPorts.map((port) =>
-      from(this._serialAdapter.getConnectionState(port)).pipe(
-        timeout(3000), // Add timeout to prevent hanging
-        map((state) => {
-          const portStats = this._portStats.get(port);
-          const portState = this._portStates.get(port);
-          const issues: string[] = [];
+  private async _disconnectFromSinglePort(port: string): Promise<void> {
+    if (this._portStates.get(port) === 'disconnecting') {
+      return;
+    }
+    this._portStates.set(port, 'disconnecting');
+    const unsubscribers = this._callbackUnsubscribers.get(port) || [];
+    for (const unsub of unsubscribers) {
+      try {
+        unsub();
+      } catch (e) {
+        /* ignore */
+      }
+    }
+    this._callbackUnsubscribers.delete(port);
+    try {
+      await this._serialAdapter.close(port);
+    } catch (e) {
+      this._logger.warn(`Failed to close port ${port} during disconnect:`, e.message);
+    }
+    this._portStates.set(port, 'disconnected');
+  }
 
-          // Check connection state
-          if (!state.isOpen) {
-            issues.push('Port not connected');
-          }
+  private _callDataHooks(reading: LoadCellReading): void {
+    if (this._globalHooks.onData) {
+      this._globalHooks.onData(reading);
+    }
+    this._hooks.forEach((hooks) => {
+      if (hooks.onData) {
+        hooks.onData(reading);
+      }
+    });
+  }
 
-          // Check internal state
-          if (portState !== 'connected') {
-            issues.push(`Port state: ${portState}`);
-          }
+  private _callErrorHooks(error: Error, context?: string): void {
+    if (this._globalHooks.onError) {
+      this._globalHooks.onError(error, context);
+    }
+    this._hooks.forEach((hooks) => {
+      if (hooks.onError) {
+        hooks.onError(error, context);
+      }
+    });
+  }
 
-          // Check for errors
-          if (state.lastError) {
-            issues.push(`Last error: ${state.lastError}`);
-          }
+  private _callDeviceDiscoveryHooks(deviceId: number, isOnline: boolean): void {
+    if (this._globalHooks.onDeviceDiscovery) {
+      this._globalHooks.onDeviceDiscovery(deviceId, isOnline);
+    }
+    this._hooks.forEach((hooks) => {
+      if (hooks.onDeviceDiscovery) {
+        hooks.onDeviceDiscovery(deviceId, isOnline);
+      }
+    });
+  }
+  private _callStatusChangeHooks(isRunning: boolean): void {
+    if (this._globalHooks.onStatusChange) {
+      this._globalHooks.onStatusChange(isRunning);
+    }
+    this._hooks.forEach((hooks) => {
+      if (hooks.onStatusChange) {
+        hooks.onStatusChange(isRunning);
+      }
+    });
+  }
 
-          // Check error rate
-          if (portStats && portStats.errors > 10) {
-            issues.push(`High error count: ${portStats.errors}`);
-          }
+  private async _disconnectFromPorts(): Promise<void> {
+    if (this._connectedPorts.length === 0) {
+      return;
+    }
 
-          // Check for recent activity
-          const now = Date.now();
-          const connectionDuration = this._startTime ? now - this._startTime : 0;
-
-          if (portStats && now - portStats.lastMessage.getTime() > 60000) {
-            // 1 minute instead of 30 seconds
-            issues.push('No recent messages (>1min)');
-          }
-
-          return {
-            port,
-            isHealthy: issues.length === 0 && state.isOpen && portState === 'connected',
-            issues,
-            connectionDuration,
-          } as LoadCellConnectionHealth;
-        }),
-        catchError((error) => {
-          this._logger.debug(`Health check failed for ${port}:`, error.message);
-          return of({
-            port,
-            isHealthy: false,
-            issues: [`Health check failed: ${error.message}`],
-            connectionDuration: 0,
-          } as LoadCellConnectionHealth);
-        }),
-      ),
-    );
-
-    return forkJoin(healthChecks).pipe(
-      tap((healthArray) => {
-        this._connectionHealth$.next(healthArray);
-      }),
-      map(() => void 0),
-      catchError((error) => {
-        this._logger.error('Failed to update connection health:', error);
-        return of(void 0);
-      }),
-    );
+    this._logger.log(`Disconnecting from ${this._connectedPorts.length} ports...`);
+    const disconnectionPromises = this._connectedPorts.map(async (port) => this._disconnectFromSinglePort(port));
+    await Promise.allSettled(disconnectionPromises);
+    this._connectedPorts = [];
+    this._logger.log('All ports have been processed for disconnection.');
   }
 }

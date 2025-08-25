@@ -157,7 +157,7 @@ export class DeviceWorkerService {
               ? Math.round(calcNewQuantity - 0.3)
               : Math.round(calcNewQuantity + 0.29);
         if (device.unitWeight) {
-          this._logger.log('quantity unitWeight', device.quantity, changeQuantity1);
+          this._logger.log('quantity unitWeight', { device });
           await this._deviceMRepository.updateFirst(
             { _id: device._id },
             {

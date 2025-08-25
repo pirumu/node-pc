@@ -1,41 +1,54 @@
-export enum EVENT_TYPE {
-  TRACE_CU_LOCK_OPEN = 'cu/lockOpen',
-  DEVICE_ACTIVATED = 'device/active',
+export const EventType = {
+  /** Events related to physical devices and their state */
+  Loadcell: {
+    Activated: 'loadcell/activated',
+    StatusChanged: 'loadcell/status-changed',
+    AllComputed: 'loadcell/all-computed', // Formerly BIN_DEVICES
+  },
 
-  BIN_OPENED = 'bin/open',
-  BIN_CLOSED = 'bin/close',
+  /** Events related to Bins (cabinets/drawers) */
+  Bin: {
+    Opened: 'bin/opened',
+    Closed: 'bin/closed',
+    Computed: 'bin/computed', // Formerly BINS_TOTAL
+  },
 
-  ISSUE_SUCCESS = 'processItem/success',
-  ISSUE_PROCESSING = 'lock/openSuccess',
+  /** Events related to Locks */
+  Lock: {
+    CuLockOpened: 'lock/cu-opened',
+    OpenSuccess: 'lock/open-success',
+    OpenFail: 'lock/open-fail',
+    StatusChanged: 'lock/status-changed',
+  },
 
-  /**Listen realtime CU lock, loadcells ... */
-  RFID_DEVICE = 'rfid/connect',
-  CU_DEVICE = 'cu/connect',
-  LOAD_CELLS = 'loadcell/connect',
-  CLOUD_CONNECT = 'cloud/connect',
+  /** Events related to core business processes (Issue, Return, Replenish) */
+  Process: {
+    IssueSuccess: 'process/issue-success',
+    IssueError: 'process/issue-error',
+    IssueWarning: 'process/issue-warning',
 
-  /**Listen all device realtime */
-  BIN_DEVICES = 'device/computed',
+    ReturnSuccess: 'process/return-success', // Assuming you might need this
+    ReturnError: 'process/return-error',
+    ReturnWarning: 'process/return-warning',
 
-  BINS_TOTAL = 'bin/computed',
+    ReplenishSuccess: 'process/replenish-success', // Assuming you might need this
+    ReplenishError: 'process/replenish-error',
+    ReplenishWarning: 'process/replenish-warning',
 
-  BIN_LOCK_STATUS = 'lock/status',
+    ItemScanned: 'process/item-scanned', // Formerly SCAN_ITEM
+  },
 
-  DEVICE_STATUS = 'device/status',
+  /** Events related to network/service connections */
+  Connection: {
+    Cloud: 'connection/cloud',
+    RfidDevice: 'connection/rfid-device',
+    CuDevice: 'connection/cu-device',
+    LoadCell: 'connection/load-cell',
+  },
+} as const;
 
-  OPEN_BIN_FAIL = 'lock/openFail',
-
-  ISSUE_ERROR = 'issue/error',
-  REPLENISH_ERROR = 'replenish/error',
-  RETURN_ERROR = 'return/error',
-
-  ISSUE_WARNING = 'issue/warning',
-
-  RETURN_WARNING = 'return/warning',
-  REPLENISH_WARNING = 'replenish/warning',
-
-  SCAN_ITEM = 'scan-item',
-}
+type ObjectValues<T> = T[keyof T];
+export type EventType = ObjectValues<ObjectValues<typeof EventType>>;
 
 export enum COMMAND_TYPE {
   CU_LOCK_OPEN = 'cu_lock.open',

@@ -1,5 +1,5 @@
 export const CABINET_ROUTES = {
   GROUP: 'cabinets',
-  GET_CABINETS: 'list',
-  GET_CABINET: 'id/:id',
+  GET_CABINETS: '/',
+  GET_CABINET: ':id',
 };

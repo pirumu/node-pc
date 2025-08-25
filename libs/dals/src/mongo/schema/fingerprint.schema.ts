@@ -1,9 +1,8 @@
 import { ModelDefinition, Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Schema as MSchema } from 'mongoose';
 
-import { schemaOptions } from '../mongo-dal.options';
-
 import { BaseSchema } from './base.schema';
+import { schemaOptions } from './default.options';
 
 @Schema(schemaOptions)
 export class Fingerprint extends BaseSchema {

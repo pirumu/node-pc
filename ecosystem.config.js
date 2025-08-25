@@ -21,8 +21,8 @@ module.exports = {
       },
     },
     // {
-    //   name: 'worker-process',
-    //   script: 'dist/apps/worker/main.js',
+    //   name: 'process-worker',
+    //   script: 'dist/apps/process-worker/main.js',
     //   watch: false,
     //   autorestart: true,
     //   max_memory_restart: '1G',

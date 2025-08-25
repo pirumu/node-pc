@@ -1,1 +1,3 @@
-export class GetAreasRequest {}
+import { PaginationRequest } from '@common/dto';
+
+export class GetAreasRequest extends PaginationRequest {}

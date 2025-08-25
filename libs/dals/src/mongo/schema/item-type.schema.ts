@@ -4,7 +4,10 @@ import { Schema as MSchema } from 'mongoose';
 import { BaseSchema } from './base.schema';
 import { schemaOptions } from './default.options';
 
-@Schema(schemaOptions)
+@Schema({
+  ...schemaOptions,
+  collection: 'item_types',
+})
 export class ItemType extends BaseSchema {
   @Prop({ type: MSchema.Types.String, required: true })
   type: string;

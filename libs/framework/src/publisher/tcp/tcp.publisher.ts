@@ -33,9 +33,9 @@ export class TCPPublisher implements IPublisher {
       const requestInfo = { [TRACING_ID]: requestId || new SnowflakeId().id(), ...metadata };
       return await lastValueFrom(
         this._client.send(channel, { ...data, metadata: requestInfo }).pipe(
-          timeout(options?.timeout ?? 3000),
+          timeout(options?.timeout ?? 10000),
           retry({
-            count: options?.retries || 3,
+            count: options?.retries || 5,
             delay: (error, retryCount) => {
               this._logger.warn(`Retry attempt ${retryCount} for pattern: ${channel}`);
               return of(error).pipe(delay(1000 * retryCount));

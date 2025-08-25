@@ -144,6 +144,15 @@
         "tsConfigPath": "libs/mapper/tsconfig.lib.json"
       }
     },
+    "process-worker": {
+      "type": "application",
+      "root": "apps/process-worker",
+      "entryFile": "main",
+      "sourceRoot": "apps/process-worker/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/process-worker/tsconfig.app.json"
+      }
+    },
     "serialport": {
       "type": "library",
       "root": "libs/serialport",
@@ -160,6 +169,15 @@
       "sourceRoot": "libs/services/src",
       "compilerOptions": {
         "tsConfigPath": "libs/services/tsconfig.lib.json"
+      }
+    },
+    "sync-worker": {
+      "type": "application",
+      "root": "apps/sync-worker",
+      "entryFile": "main",
+      "sourceRoot": "apps/sync-worker/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/sync-worker/tsconfig.app.json"
       }
     },
     "worker": {

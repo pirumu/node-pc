@@ -1,4 +1,4 @@
-import { CardDeviceConnectedEvent, CardScanEvent } from '@common/business/events';
+import { CardDeviceConnectedEvent, CardScannedEvent } from '@common/business/events';
 import { HidDeviceConfig } from '@config/contracts';
 import { CONFIG_KEY } from '@config/core';
 import { PublisherService, Transport } from '@framework/publisher';
@@ -48,9 +48,9 @@ export class CardScanService implements OnModuleInit {
 
   private _subscribeToHidData(): void {
     this._hidService.data$().subscribe({
-      next: async (cardNumber) => {
-        this._logger.log(`Card scanned: ${cardNumber}`);
-        const event = new CardScanEvent({ cardNumber });
+      next: async (value) => {
+        this._logger.log(`Card scanned: ${value}`);
+        const event = new CardScannedEvent({ value });
         await this._publisherService.publish(Transport.MQTT, event.getChannel(), event.getPayload());
       },
       error: (error) => {

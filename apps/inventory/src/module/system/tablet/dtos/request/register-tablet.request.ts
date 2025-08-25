@@ -1,51 +1,33 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Expose } from 'class-transformer';
-import { IsBoolean, IsInt, IsOptional, IsString, IsUrl, Min } from 'class-validator';
+import { IsBoolean, IsMongoId, IsNotEmpty, IsOptional, IsString } from 'class-validator';
 
-export class RegisterTabletRequestDto {
-  @ApiProperty({ name: 'clusterId' })
-  @Expose({ name: 'clusterId' })
+export class RegisterTabletRequest {
+  @ApiProperty({
+    name: 'clientId',
+    description:
+      'The device unique ID. On Android it is currently identical to getAndroidId() in this module. On iOS it uses the DeviceUID uid identifier. On Windows it uses Windows.Security.ExchangeActiveSyncProvisioning.EasClientDeviceInformation.id.',
+  })
+  @Expose()
+  @IsNotEmpty()
+  @IsString()
+  public clientId: string;
+
+  @ApiProperty()
+  @Expose()
+  @IsNotEmpty()
+  @IsString()
+  public publicKey: string;
+
+  @ApiProperty()
+  @Expose()
+  @IsNotEmpty()
+  @IsMongoId()
   public clusterId: string;
 
-  @ApiProperty({ name: 'username' })
-  @Expose({ name: 'username' })
-  @IsString()
-  public username: string;
-
-  @ApiProperty({ name: 'accessKey' })
-  @Expose({ name: 'accessKey' })
-  @IsString()
+  @ApiProperty({ required: false, default: false })
+  @Expose()
   @IsOptional()
-  public accessKey?: string;
-
-  @ApiProperty({ name: 'password' })
-  @Expose({ name: 'password' })
-  @IsString()
-  public password: string;
-
-  @ApiProperty({ name: 'interval_sync_time' })
-  @Expose({ name: 'interval_sync_time' })
-  @IsInt()
-  @Min(1)
-  public intervalSyncTime: number;
-
-  @ApiProperty({ name: 'cloud_url' })
-  @Expose({ name: 'cloud_url' })
-  @IsUrl()
-  public cloudUrl: string;
-
-  @ApiProperty({ name: 'compensation_time' })
-  @Expose({ name: 'compensation_time' })
-  @IsInt()
-  public compensationTime: number;
-
-  @ApiProperty({ name: 'torque_wrench_type_id' })
-  @Expose({ name: 'torque_wrench_type_id' })
-  @IsInt()
-  public torqueWrenchTypeId: number;
-
-  @ApiProperty({ name: 'is_2fa' })
-  @Expose({ name: 'is_2fa' })
   @IsBoolean()
-  public is2fa: boolean;
+  public isMfaEnabled: boolean;
 }

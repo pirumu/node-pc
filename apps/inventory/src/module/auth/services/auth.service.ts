@@ -1,68 +1,155 @@
-import { UserEntity } from '@entity';
+import { PaginationMeta } from '@common/dto';
+import { FacialRecognitionEntity, TabletEntity, UserEntity } from '@dals/mongo/entities';
 import { AppHttpException } from '@framework/exception';
-import { Pbkdf2 } from '@framework/hash/pbkdf2';
-import { BadRequestException, Injectable, InternalServerErrorException, UnauthorizedException } from '@nestjs/common';
+import { BCrypto } from '@framework/hash/bcrypto';
+import { EntityRepository, ObjectId } from '@mikro-orm/mongodb';
+import { InjectRepository } from '@mikro-orm/nestjs';
+import { Injectable } from '@nestjs/common';
 
-import { UserService } from '../../user';
-import { LoginByPinRequest } from '../dtos';
-import { LoginRequest } from '../dtos/request';
+import { LoginByPinRequest, LoginByFaceRequest, LoginRequest } from '../dtos/request';
 import { JwtAuthResponse } from '../dtos/response';
 
 import { JwtAuthService } from './jwt-auth.service';
 
 @Injectable()
 export class AuthService {
-  private readonly _hashAlgorithm = new Pbkdf2();
+  private readonly _signatureExpireInMs: number = 10000; //10s
+  private readonly _signatureMap: Map<
+    string,
+    {
+      userId: string;
+      timeout: any;
+    }
+  > = new Map<
+    string,
+    {
+      userId: string;
+      timeout: any;
+    }
+  >();
+
+  private readonly _hashAlgorithm = new BCrypto();
   constructor(
     private readonly _jwtAuthService: JwtAuthService,
-    private readonly _userService: UserService,
+
+    @InjectRepository(UserEntity) private readonly _userRepository: EntityRepository<UserEntity>,
+    @InjectRepository(TabletEntity) private readonly _tabletRepository: EntityRepository<TabletEntity>,
+    @InjectRepository(FacialRecognitionEntity) private readonly _facialRecognitionRepository: EntityRepository<FacialRecognitionEntity>,
   ) {}
 
-  public async login(payload: LoginRequest): Promise<JwtAuthResponse> {
-    const user = await this._prepareUser(payload.loginId);
-    await this._isValidPassword(payload.password, user.password);
-    return this._generateJwtAuthResponse(user);
-  }
-
-  public async loginByPin(dto: LoginByPinRequest): Promise<JwtAuthResponse> {
-    const user = await this._prepareUser(dto.loginId);
-
-    this._validateSetting(user);
-
-    await this._isValidPinCode(dto.pin, user.pin());
-
-    return this._generateJwtAuthResponse(user);
-  }
-
-  private async _prepareUser(loginId: string): Promise<UserEntity> {
-    let user: UserEntity | null = null;
-
-    try {
-      user = await this._userService.findByLoginId(loginId);
-    } catch (error) {
-      throw new InternalServerErrorException('Failed to find user', error);
+  public async loginByPin(clientId: string, dto: LoginByPinRequest): Promise<JwtAuthResponse> {
+    const signature = this._signatureMap.get(dto.signature);
+    if (!signature) {
+      this._signatureMap.delete(dto.signature);
+      throw AppHttpException.unauthorized({ message: 'Invalid signature' });
     }
+    const user = await this._userRepository.findOne({ _id: new ObjectId(signature.userId) });
+
+    this._signatureMap.delete(dto.signature);
 
     if (!user) {
-      throw new UnauthorizedException('Unauthorized');
-    }
-    return user;
-  }
-
-  private _validateSetting(user: UserEntity): void {
-    if (!user.isEnableTwoFactorAuthentication()) {
-      throw new BadRequestException('Please enable two-factor authentication (2FA) to continue');
-    }
-  }
-
-  private async _isValidPinCode(pinCode: string, hashPinCode: string): Promise<void> {
-    const isValid = await this._hashAlgorithm.compare(pinCode, hashPinCode);
-    if (!isValid) {
       throw AppHttpException.unauthorized();
+    }
+
+    await this._isValidPinCode(clientId, user.pin, dto.pin);
+
+    return this._generateJwtAuthResponse(user);
+  }
+
+  public async loginByFaceData(clientId: string, dto: LoginByFaceRequest): Promise<JwtAuthResponse> {
+    const faceData = await this._facialRecognitionRepository.findOne(
+      {
+        data: dto.data,
+      },
+      {
+        populate: ['user'],
+      },
+    );
+
+    if (!faceData || !faceData.user) {
+      throw AppHttpException.unauthorized();
+    }
+    // todo: clear
+    // if (await this._is2FaEnable(clientId)) {
+    //   const key = randomBytes(32).toString('hex');
+    //   this._addSignature(faceData.user.id, key);
+    //   return new JwtAuthResponse({
+    //     signature: key,
+    //     signatureExpireInMs: this._signatureExpireInMs,
+    //   });
+    // }
+    return this._generateJwtAuthResponse(faceData.user.unwrap());
+  }
+
+  public async getFacialRecognitions(page: number, limit: number): Promise<{ rows: FacialRecognitionEntity[]; meta: PaginationMeta }> {
+    const [rows, count] = await Promise.all([
+      this._facialRecognitionRepository.findAll({
+        limit,
+        offset: (page - 1) * limit,
+      }),
+      this._facialRecognitionRepository.count(),
+    ]);
+
+    return {
+      rows,
+      meta: new PaginationMeta({
+        limit,
+        page,
+        total: count,
+      }),
+    };
+  }
+
+  private _addSignature(userId: string, key: string) {
+    const signature = this._signatureMap.get(key);
+    if (signature) {
+      clearTimeout(signature.timeout);
+    }
+    const timeout = setTimeout(() => {
+      this._signatureMap.delete(key);
+    }, 10000); // 10s.
+
+    this._signatureMap.set(key, { userId, timeout });
+  }
+
+  private async _is2FaEnable(clientId?: string, clusterId?: string): Promise<boolean> {
+    const conditions: Array<Record<string, any>> = [];
+    if (clientId) {
+      conditions.push({
+        clientId,
+      });
+    }
+    if (clusterId) {
+      conditions.push({
+        cluster: {
+          _id: new ObjectId(clusterId),
+        },
+      });
+    }
+
+    const tablet = await this._tabletRepository.findOne(
+      {
+        $or: conditions,
+      },
+      { fields: ['isMfaEnabled'] },
+    );
+
+    if (!tablet) {
+      throw AppHttpException.unauthorized({ message: 'Invalid client id' });
+    }
+    return tablet.isMfaEnabled;
+  }
+
+  private async _isValidPinCode(clientId: string, userPinCode: string, requestPinCode?: string): Promise<void> {
+    const isMfa = await this._is2FaEnable(clientId);
+
+    if (isMfa && requestPinCode !== userPinCode) {
+      throw AppHttpException.unauthorized({ message: 'Invalid pin code' });
     }
   }
 
   private async _isValidPassword(password: string, hashPassword: string): Promise<void> {
+    hashPassword = hashPassword.replace('$2y', '$2a');
     const isValid = await this._hashAlgorithm.compare(password, hashPassword);
     if (!isValid) {
       throw AppHttpException.unauthorized();
@@ -73,28 +160,37 @@ export class AuthService {
     const accessToken = await this._jwtAuthService.generateToken(user);
 
     return new JwtAuthResponse({
+      username: user.username,
       accessToken,
-      loginId: user.loginId,
     });
   }
 
-  // test only
-  public async loginByCard(): Promise<JwtAuthResponse> {
-    const accessToken = await this._jwtAuthService.generateToken({
-      cloud: {},
-      employeeId: '12345',
-      genealogy: null,
-      id: '6897161d859e7e5b8bbb2ab8',
-      password: '',
-      pinCode: undefined,
-      role: 'admin',
-      loginId: 'admin',
-      cardNumber: 1234,
-    } as any);
+  // testing only
+  public async loginByCard(cardId: string): Promise<JwtAuthResponse> {
+    const user = await this._userRepository.findOne({ cardId: cardId });
+    if (!user) {
+      throw AppHttpException.unauthorized();
+    }
 
-    return new JwtAuthResponse({
-      accessToken,
-      loginId: 'admin',
-    });
+    // todo: clear
+    // if (await this._is2FaEnable(undefined, cardId)) {
+    //   const key = randomBytes(32).toString('hex');
+    //   this._addSignature(user.id, key);
+    //   return new JwtAuthResponse({
+    //     signature: key,
+    //     signatureExpireInMs: this._signatureExpireInMs,
+    //   });
+    // }
+
+    return this._generateJwtAuthResponse(user);
+  }
+
+  public async login(payload: LoginRequest): Promise<JwtAuthResponse> {
+    const user = await this._userRepository.findOne({ username: payload.username });
+    if (!user) {
+      throw AppHttpException.unauthorized();
+    }
+    await this._isValidPassword(payload.password, user.password);
+    return this._generateJwtAuthResponse(user);
   }
 }

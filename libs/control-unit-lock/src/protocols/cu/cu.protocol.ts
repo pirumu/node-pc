@@ -107,7 +107,7 @@ export class CuProtocol implements IProtocol<CuResponse> {
 
           if (dataByte !== undefined) {
             const statusBit = (dataByte >> bitIndex) & 0x01;
-            result.lockStatuses[lockId] = statusBit === 1 ? LOCK_STATUS.CLOSED : LOCK_STATUS.OPEN;
+            result.lockStatuses[lockId] = statusBit === 1 ? LOCK_STATUS.CLOSED : LOCK_STATUS.OPENED;
           }
         }
       }
@@ -115,7 +115,7 @@ export class CuProtocol implements IProtocol<CuResponse> {
       else if (bytes.length === 6) {
         const lockId = bytes[2] + 1; // Convert back to 1-based index
         result.lockStatuses = {
-          [lockId]: LOCK_STATUS.OPEN, // Successful open command response
+          [lockId]: LOCK_STATUS.OPENED, // Successful open command response
         };
       }
     }

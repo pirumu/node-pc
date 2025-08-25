@@ -5,7 +5,7 @@ export class LoginRequest {
   @ApiProperty()
   @IsNotEmpty()
   @IsString()
-  loginId: string;
+  username: string;
 
   @ApiProperty()
   @IsNotEmpty()

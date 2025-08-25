@@ -1,15 +1,16 @@
 import { BaseController } from '@framework/controller';
 import { ApiDocs, ControllerDocs } from '@framework/swagger';
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, Query } from '@nestjs/common';
 
 import { HEADER_KEYS } from '../../../common';
 
 import { CONDITION_ROUTES } from './condition.constants';
 import { ConditionService } from './condition.service';
+import { GetConditionsRequest } from './dtos/request';
 import { GetConditionsResponse } from './dtos/response';
 
 @ControllerDocs({
-  tag: '[INVENTORY] Condition',
+  tag: 'Condition',
   securitySchema: 'header',
   securityKey: HEADER_KEYS.DEVICE_KEY,
 })
@@ -23,8 +24,8 @@ export class ConditionController extends BaseController {
     responseSchema: [GetConditionsResponse],
   })
   @Get(CONDITION_ROUTES.GET_CONDITIONS)
-  public async getConditions(): Promise<GetConditionsResponse[]> {
-    const results = await this._service.getConditions('');
-    return results.map((item) => this.toDto<GetConditionsResponse>(GetConditionsResponse, item));
+  public async getConditions(@Query() query: GetConditionsRequest): Promise<GetConditionsResponse[]> {
+    const results = await this._service.getConditions(query.excludeName);
+    return results.map((item) => this.toDto<GetConditionsResponse>(GetConditionsResponse, item.toPOJO()));
   }
 }

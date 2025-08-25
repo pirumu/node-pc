@@ -9,8 +9,10 @@ export class Location {
   @Prop({
     type: {
       id: { type: MSchema.Types.String, required: true },
-      name: { type: MSchema.Types.String, required: false },
-      row: { type: MSchema.Types.Number, required: false },
+      name: { type: MSchema.Types.String, required: true },
+      row: { type: MSchema.Types.Number, required: true },
+      cuId: { type: MSchema.Types.Number, required: true },
+      lockId: { type: MSchema.Types.Number, required: true },
     },
     required: true,
   })
@@ -18,6 +20,8 @@ export class Location {
     id: string;
     name: string;
     row: number;
+    cuId: number;
+    lockId: number;
   };
 
   @Prop({ type: MSchema.Types.Number, required: false, default: 0 })
@@ -30,7 +34,10 @@ export class Location {
   quantity: number;
 
   @Prop({ type: MSchema.Types.Mixed, required: false })
-  cabinet: any;
+  cabinet: {
+    id: string;
+    name: string;
+  };
 }
 
 const LocationSchema = SchemaFactory.createForClass(Location);

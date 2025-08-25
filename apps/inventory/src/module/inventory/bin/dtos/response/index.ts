@@ -1,2 +1,2 @@
 export * from './get-bins.response';
-export * from './get-bin.response';
+export * from './bin-actions.response';

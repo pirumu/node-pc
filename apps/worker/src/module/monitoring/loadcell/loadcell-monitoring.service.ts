@@ -1,4 +1,4 @@
-import { LoadcellHeartbeatEvent } from '@common/business/events/device';
+import { LoadcellHeartbeatEvent } from '@common/business/events/loadcell';
 import { CONFIG_KEY } from '@config/core';
 import { DeviceEntity } from '@entity';
 import { PublisherService, Transport } from '@framework/publisher';

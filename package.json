@@ -28,6 +28,10 @@
     "generate:module": "ts-node scripts/generate-module.ts"
   },
   "dependencies": {
+    "@mikro-orm/core": "^6.4.16",
+    "@mikro-orm/mongo-highlighter": "^1.0.0",
+    "@mikro-orm/mongodb": "^6.4.16",
+    "@mikro-orm/nestjs": "^6.1.1",
     "@nestjs/bullmq": "^11.0.3",
     "@nestjs/cache-manager": "^3.0.1",
     "@nestjs/common": "^11.0.1",

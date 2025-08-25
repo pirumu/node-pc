@@ -181,6 +181,7 @@ export class AppLoggerService implements LoggerService {
     } else {
       // Standard logging
       if (messageParams.length > 0) {
+        // @ts-ignore
         this._logger[level](objArg, message, ...messageParams);
       } else {
         if (Object.keys(objArg).length > 0) {

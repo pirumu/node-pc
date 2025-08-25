@@ -3,21 +3,21 @@ import { Type, Transform, Expose } from 'class-transformer';
 import { IsArray, IsNumber, IsOptional, ValidateNested, ArrayMinSize, IsPositive, IsMongoId } from 'class-validator';
 
 export class WorkingOrder {
-  @ApiProperty({ description: 'Work Order ID', name: 'wo_id' })
+  @ApiProperty({ description: 'Working order id' })
   @IsMongoId()
   @Type(() => String)
-  @Expose({ name: 'wo_id', toClassOnly: true })
-  woId: string;
+  @Expose({ toClassOnly: true })
+  workingOrderId: string;
 
-  @ApiProperty({ description: 'Area ID', name: 'area_id' })
+  @ApiProperty({ description: 'Area id' })
   @IsMongoId()
   @Type(() => String)
-  @Expose({ name: 'area_id', toClassOnly: true })
+  @Expose({ toClassOnly: true })
   areaId: string;
 }
 
-export class RequestIssueItemDto {
-  @ApiProperty({ description: 'Item ID' })
+export class RequestItem {
+  @ApiProperty({ description: 'Item id' })
   @IsMongoId()
   @Type(() => String)
   itemId: string;
@@ -29,13 +29,12 @@ export class RequestIssueItemDto {
   @Type(() => Number)
   quantity: number;
 
-  @ApiProperty({
-    required: false,
-    description: 'Item condition status',
-  })
+  @ApiProperty({ description: 'Condition id' })
+  @IsNumber()
+  @IsMongoId()
+  @Expose({ toClassOnly: true })
   @IsOptional()
-  @Type(() => String)
-  status?: string;
+  conditionId?: string;
 
   @ApiProperty({
     type: [WorkingOrder],
@@ -46,30 +45,18 @@ export class RequestIssueItemDto {
   @ValidateNested({ each: true })
   @Type(() => WorkingOrder)
   @IsOptional()
-  workingOrders: WorkingOrder[];
-
-  @ApiProperty({ description: 'Condition ID', name: 'condition_id' })
-  @IsNumber()
-  @IsMongoId()
-  @Expose({ name: 'condition_id', toClassOnly: true })
-  @IsOptional()
-  conditionId: string;
-
-  @ApiProperty({ description: 'Bin ID', required: false })
-  @IsMongoId()
-  @Expose({ toClassOnly: true })
-  binId: string;
+  workingOrders?: WorkingOrder[] = [];
 }
 
 export class ItemRequest {
   @ApiProperty({
-    type: [RequestIssueItemDto],
-    description: 'Array of items to issue',
+    type: [RequestItem],
+    description: 'Array of items',
   })
   @IsArray()
   @ArrayMinSize(1, { message: 'At least one item is required' })
   @ValidateNested({ each: true })
-  @Type(() => RequestIssueItemDto)
+  @Type(() => RequestItem)
   @Expose({ toClassOnly: true })
-  items: RequestIssueItemDto[];
+  items: RequestItem[];
 }

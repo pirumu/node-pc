@@ -1,15 +1,17 @@
+import { PaginationResponse } from '@common/dto';
 import { BaseController } from '@framework/controller';
 import { ApiDocs, ControllerDocs } from '@framework/swagger';
-import { Controller, Get, Param } from '@nestjs/common';
+import { Controller, Get, Param, Query } from '@nestjs/common';
 
 import { HEADER_KEYS } from '../../../common';
 
 import { CABINET_ROUTES } from './cabinet.constants';
 import { CabinetService } from './cabinet.service';
+import { GetCabinetsRequest } from './dtos/request';
 import { GetCabinetResponse, GetCabinetsResponse } from './dtos/response';
 
 @ControllerDocs({
-  tag: 'Device',
+  tag: 'Cabinet',
   securitySchema: 'header',
   securityKey: HEADER_KEYS.DEVICE_KEY,
 })
@@ -20,11 +22,11 @@ export class CabinetController extends BaseController {
   }
 
   @ApiDocs({
-    responseSchema: Array<GetCabinetsResponse>,
+    responseSchema: PaginationResponse<GetCabinetsResponse>,
   })
   @Get(CABINET_ROUTES.GET_CABINETS)
-  public async getCabinets(): Promise<any> {
-    const result = await this._cabinetService.getCabinets();
+  public async getCabinets(@Query() queries: GetCabinetsRequest): Promise<any> {
+    const result = await this._cabinetService.getCabinets(queries);
     return { rows: result.map((cabinet) => this.toDto<GetCabinetsResponse>(GetCabinetsResponse, cabinet)), count: result.length };
   }
 

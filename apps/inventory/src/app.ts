@@ -4,11 +4,11 @@ import { setupSwagger, setupValidation } from '@framework/bootstrap';
 import { GlobalExceptionFilter } from '@framework/filter';
 import { HandleResponseInterceptor } from '@framework/interceptor';
 import { APP_LOGGER } from '@framework/logger';
+import { MikroORM } from '@mikro-orm/core';
 import { INestApplication, Logger } from '@nestjs/common';
 import { ShutdownSignal } from '@nestjs/common/enums/shutdown-signal.enum';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
-import { MqttOptions, Transport } from '@nestjs/microservices';
 
 import { AppModule } from './app.module';
 import { MqttConfig } from './config/mqtt.config';
@@ -19,21 +19,30 @@ export class Application {
     await app.startAllMicroservices();
   }
 
+  private static async _setupDatabase(app: INestApplication): Promise<void> {
+    try {
+      await app.get(MikroORM).getSchemaGenerator().ensureDatabase();
+      await app.get(MikroORM).getSchemaGenerator().updateSchema();
+    } catch (error) {
+      // ignore.
+    }
+  }
+
   private static async _connectMqtt(app: INestApplication, configService: ConfigService): Promise<void> {
     const mqttConfig = configService.getOrThrow<MqttConfig>(CONFIG_KEY.MQTT);
-    app.connectMicroservice<MqttOptions>(
-      {
-        transport: Transport.MQTT,
-        options: {
-          ...mqttConfig.consumer,
-          resubscribe: true,
-          reschedulePings: true,
-          // use v5 to support userProperties
-          protocolVersion: 5,
-        },
-      },
-      { inheritAppConfig: true },
-    );
+    // app.connectMicroservice<MqttOptions>(
+    //   {
+    //     transport: Transport.MQTT,
+    //     options: {
+    //       ...mqttConfig.consumer,
+    //       resubscribe: true,
+    //       reschedulePings: true,
+    //       // use v5 to support userProperties
+    //       protocolVersion: 5,
+    //     },
+    //   },
+    //   { inheritAppConfig: true },
+    // );
   }
 
   private static _setupSwagger(app: INestApplication, configService: ConfigService) {
@@ -51,6 +60,8 @@ export class Application {
     const configService = app.get(ConfigService);
 
     const appConfig = configService.getOrThrow<AppConfig>(CONFIG_KEY.APP);
+
+    await this._setupDatabase(app);
 
     app.setGlobalPrefix(appConfig.apiPrefix);
     app.useGlobalPipes(setupValidation(app, AppModule));
@@ -70,3 +81,9 @@ export class Application {
     this._bootstrap().catch((error) => Logger.error(error.message, Application.name));
   }
 }
+
+process.on('unhandledRejection', (reason: any, p) => {
+  if ('codeName' in reason && reason.codeName === 'IndexKeySpecsConflict') {
+    // skip.
+  }
+});
