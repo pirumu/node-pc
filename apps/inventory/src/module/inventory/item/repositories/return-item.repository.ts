@@ -88,9 +88,9 @@ export class ReturnItemRepository {
               binId: l.binId.toHexString(),
               issuedQuantity: l.quantity,
               location: location,
-              batchNumber: loadcell.itemInfo.batchNumber,
-              serialNumber: loadcell.itemInfo.serialNumber,
-              dueDate: loadcell.itemInfo.expiryDate,
+              batchNumber: loadcell.metadata.batchNumber,
+              serialNumber: loadcell.metadata.serialNumber,
+              dueDate: loadcell.metadata.expiryDate,
             };
           })
           .filter((i) => i !== null);

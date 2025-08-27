@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { Exclude, Expose, Transform } from 'class-transformer';
+import { Exclude, Expose, Transform, Type } from 'class-transformer';
 
 export class GetUsersResponse {
   @ApiProperty()
@@ -39,7 +39,7 @@ export class GetUsersResponse {
   emailVerifiedAt?: Date;
 
   @ApiProperty()
-  @Expose()
+  @Exclude()
   cardId: string;
 
   @ApiProperty()
@@ -51,7 +51,8 @@ export class GetUsersResponse {
   status?: string;
 
   @ApiProperty({ type: [String] })
-  @Exclude({ toClassOnly: true })
+  @Expose()
+  @Type(() => Array)
   permissions: string[];
 
   @ApiProperty()

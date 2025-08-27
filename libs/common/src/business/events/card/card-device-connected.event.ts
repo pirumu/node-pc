@@ -1,7 +1,6 @@
+import { CardEventType, EVENT_TYPE } from '@common/constants';
+import { IAppEvent } from '@common/interfaces';
 import { Properties } from '@framework/types';
-
-import { EVENT_TYPE } from '../../../constants';
-import { IAppEvent } from '../../../interfaces';
 
 export class CardDeviceConnectedEvent implements IAppEvent {
   public readonly isConnected: boolean;
@@ -10,8 +9,8 @@ export class CardDeviceConnectedEvent implements IAppEvent {
     Object.assign(this, props);
   }
 
-  public getChannel(): string {
-    throw EVENT_TYPE.CARD_DEVICE_CONNECTED;
+  public getChannel(): CardEventType {
+    throw EVENT_TYPE.CARD.CONNECTED;
   }
 
   public getPayload(): { isConnected: boolean } {

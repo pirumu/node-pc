@@ -10,6 +10,7 @@ import { LoginByPinRequest, LoginByFaceRequest, LoginRequest } from '../dtos/req
 import { JwtAuthResponse } from '../dtos/response';
 
 import { JwtAuthService } from './jwt-auth.service';
+import { randomBytes } from 'crypto';
 
 @Injectable()
 export class AuthService {
@@ -131,7 +132,9 @@ export class AuthService {
       {
         $or: conditions,
       },
-      { fields: ['isMfaEnabled'] },
+      {
+        fields: ['isMfaEnabled'],
+      },
     );
 
     if (!tablet) {
@@ -165,24 +168,40 @@ export class AuthService {
     });
   }
 
-  // testing only
-  public async loginByCard(cardId: string): Promise<JwtAuthResponse> {
-    const user = await this._userRepository.findOne({ cardId: cardId });
+  public async loginByCard(cardId: string): Promise<[string, JwtAuthResponse][]> {
+    const user = await this._userRepository.findOne({ cardId: cardId }, { populate: ['sites', 'sites.clusters'] });
     if (!user) {
       throw AppHttpException.unauthorized();
     }
 
-    // todo: clear
-    // if (await this._is2FaEnable(undefined, cardId)) {
-    //   const key = randomBytes(32).toString('hex');
-    //   this._addSignature(user.id, key);
-    //   return new JwtAuthResponse({
-    //     signature: key,
-    //     signatureExpireInMs: this._signatureExpireInMs,
-    //   });
-    // }
+    const clusterIds = user.sites.map((s) => s.clusters.map((c) => c.id)).flat();
 
-    return this._generateJwtAuthResponse(user);
+    const results: [string, JwtAuthResponse][] = [];
+    for (const clusterId of clusterIds) {
+      try {
+        const isEnabled = await this._is2FaEnable(undefined, clusterId);
+        console.log(isEnabled);
+        if (isEnabled) {
+          const key = randomBytes(32).toString('hex');
+          this._addSignature(user.id, key);
+          results.push([
+            clusterId,
+            new JwtAuthResponse({
+              signature: key,
+              signatureExpireInMs: this._signatureExpireInMs,
+            }),
+          ]);
+        }
+      } catch (_error) {
+        // skip if not existed
+      }
+    }
+
+    if (results.length === 0) {
+      const jwtRes = await this._generateJwtAuthResponse(user);
+      results.push(['none', jwtRes]);
+    }
+    return results;
   }
 
   public async login(payload: LoginRequest): Promise<JwtAuthResponse> {

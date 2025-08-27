@@ -1,6 +1,6 @@
 import { PaginationMeta } from '@common/dto';
 import { UserEntity } from '@dals/mongo/entities';
-import { EntityRepository } from '@mikro-orm/mongodb';
+import { EntityRepository, ObjectId } from '@mikro-orm/mongodb';
 import { InjectRepository } from '@mikro-orm/nestjs';
 import { Injectable } from '@nestjs/common';
 
@@ -31,5 +31,9 @@ export class UserService {
         total: count,
       }),
     };
+  }
+
+  public async findOne(userId: string): Promise<UserEntity> {
+    return this._userRepository.findOneOrFail(new ObjectId(userId));
   }
 }

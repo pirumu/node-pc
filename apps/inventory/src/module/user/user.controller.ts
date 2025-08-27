@@ -1,4 +1,5 @@
-import { PaginationResponse } from '@common/dto';
+import { AuthUser } from '@common/decorator';
+import { AuthUserDto, PaginationResponse } from '@common/dto';
 import { BaseController } from '@framework/controller';
 import { ApiDocs, ControllerDocs } from '@framework/swagger';
 import { Controller, Get, Query } from '@nestjs/common';
@@ -16,6 +17,16 @@ import { UserService } from './user.service';
 export class UserController extends BaseController {
   constructor(private readonly _userService: UserService) {
     super();
+  }
+
+  @ApiDocs({
+    summary: 'Get user',
+    paginatedResponseSchema: GetUsersResponse,
+  })
+  @Get(USER_ROUTES.ME)
+  public async getUser(@AuthUser() user: AuthUserDto): Promise<GetUsersResponse> {
+    const entity = await this._userService.findOne(user.id);
+    return this.toDto<GetUsersResponse>(GetUsersResponse, entity.toPOJO());
   }
 
   @ApiDocs({

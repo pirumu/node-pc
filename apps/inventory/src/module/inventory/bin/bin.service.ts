@@ -1,5 +1,5 @@
 import { COMMAND_TYPE, EVENT_TYPE } from '@common/constants';
-import { PaginationMeta } from '@common/dto';
+import { PaginatedResult, PaginationMeta } from '@common/dto';
 import { CuLockRequest } from '@culock/dto';
 import { Command, ProtocolType } from '@culock/protocols';
 import { CuResponse } from '@culock/protocols/cu';
@@ -11,6 +11,7 @@ import { InjectRepository } from '@mikro-orm/nestjs';
 import { Injectable, Logger } from '@nestjs/common';
 
 import { OpenCabinetBinRequest } from './dtos/request';
+import type { FilterQuery } from '@mikro-orm/core/typings';
 
 @Injectable()
 export class BinService {
@@ -22,26 +23,8 @@ export class BinService {
     @InjectRepository(BinEntity) private readonly _binRepository: EntityRepository<BinEntity>,
   ) {}
 
-  public async getBins(
-    page: number,
-    limit: number,
-    cabinetId?: string,
-    enrich?: boolean,
-  ): Promise<{
-    rows: BinEntity[];
-    meta: PaginationMeta;
-  }> {
-    const conditions = cabinetId
-      ? {
-          where: {
-            cabinet: {
-              _id: new ObjectId(cabinetId),
-            },
-          },
-        }
-      : {};
-
-    const countConditions = cabinetId
+  public async getBins(page: number, limit: number, cabinetId?: string, enrich?: boolean): Promise<PaginatedResult<BinEntity>> {
+    const conditions: FilterQuery<BinEntity> = cabinetId
       ? {
           cabinet: {
             _id: new ObjectId(cabinetId),
@@ -49,15 +32,14 @@ export class BinService {
         }
       : {};
 
-    const [binEntities, count] = await Promise.all([
-      this._binRepository.findAll({
-        ...conditions,
+    const [binEntities, count] = await this._binRepository.findAndCount(
+      { ...conditions },
+      {
         limit: limit,
         offset: (page - 1) * limit,
-        populate: enrich ? ['site', 'cluster', 'loadcells', 'loadcells.item'] : [],
-      }),
-      this._binRepository.count({ ...countConditions }),
-    ]);
+        populate: enrich ? ['site', 'cabinet', 'cluster', 'loadcells'] : [],
+      },
+    );
 
     return {
       rows: binEntities,
@@ -74,7 +56,9 @@ export class BinService {
       {
         _id: new ObjectId(id),
       },
-      { populate: enrich ? ['site', 'cluster', 'loadcells', 'loadcells.item'] : [] },
+      {
+        populate: enrich ? ['cabinet', 'site', 'cluster', 'loadcells', 'loadcells.item', 'loadcells.item.itemType'] : [],
+      },
     );
 
     if (!binEntity) {

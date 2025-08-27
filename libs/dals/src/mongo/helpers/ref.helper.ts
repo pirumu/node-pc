@@ -17,7 +17,7 @@ export class RefHelper {
     return entity as unknown as T & object;
   }
 
-  public static get<T extends AbstractEntity>(ref: Ref<T> | null | undefined, name: string): (T & object) | null {
+  public static get<T extends AbstractEntity>(ref: Ref<T> | null | undefined): (T & object) | null {
     if (!ref) {
       return null;
     }

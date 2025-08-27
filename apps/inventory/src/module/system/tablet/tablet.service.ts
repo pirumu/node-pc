@@ -1,6 +1,6 @@
 import { TabletEntity, ClusterEntity } from '@dals/mongo/entities';
 import { AppHttpException } from '@framework/exception';
-import { EntityRepository, ObjectId } from '@mikro-orm/mongodb';
+import { EntityRepository, ObjectId, Reference } from '@mikro-orm/mongodb';
 import { InjectRepository } from '@mikro-orm/nestjs';
 import { Injectable } from '@nestjs/common';
 
@@ -27,15 +27,13 @@ export class TabletService {
       });
     }
 
-    const entity = await this._tabletRepository.upsert({
+    await this._tabletRepository.upsert({
       clientId: dto.clientId,
-      cluster: {
-        _id: cluster._id,
-      },
+      cluster: Reference.create(cluster),
       publicKey: dto.publicKey,
       isMfaEnabled: dto.isMfaEnabled,
     });
 
-    return !!entity;
+    return true;
   }
 }

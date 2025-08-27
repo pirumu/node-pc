@@ -1,5 +1,6 @@
+import { ClusterEntity } from '@dals/mongo/entities/cluster.entity';
 import { PartialProperties } from '@framework/types';
-import { Entity, Property, ManyToOne, Ref } from '@mikro-orm/core';
+import { Entity, Property, ManyToOne, Ref, OneToMany, Collection } from '@mikro-orm/core';
 
 import { AbstractEntity } from './abstract.entity';
 import { SystemEntity } from './system.entity';
@@ -9,7 +10,7 @@ export class SiteEntity extends AbstractEntity {
   @Property()
   name: string;
 
-  @Property({ unique: true })
+  @Property({ unique: true, hidden: true })
   accessKey: string;
 
   @Property()
@@ -17,6 +18,9 @@ export class SiteEntity extends AbstractEntity {
 
   @ManyToOne(() => SystemEntity, { fieldName: 'systemId', ref: true })
   system!: Ref<SystemEntity>;
+
+  @OneToMany(() => ClusterEntity, (e) => e.site, { persist: false })
+  clusters = new Collection<ClusterEntity>(this);
 
   constructor(data?: PartialProperties<SiteEntity>) {
     super();

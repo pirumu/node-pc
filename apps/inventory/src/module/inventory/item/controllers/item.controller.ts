@@ -17,7 +17,7 @@ import { IssueItemService, ItemService, ReplenishItemService, ReturnItemService 
 
 @ControllerDocs({
   tag: 'Item',
-  // securitySchema: 'bearer', // bearer and header
+  securitySchema: 'bearer', // bearer and header
   // securityKey: HEADER_KEYS.DEVICE_KEY,
 })
 @Controller(ITEM_ROUTES.GROUP)

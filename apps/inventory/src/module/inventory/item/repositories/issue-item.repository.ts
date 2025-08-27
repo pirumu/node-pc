@@ -1,7 +1,7 @@
 import { PaginatedResult, PaginationMeta } from '@common/dto';
 import { IssueHistoryEntity, LoadcellEntity } from '@dals/mongo/entities';
 import { AppHttpException } from '@framework/exception';
-import { EntityDTO, EntityManager, FilterQuery, QueryOrder, Reference } from '@mikro-orm/core';
+import { EntityManager, FilterQuery, QueryOrder } from '@mikro-orm/core';
 import { ObjectId } from '@mikro-orm/mongodb';
 import { Injectable, Logger } from '@nestjs/common';
 
@@ -48,10 +48,10 @@ export class IssueItemRepository {
 
       const rows: IssuableItemRecord[] = loadcells.map((lc) => {
         const canIssue = (lc: LoadcellEntity): boolean => {
-          if (lc.calibration.quantity <= 0) {
+          if (lc.availableQuantity <= 0) {
             return false;
           }
-          if ((lc.itemInfo?.expiryDate !== null || true) && (lc.itemInfo?.expiryDate?.getTime() || 0) >= expiryDate) {
+          if ((lc.metadata?.expiryDate !== null || true) && (lc.metadata?.expiryDate?.getTime() || 0) >= expiryDate) {
             return true;
           }
           const bin = lc.bin?.unwrap();
@@ -78,11 +78,11 @@ export class IssueItemRepository {
           type: itemType.name,
           image: item.itemImage,
           description: item.description,
-          totalQuantity: lc.calibration.availableQuantity,
+          totalQuantity: lc.availableQuantity,
           totalCalcQuantity: lc.calibration.calibratedQuantity,
           binId: lc.bin.id,
           binName: `${cabinet.name}-${cabinet.rowNumber}-${bin.x}-${bin.y}`,
-          dueDate: lc.itemInfo?.expiryDate || null,
+          dueDate: lc.metadata?.expiryDate || null,
           canIssue: canIssue(lc),
         };
       });
@@ -116,13 +116,11 @@ export class IssueItemRepository {
       item: {
         _id: { $in: itemIds.map((id) => new ObjectId(id)) },
       },
-      itemInfo: {
+      metadata: {
         ...timeConditions,
       },
       state: { isCalibrated: true },
-      calibration: {
-        quantity: { $gt: 0 },
-      },
+      availableQuantity: { $gt: 0 },
       bin: {
         state: {
           isFailed: false,

@@ -111,23 +111,33 @@ export class ReturnItemService {
 
         const item = RefHelper.getRequired(loadcell.item, 'ItemEntity');
         const bin = RefHelper.getRequired(loadcell.bin, 'BinItem');
+        const cabinet = RefHelper.getRequired(loadcell.cabinet, 'CabinetEntity');
+        const cluster = RefHelper.getRequired(loadcell.cluster, 'ClusterEntity');
+        const site = RefHelper.getRequired(loadcell.site, 'SiteEntity');
 
         plan.push({
           name: item.name,
           itemId: returnItem.itemId,
           requestQty: qtyToReturnHere,
-          currentQty: loadcell.calibration.quantity,
+          currentQty: loadcell.availableQuantity,
           loadcellId: loadcell.id,
           location: {
             binId: bin.id,
+            binName: `${bin.x}-${bin.y}`,
+            cabinetId: cabinet.id,
+            cabinetName: cabinet.name,
+            clusterId: cabinet.id,
+            clusterName: cluster.name,
+            siteId: site.id,
+            siteName: site.name,
           },
           keepTrackItems: bin.loadcells
-            .filter((l) => !!l.bin?.id && !!l.item?.id && l.calibration.quantity > 0 && !itemIds.includes(l.item?.id))
+            .filter((l) => !!l.bin?.id && !!l.item?.id && !itemIds.includes(l.item?.id))
             .map((l) => ({
               loadcellId: l.id,
               itemId: l.item!.id,
               name: l.item?.unwrap()?.name || '',
-              currentQty: l.calibration.availableQuantity,
+              currentQty: l.availableQuantity,
               binId: l.bin!.id,
             })),
         });
@@ -159,9 +169,12 @@ export class ReturnItemService {
     }
 
     const steps: ExecutionStep[] = [];
-    let stepCounter = 1;
+    let stepIndex = 1;
 
     for (const [binId, items] of binGroups) {
+      // now all item in same bin is grouped.
+      const location = items[0].location;
+
       const itemsToReturn: ItemToReturn[] = items.map((item) => ({
         itemId: item.itemId,
         name: item.name,
@@ -179,23 +192,23 @@ export class ReturnItemService {
       });
 
       const instructions = [
-        `Step ${stepCounter}: Go to ${binId}`,
-        `Open ${binId}`,
+        `Step ${stepIndex}: Go to cabinet ${location.cabinetName} and find bin ${location.binName}`,
         ...itemsToReturn.map((item) => `Return ${item.requestQty} units of ${item.name}`),
         `Close ${binId}`,
       ];
 
       steps.push({
-        stepId: `return_step_${stepCounter}_${binId}`,
+        stepId: `return_step_${stepIndex}_${binId}`,
         binId: binId,
         itemsToIssue: [],
         itemsToReplenish: [],
         itemsToReturn: itemsToReturn,
         keepTrackItems: Array.from(trackingItemsMap.values()),
         instructions: instructions,
+        location: location,
       });
 
-      stepCounter++;
+      stepIndex++;
     }
 
     return steps;

@@ -1,74 +1,126 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type, Expose } from 'class-transformer';
 import { IsString, IsNumber, IsBoolean, IsOptional, IsDateString, Min } from 'class-validator';
+import { Default } from '@framework/decorators';
 
 export class LoadcellState {
-  @ApiProperty({ description: 'Weight update status', default: false })
+  @ApiProperty({
+    description: 'Weight update status',
+    default: false,
+    example: false,
+  })
   @Expose({ toClassOnly: true })
   @Type(() => Boolean)
   isUpdatedWeight: boolean = false;
 
-  @ApiProperty({ description: 'Current status of loadcell', default: 'idle', example: 'idle' })
+  @ApiProperty({
+    description: 'Current status of loadcell',
+  })
   @Expose({ toClassOnly: true })
   @Type(() => String)
-  status: string = 'idle';
+  status: string;
+
+  @ApiProperty({
+    description: 'Whether the loadcell is calibrated',
+    default: false,
+    example: true,
+  })
+  @Expose({ toClassOnly: true })
+  @Type(() => Boolean)
+  isCalibrated: boolean = false;
+
+  @ApiProperty({
+    description: 'Whether the loadcell is currently running/active',
+    default: false,
+    example: true,
+  })
+  @Expose({ toClassOnly: true })
+  @Type(() => Boolean)
+  isRunning: boolean = false;
 }
 
 export class CalibrationData {
-  @ApiProperty({ description: 'Current quantity', default: 0, minimum: 0 })
-  @IsNumber()
-  @Min(0)
+  @ApiProperty({
+    description: 'Available quantity in the bin',
+    default: 0,
+    minimum: 0,
+    example: 150,
+  })
   @Expose({ toClassOnly: true })
   @Type(() => Number)
-  quantity: number = 0;
+  availableQuantity: number = 0;
 
-  @ApiProperty({ description: 'Maximum quantity capacity', default: 0, minimum: 0 })
-  @IsNumber()
-  @Min(0)
+  @ApiProperty({
+    description: 'Calibrated/reference quantity used for calibration',
+    default: 0,
+    minimum: 0,
+    example: 100,
+  })
   @Expose({ toClassOnly: true })
   @Type(() => Number)
-  maxQuantity: number = 0;
+  calibratedQuantity: number = 0;
 
-  @ApiProperty({ description: 'Zero weight calibration value', default: 0 })
+  @ApiProperty({
+    description: 'Zero weight calibration value (tare weight)',
+    default: 0,
+    example: 1500.5,
+  })
   @IsNumber()
   @Expose({ toClassOnly: true })
   @Type(() => Number)
   zeroWeight: number = 0;
 
-  @ApiProperty({ description: 'Unit weight for calculation', default: 0, minimum: 0 })
-  @IsNumber()
-  @Min(0)
+  @ApiProperty({
+    description: 'Unit weight for quantity calculation (weight per item)',
+    default: 0,
+    minimum: 0,
+    example: 12.5,
+  })
   @Expose({ toClassOnly: true })
   @Type(() => Number)
   unitWeight: number = 0;
 
-  @ApiProperty({ description: 'Quantity marked as damaged', default: 0, minimum: 0 })
+  @ApiProperty({
+    description: 'Quantity marked as damaged/defective',
+    default: 0,
+    minimum: 0,
+    example: 5,
+  })
   @IsNumber()
-  @Min(0)
   @Expose({ toClassOnly: true })
   @Type(() => Number)
   damageQuantity: number = 0;
+
+  @ApiPropertyOptional({
+    description: 'Next calibration due date',
+    type: String,
+    format: 'date-time',
+    example: '2024-12-31T23:59:59.000Z',
+    nullable: true,
+  })
+  @Expose({ toClassOnly: true })
+  @Type(() => Date)
+  calibrationDue?: Date | null = null;
 }
 
 export class LiveReading {
-  @ApiProperty({ description: 'Current weight reading from sensor', default: 0 })
-  @IsNumber()
+  @ApiProperty({
+    description: 'Current raw weight reading from sensor',
+    default: 0,
+    example: 1875.25,
+  })
   @Expose({ toClassOnly: true })
   @Type(() => Number)
   currentWeight: number = 0;
 
-  @ApiProperty({ description: 'Calculated weight after processing', default: 0 })
-  @IsNumber()
+  @ApiProperty({
+    description: 'Pending weight change from last reading',
+    default: 0,
+    example: 25.5,
+  })
   @Expose({ toClassOnly: true })
   @Type(() => Number)
-  calculatedWeight: number = 0;
-
-  @ApiProperty({ description: 'Calculated quantity based on unit weight', default: 0, minimum: 0 })
-  @IsNumber()
-  @Min(0)
-  @Expose({ toClassOnly: true })
-  @Type(() => Number)
-  calculatedQuantity: number = 0;
+  pendingChange: number = 0;
 }
 
 export class LoadcellItem {
@@ -209,21 +261,25 @@ export class GetLoadcellsResponse {
   @ApiPropertyOptional({ description: 'Item information', type: LoadcellItem })
   @Type(() => LoadcellItem)
   @Expose({ toClassOnly: true })
-  item?: LoadcellItem;
+  @Default(new LoadcellItem())
+  itemInfo?: LoadcellItem;
 
   @ApiProperty({ description: 'Calibration data', type: CalibrationData })
   @Type(() => CalibrationData)
   @Expose({ toClassOnly: true })
+  @Default(new CalibrationData())
   calibration: CalibrationData;
 
   @ApiProperty({ description: 'Live reading data', type: LiveReading })
   @Type(() => LiveReading)
   @Expose({ toClassOnly: true })
+  @Default(new LiveReading())
   reading: LiveReading;
 
   @ApiProperty({ description: 'Loadcell state', type: LoadcellState })
   @Type(() => LoadcellState)
   @Expose({ toClassOnly: true })
+  @Default(new LoadcellState())
   state: LoadcellState;
 
   @ApiPropertyOptional({ description: 'Port ID', example: '507f1f77bcf86cd799439011' })
@@ -234,15 +290,18 @@ export class GetLoadcellsResponse {
   @ApiProperty({ description: 'Hardware ID', default: 0, minimum: 0 })
   @Expose({ toClassOnly: true })
   @Type(() => Number)
+  @Default(0)
   hardwareId: number = 0;
 
   @ApiProperty({ description: 'Creation timestamp', type: Date })
   @Expose({ toClassOnly: true })
   @Type(() => Date)
+  @Default(null)
   createdAt: Date;
 
   @ApiProperty({ description: 'Last update timestamp', type: Date })
   @Expose({ toClassOnly: true })
   @Type(() => Date)
+  @Default(null)
   updatedAt: Date;
 }

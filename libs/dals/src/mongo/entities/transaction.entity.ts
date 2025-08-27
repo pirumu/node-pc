@@ -5,6 +5,7 @@ import { AbstractEntity } from './abstract.entity';
 // eslint-disable-next-line import/no-cycle
 import { TransactionEventEntity } from './transaction-event.entity';
 import { UserEntity } from './user.entity';
+import { AnotherItem, ItemToReplenish, ItemToReturn, ItemToTake, Location } from '@common/business/types';
 
 export enum TransactionType {
   ISSUE = 'ISSUE',
@@ -17,6 +18,7 @@ export enum TransactionStatus {
   PROCESSING = 'PROCESSING',
   COMPLETED = 'COMPLETED',
   COMPLETED_WITH_ERROR = 'COMPLETED_WITH_ERROR',
+  AWAITING_CORRECTION = 'AWAITING_CORRECTION',
   FAILED = 'FAILED',
   CANCELLED = 'CANCELLED',
 }
@@ -47,9 +49,6 @@ export class TransactionEntity extends AbstractEntity {
   @Embedded(() => ExecutionStep)
   executionSteps: ExecutionStep[] = [];
 
-  @Property({ default: false })
-  isSync: boolean = false;
-
   @Property({ type: 'json', nullable: true })
   lastError?: Record<string, any>;
 
@@ -63,48 +62,23 @@ export class TransactionEntity extends AbstractEntity {
     }
   }
 
-  public setCurrentStepId(id: string): void {
-    this.currentStepId = id;
+  public setCurrentStepId(stepId: string): void {
+    this.currentStepId = stepId;
   }
 
-  public currentStep(id: string): Nullable<ExecutionStep> {
-    return this.executionSteps.find((es) => es.stepId === id) || null;
+  public currentStep(stepId: string): Nullable<ExecutionStep> {
+    return this.executionSteps.find((es) => es.stepId === stepId) || null;
+  }
+
+  public nextStep(stepId: string): Nullable<ExecutionStep> {
+    const index = this.executionSteps.findIndex((es) => es.stepId === stepId);
+    return this.executionSteps[index + 1] || null;
+  }
+
+  public isLastStep(stepId: string): boolean {
+    return this.executionSteps[this.executionSteps.length - 1].stepId === stepId;
   }
 }
-
-export type Location = {
-  binId: string;
-};
-
-export type AnotherItem = {
-  binId: string;
-  itemId: string;
-  loadcellId: string;
-  loadcellHardwareId: number;
-  quantity: number;
-};
-
-export type PlannedItem = {
-  itemId: string;
-  loadcellId: string;
-  loadcellHardwareId: number;
-  name: string;
-  requestQty: number;
-  location: Location;
-  keepTrackItems: AnotherItem[];
-  conditionId?: string;
-};
-
-export type ItemToTake = {
-  itemId: string;
-  loadcellHardwareId: number;
-  name: string;
-  requestQty: number;
-  loadcellId: string;
-};
-
-export type ItemToReturn = ItemToTake & { conditionId?: string };
-export type ItemToReplenish = ItemToTake;
 
 @Embeddable()
 export class ExecutionStep {
@@ -115,17 +89,20 @@ export class ExecutionStep {
   binId: string;
 
   @Property({ type: 'json' })
-  itemsToIssue: ItemToTake[];
+  itemsToIssue: ItemToTake[] = [];
 
   @Property({ type: 'json' })
-  itemsToReturn: ItemToReturn[];
+  itemsToReturn: ItemToReturn[] = [];
 
   @Property({ type: 'json' })
-  itemsToReplenish: ItemToReplenish[];
+  itemsToReplenish: ItemToReplenish[] = [];
 
   @Property({ type: 'json' })
-  keepTrackItems: AnotherItem[];
+  keepTrackItems: AnotherItem[] = [];
+
+  @Property({ type: 'json' })
+  location: Location;
 
   @Property({ type: 'array' })
-  instructions: string[];
+  instructions: string[] = [];
 }

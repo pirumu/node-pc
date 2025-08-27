@@ -27,8 +27,12 @@ export class BinController extends BaseController {
   })
   @Get(BIN_ROUTES.GET_BINS)
   public async getBins(@Query() query: GetBinsRequest): Promise<PaginationResponse<GetBinResponse>> {
-    const { rows, meta } = await this._binService.getBins(query.page || 1, query.limit || 10, query.cabinetId);
-    const data = rows.map((row) => this.toDto<GetBinResponse>(GetBinResponse, row.toPOJO()));
+    const { rows, meta } = await this._binService.getBins(query.page || 1, query.limit || 10, query.cabinetId, query.enrich);
+    const data = rows.map((row) =>
+      this.toDto<GetBinResponse>(GetBinResponse, {
+        ...row.toPOJO(),
+      }),
+    );
     return new PaginationResponse(data, meta);
   }
 
@@ -39,6 +43,7 @@ export class BinController extends BaseController {
   @Get(BIN_ROUTES.GET_BIN_BY_ID)
   public async getBinById(@Param('id') id: string, @Query() query: GetBinRequest): Promise<GetBinResponse> {
     const result = await this._binService.getBinById(id, query.enrich);
+
     return this.toDto<GetBinResponse>(GetBinResponse, result.toPOJO());
   }
 

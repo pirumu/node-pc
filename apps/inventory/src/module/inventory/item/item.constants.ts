@@ -10,7 +10,7 @@ export enum ITEM_ROUTES {
 
 export enum PROCESSING_ITEM_ROUTES {
   GROUP = 'processing-items',
-  FORCE_NEXT_ITEM = 'force-next',
+  FORCE_NEXT_STEP = 'force-step',
 }
 
 export enum ITEM_TYPE_ROUTES {

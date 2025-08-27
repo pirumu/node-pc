@@ -1,22 +1,25 @@
 import { Injectable } from '@nestjs/common';
 
 import { GetCabinetsRequest } from './dtos/request';
+import { EntityManager, ObjectId } from '@mikro-orm/mongodb';
+import { CabinetEntity } from '@dals/mongo/entities';
 
 @Injectable()
 export class CabinetService {
-  constructor() {}
+  constructor(private readonly _em: EntityManager) {}
 
-  public async getCabinets(queries: GetCabinetsRequest): Promise<any[]> {
-    return [];
-    // return this._repository.findAll();
+  public async getCabinets(query: GetCabinetsRequest): Promise<CabinetEntity[]> {
+    return this._em.find(
+      CabinetEntity,
+      {},
+      {
+        limit: query.limit || 100,
+        offset: ((query.page || 1) - 1) * (query.limit || 100),
+      },
+    );
   }
 
-  public async getCabinetById(id: string): Promise<any> {
-    // const cabinet = await this._repository.findComplexById(id);
-    // if (!cabinet) {
-    //   throw new BadRequestException(`Cabin with id ${id} not found`);
-    // }
-    // return cabinet;
-    return null;
+  public async getCabinetById(id: string): Promise<CabinetEntity> {
+    return this._em.findOneOrFail(CabinetEntity, new ObjectId(id));
   }
 }

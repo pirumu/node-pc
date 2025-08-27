@@ -35,7 +35,6 @@ export class ReplenishItemRepository {
         $ne: null,
         ...itemConditions,
       },
-      itemInfo: { $ne: null },
       state: { isCalibrated: true },
       bin: {
         $ne: null,
@@ -51,7 +50,7 @@ export class ReplenishItemRepository {
     try {
       const [loadcells, total] = await this._em.findAndCount(LoadcellEntity, where, {
         populate: ['item', 'item.itemType', 'bin'],
-        orderBy: { bin: { x: 'ASC' } },
+        populateOrderBy: { bin: { x: 'ASC', y: 'ASC' } },
         limit: limit,
         offset: (page - 1) * limit,
       });
@@ -76,11 +75,11 @@ export class ReplenishItemRepository {
           type: itemType.name,
           image: item.itemImage,
           description: item.description,
-          totalQuantity: lc.calibration.availableQuantity,
+          totalQuantity: lc.availableQuantity,
           totalCalcQuantity: lc.calibration.calibratedQuantity,
           binId: bin.id,
           binName: `${cabinet.name}-${cabinet.rowNumber}-${bin.x}-${bin.y}`,
-          dueDate: lc.itemInfo.expiryDate || null,
+          dueDate: lc.metadata?.expiryDate || null,
           canReplenish: canReplenish(lc),
         };
       });

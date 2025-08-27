@@ -7,7 +7,7 @@ import { PublisherModule } from '@framework/publisher';
 import { snowflakeId } from '@framework/snowflake';
 import { MongoHighlighter } from '@mikro-orm/mongo-highlighter';
 import { MongoDriver } from '@mikro-orm/mongodb';
-import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
+import { Logger, MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { ServicesModule } from '@services';
@@ -88,17 +88,21 @@ import { WsModule } from './module/ws';
           entities: ALL_ENTITIES,
           clientUrl: mongoConfig.uri,
           driverOptions,
-          serialization: {
-            forceObject: true,
-          },
-          debug: mongoConfig.debug,
-          logLevel: mongoConfig.logLevel,
+          // serialization: {
+          //   forceObject: true,
+          // },
+          debug: true,
+          logLevel: mongoConfig.logLevel || 'info',
           highlighter: new MongoHighlighter(),
           discovery: {
             checkDuplicateFieldNames: true,
             checkDuplicateEntities: true,
             checkNonPersistentCompositeProps: true,
           },
+          autoJoinRefsForFilters: false,
+          populateWhere: 'infer',
+
+          logger: (msg) => Logger.log(msg, 'MikroORM'),
         };
       },
       inject: [ConfigService],
@@ -135,6 +139,6 @@ import { WsModule } from './module/ws';
 export class AppModule implements NestModule {
   public configure(consumer: MiddlewareConsumer): void {
     // consumer.apply(DeviceKeyAuthMiddleware).forRoutes(...['/ports']);
-    // consumer.apply(JwtAuthMiddleware).forRoutes(...['/items']);
+    consumer.apply(JwtAuthMiddleware).forRoutes(...['/items', '/users']);
   }
 }

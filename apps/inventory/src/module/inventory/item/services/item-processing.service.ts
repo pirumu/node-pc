@@ -1,5 +1,5 @@
 import { ExecutionStep } from '@common/business/types';
-import { TransactionEntity, TransactionStatus, TransactionType } from '@dals/mongo/entities';
+import { TransactionEntity, TransactionStatus, TransactionType, Synchronization } from '@dals/mongo/entities';
 import { PublisherService, Transport } from '@framework/publisher';
 import { EntityManager, ObjectId } from '@mikro-orm/mongodb';
 import { Injectable } from '@nestjs/common';
@@ -27,8 +27,8 @@ export class ItemProcessingService {
       currentStepId: executionSteps[0].stepId,
       executionSteps: executionSteps as any,
       totalRequestQty: totalRequestQty,
-      isSync: false,
       createdAt: new Date(),
+      synchronization: new Synchronization(),
     });
     await this._em.persistAndFlush(tx);
     await this._publisherService.publish(Transport.MQTT, 'tx/start', { transactionId: tx.id });

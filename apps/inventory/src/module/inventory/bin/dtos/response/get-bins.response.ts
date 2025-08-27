@@ -224,12 +224,34 @@ export class LoadcellResponse {
   id: string;
 
   @ApiProperty({
-    description: 'Loadcell name',
+    description: 'Loadcell code',
+    example: '01',
+  })
+  @Expose()
+  @Type(() => String)
+  code: string;
+
+  @ApiProperty({
+    description: 'Loadcell label',
     example: 'Loadcell 001',
   })
   @Expose()
   @Type(() => String)
-  name: string;
+  label: string;
+
+  @ApiProperty({
+    description: 'Loadcell hardwareId',
+    example: 'Loadcell 001',
+  })
+  @Expose()
+  @Type(() => Number)
+  hardwareId: number;
+
+  @ApiProperty({
+    description: 'Loadcell item',
+  })
+  @Expose()
+  item: any;
 }
 
 export class GetBinResponse {

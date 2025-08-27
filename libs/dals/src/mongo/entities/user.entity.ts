@@ -36,7 +36,7 @@ export class UserEntity extends AbstractEntity {
   @Property({ default: '' })
   cardId: string = '';
 
-  @Property({ default: '' })
+  @Property({ default: '', hidden: true })
   pin: string = '';
 
   @Property({ default: '' })

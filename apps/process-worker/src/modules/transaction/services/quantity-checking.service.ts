@@ -1,12 +1,16 @@
 import { ExecutionStep, ItemToTake, ItemToReturn, AnotherItem } from '@common/business/types';
 import { EVENT_TYPE, ProcessEventType } from '@common/constants';
-import { LoadcellEntity, TransactionEntity, TransactionEventEntity, TransactionType } from '@dals/mongo/entities';
+import { CuLockRequest } from '@culock/dto';
+import { LOCK_STATUS, ProtocolType } from '@culock/protocols';
+import { CuResponse } from '@culock/protocols/cu';
+import { BinEntity, LoadcellEntity, TransactionEntity, TransactionEventEntity, TransactionType } from '@dals/mongo/entities';
 import { PublisherService, Transport } from '@framework/publisher';
 import { Nullable } from '@framework/types';
 import { EntityManager, ObjectId, Reference, CreateRequestContext } from '@mikro-orm/mongodb';
 import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 
-const POLLING_INTERVAL_MS = 1000;
+const WEIGHT_POLLING_INTERVAL_MS = 1000;
+const LOCK_POLLING_INTERVAL_MS = 1000;
 
 export enum PlanActionType {
   ISSUE = 'issue',
@@ -22,6 +26,8 @@ export type PollingContext = {
   lastSentMessages: Map<string, string>;
 };
 
+export type LockPollingContext = Omit<PollingContext, 'lastSentMessages' | 'initialQuantities'>;
+
 export type StepCalculationResult = {
   isValid: boolean;
   events: TransactionEventEntity[];
@@ -36,7 +42,8 @@ export type PlannedActionResult = {
 @Injectable()
 export class QuantityCheckingService implements OnModuleDestroy {
   private readonly _logger = new Logger(QuantityCheckingService.name);
-  private _activePollingLoops = new Map<string, PollingContext>();
+  private _activePollingWeightLoops = new Map<string, PollingContext>();
+  private _activePollingLockStatusLoops = new Map<string, LockPollingContext>();
 
   constructor(
     private readonly _em: EntityManager,
@@ -44,11 +51,17 @@ export class QuantityCheckingService implements OnModuleDestroy {
   ) {}
 
   public onModuleDestroy(): void {
-    this._activePollingLoops.forEach((context, txId) => {
-      this._logger.warn(`[${txId}] Forcibly stopping polling loop due to module destruction.`);
+    this._activePollingWeightLoops.forEach((context, txId) => {
+      this._logger.warn(`[${txId}] Forcibly stopping db polling loop due to module destruction.`);
       clearInterval(context.intervalId);
     });
-    this._activePollingLoops.clear();
+    this._activePollingWeightLoops.clear();
+
+    this._activePollingLockStatusLoops.forEach((context, txId) => {
+      this._logger.warn(`[${txId}] Forcibly stopping lock polling loop due to module destruction.`);
+      clearInterval(context.intervalId);
+    });
+    this._activePollingLockStatusLoops.clear();
   }
 
   @CreateRequestContext()
@@ -56,13 +69,23 @@ export class QuantityCheckingService implements OnModuleDestroy {
     const { transactionId, binId } = event;
 
     this._stopPolling(transactionId);
+    this._stopLockPolling(transactionId);
+
     this._logger.log(`[${transactionId}] Bin ${binId} opened. Starting real-time DB polling.`);
 
     const tx = await this._em.findOneOrFail(TransactionEntity, { id: transactionId });
     const step = tx.currentStep(tx.currentStepId);
+
     if (!step || step.binId !== binId) {
       return;
     }
+
+    // start keep track bin lock status.
+    const lockStatusIntervalId = setInterval(async () => this._lockStatusPollingCycle(transactionId), LOCK_POLLING_INTERVAL_MS);
+    this._activePollingLockStatusLoops.set(transactionId, {
+      intervalId: lockStatusIntervalId,
+      step: step as any, // stupid TypeScript
+    });
 
     const loadcells = await this._em.find(LoadcellEntity, {
       bin: new ObjectId(binId),
@@ -70,13 +93,14 @@ export class QuantityCheckingService implements OnModuleDestroy {
     });
 
     const initialQuantities = new Map<string, number>();
+
     loadcells.forEach((lc) => {
-      initialQuantities.set(lc.id, lc.calibration.availableQuantity);
+      initialQuantities.set(lc.id, lc.availableQuantity);
     });
 
-    const intervalId = setInterval(async () => this._pollingCycle(transactionId, tx.type), POLLING_INTERVAL_MS);
+    const intervalId = setInterval(async () => this._pollingCycle(transactionId, tx.type), WEIGHT_POLLING_INTERVAL_MS);
 
-    this._activePollingLoops.set(transactionId, {
+    this._activePollingWeightLoops.set(transactionId, {
       intervalId,
       step: step as any, // stupid TypeScript
       initialQuantities,
@@ -94,6 +118,8 @@ export class QuantityCheckingService implements OnModuleDestroy {
     const { transactionId, binId } = event;
 
     this._stopPolling(transactionId);
+    this._stopLockPolling(transactionId);
+
     this._logger.log(`[${transactionId}] Bin ${binId} closed. Persisting final results.`);
 
     const tx = await this._em.findOneOrFail(TransactionEntity, { id: transactionId });
@@ -115,15 +141,24 @@ export class QuantityCheckingService implements OnModuleDestroy {
 
     const eventType = result.isValid ? this._getSuccessTopic(tx.type) : this._getErrorTopic(tx.type);
 
-    await this._publisher.publish(Transport.MQTT, eventType, {
-      transactionId,
-      stepId: step.stepId,
-      errors: result.errorMessages,
-    });
+    const internalEventType = result.isValid ? EVENT_TYPE.PROCESS.STEP_SUCCESS : EVENT_TYPE.PROCESS.STEP_ERROR;
+
+    await Promise.all([
+      this._publisher.publish(Transport.MQTT, eventType, {
+        transactionId,
+        stepId: step.stepId,
+        errors: result.errorMessages,
+      }),
+      this._publisher.publish(Transport.MQTT, internalEventType, {
+        transactionId,
+        stepId: step.stepId,
+        errors: result.errorMessages,
+      }),
+    ]);
   }
 
   private async _pollingCycle(transactionId: string, transactionType: TransactionType): Promise<void> {
-    const context = this._activePollingLoops.get(transactionId);
+    const context = this._activePollingWeightLoops.get(transactionId);
     if (!context) {
       this._stopPolling(transactionId);
       return;
@@ -179,11 +214,49 @@ export class QuantityCheckingService implements OnModuleDestroy {
     }
   }
 
+  private async _lockStatusPollingCycle(transactionId: string): Promise<void> {
+    const context = this._activePollingWeightLoops.get(transactionId);
+    if (!context) {
+      this._stopLockPolling(transactionId);
+      return;
+    }
+    const { step } = context;
+
+    const bin = await this._em.findOneOrFail(BinEntity, new ObjectId(step.binId), {
+      cache: true,
+    });
+
+    const status = await this._publisher.publish<CuResponse>(
+      Transport.TCP,
+      EVENT_TYPE.LOCK.STATUS,
+      new CuLockRequest({
+        deviceId: bin.cuLockId,
+        lockIds: [bin.lockId],
+        protocol: ProtocolType.CU,
+      }),
+    );
+
+    if (status.isSuccess && Object.values(status.lockStatuses).every((s) => s === LOCK_STATUS.CLOSED)) {
+      await this._publisher.publish(Transport.MQTT, EVENT_TYPE.BIN.CLOSED, {
+        transactionId,
+        binId: step.binId,
+      });
+    }
+  }
+
   private _stopPolling(transactionId: string): void {
-    if (this._activePollingLoops.has(transactionId)) {
-      clearInterval(this._activePollingLoops.get(transactionId)!.intervalId);
-      this._activePollingLoops.delete(transactionId);
+    if (this._activePollingWeightLoops.has(transactionId)) {
+      clearInterval(this._activePollingWeightLoops.get(transactionId)!.intervalId);
+      this._activePollingWeightLoops.delete(transactionId);
       this._logger.log(`[${transactionId}] Polling loop stopped.`);
+    }
+  }
+
+  private _stopLockPolling(transactionId: string): void {
+    if (this._activePollingLockStatusLoops.has(transactionId)) {
+      clearInterval(this._activePollingLockStatusLoops.get(transactionId)!.intervalId);
+      this._activePollingLockStatusLoops.delete(transactionId);
+      this._logger.log(`[${transactionId}] Lock Polling loop stopped.`);
     }
   }
 
@@ -209,7 +282,7 @@ export class QuantityCheckingService implements OnModuleDestroy {
       }
 
       const quantityBefore = plannedAction.item.currentQty;
-      const quantityAfter = loadcell.calibration.availableQuantity;
+      const quantityAfter = loadcell.availableQuantity + loadcell.liveReading.pendingChange;
       const quantityChanged = quantityAfter - quantityBefore;
 
       // FIX 1: Logic for "user did nothing" error
@@ -241,12 +314,12 @@ export class QuantityCheckingService implements OnModuleDestroy {
   }
 
   private _calculateCurrentQuantityFromWeight(loadcell: LoadcellEntity): number {
-    const { reading, calibration } = loadcell;
+    const { liveReading, calibration } = loadcell;
     if (!calibration.unitWeight || calibration.unitWeight === 0) {
       this._logger.warn(`[LC-${loadcell.code}] Unit weight is zero. Cannot calculate quantity.`);
-      return calibration.availableQuantity;
+      return loadcell.availableQuantity;
     }
-    const netWeight = reading.currentWeight - calibration.zeroWeight;
+    const netWeight = liveReading.currentWeight - calibration.zeroWeight;
     return Math.round(netWeight / calibration.unitWeight);
   }
 

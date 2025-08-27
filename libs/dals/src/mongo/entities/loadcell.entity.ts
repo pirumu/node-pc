@@ -6,6 +6,7 @@ import { AbstractEntity } from './abstract.entity';
 import { BinEntity } from './bin.entity';
 import { CabinetEntity } from './cabinet.entity';
 import { ClusterEntity } from './cluster.entity';
+// eslint-disable-next-line import/no-cycle
 import { ItemEntity } from './item.entity';
 import { PortEntity } from './port.entity';
 import { SiteEntity } from './site.entity';
@@ -24,14 +25,11 @@ export class LoadcellState {
   @Property({ default: false })
   isUpdatedWeight = false;
 
-  @Property({ default: LOADCELL_STATUS.CREATED })
+  @Property({ type: 'string', default: LOADCELL_STATUS.CREATED })
   status: LoadcellStatus = LOADCELL_STATUS.CREATED;
 
   @Property({ default: false })
   isCalibrated: boolean;
-
-  @Property({ default: false })
-  isSync = false;
 
   @Property({ default: false })
   isRunning = false;
@@ -40,22 +38,13 @@ export class LoadcellState {
 @Embeddable()
 export class CalibrationData {
   @Property({ default: 0 })
-  quantity = 0;
-
-  @Property({ default: 0 })
-  availableQuantity = 0;
-
-  @Property({ default: 0 })
-  calibratedQuantity = 0;
-
-  @Property({ default: 0 })
   zeroWeight = 0;
 
   @Property({ default: 0 })
   unitWeight = 0;
 
   @Property({ default: 0 })
-  damageQuantity = 0;
+  calibratedQuantity = 0;
 
   @Property({ default: null, nullable: true })
   calibrationDue: Date | null = null;
@@ -71,7 +60,7 @@ export class LiveReading {
 }
 
 @Embeddable()
-export class LoadcellItem {
+export class LoadcellMetadata {
   @Property()
   itemId!: ObjectId;
 
@@ -138,16 +127,16 @@ export class LoadcellEntity extends AbstractEntity {
   @Property({ default: '' })
   label: string = '';
 
-  @Embedded(() => LoadcellItem, { nullable: true })
-  itemInfo = new LoadcellItem();
+  @Embedded(() => LoadcellMetadata)
+  metadata = new LoadcellMetadata(); // item.
 
-  @Embedded(() => CalibrationData, { nullable: true })
+  @Embedded(() => CalibrationData)
   calibration = new CalibrationData();
 
-  @Embedded(() => LiveReading, { nullable: true })
-  reading = new LiveReading();
+  @Embedded(() => LiveReading)
+  liveReading = new LiveReading();
 
-  @Embedded(() => LoadcellState, { nullable: true })
+  @Embedded(() => LoadcellState)
   state = new LoadcellState();
 
   @ManyToOne(() => PortEntity, {
@@ -161,6 +150,12 @@ export class LoadcellEntity extends AbstractEntity {
   hardwareId: number = 0;
 
   @Property({ default: 0 })
+  availableQuantity = 0;
+
+  @Property({ default: 0 })
+  damageQuantity = 0;
+
+  @Property({ default: 0 })
   heartbeat: number = 0;
 
   constructor(data?: PartialProperties<LoadcellEntity>) {
@@ -171,10 +166,10 @@ export class LoadcellEntity extends AbstractEntity {
   }
 
   public unassign(): void {
-    this.itemInfo = new LoadcellItem();
+    this.metadata = new LoadcellMetadata();
     this.item = Reference.create(new ItemEntity());
     this.bin = Reference.create(new BinEntity());
-    this.reading = new LiveReading();
+    this.liveReading = new LiveReading();
     this.state = new LoadcellState();
     this.calibration = new CalibrationData();
   }

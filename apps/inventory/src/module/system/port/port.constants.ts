@@ -3,5 +3,5 @@ export const PORT_ROUTES = {
   GET_PORTS: '/',
   GET_PORTS_LOADCELLS: '/loadcells',
   UPDATE_PORT_NAME: ':id',
-  RESET_PORT_NAME: ':id/reset',
+  RESET_PORT_NAME: 'name/reset',
 };

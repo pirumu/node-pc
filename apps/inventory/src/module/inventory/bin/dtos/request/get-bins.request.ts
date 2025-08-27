@@ -4,7 +4,9 @@ import { Type } from 'class-transformer';
 import { IsMongoId, IsOptional } from 'class-validator';
 
 export class GetBinsRequest extends PaginationRequest {
-  @ApiProperty()
+  @ApiProperty({
+    required: false,
+  })
   @IsMongoId()
   @Type(() => String)
   @IsOptional()

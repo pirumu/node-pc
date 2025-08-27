@@ -90,8 +90,8 @@ export class ReplenishItemService {
 
       // Sort loadcells by priority - the least stocked first (smart allocation)
       loadcellsForItem.sort((a, b) => {
-        const stockLevelA = a.calibration.availableQuantity / a.calibration.calibratedQuantity;
-        const stockLevelB = b.calibration.availableQuantity / b.calibration.calibratedQuantity;
+        const stockLevelA = a.availableQuantity / a.calibration.calibratedQuantity;
+        const stockLevelB = b.availableQuantity / b.calibration.calibratedQuantity;
         return stockLevelA - stockLevelB;
       });
 
@@ -102,34 +102,44 @@ export class ReplenishItemService {
         }
 
         // Calculate available space
-        const spaceAvailable = loadcell.calibration.calibratedQuantity - loadcell.calibration.availableQuantity;
+        const spaceAvailable = loadcell.calibration.calibratedQuantity - loadcell.availableQuantity;
         if (spaceAvailable <= 0) {
           continue; // This loadcell is full
         }
 
         const qtyToReplenishHere = Math.min(neededToReplenish, spaceAvailable);
 
-        // Create plan item - same structure as return
+        // Create plan item
         const item = RefHelper.getRequired(loadcell.item, 'ItemEntity');
         const bin = RefHelper.getRequired(loadcell.bin, 'BinEntity');
+        const cabinet = RefHelper.getRequired(loadcell.cabinet, 'CabinetEntity');
+        const cluster = RefHelper.getRequired(loadcell.cluster, 'ClusterEntity');
+        const site = RefHelper.getRequired(loadcell.site, 'SiteEntity');
 
         plan.push({
           name: item.name,
           itemId: replenishItem.itemId,
           requestQty: qtyToReplenishHere,
-          currentQty: loadcell.calibration.quantity,
+          currentQty: loadcell.availableQuantity,
           loadcellId: loadcell.id,
           location: {
             binId: bin.id,
+            binName: `${bin.x}-${bin.y}`,
+            cabinetId: cabinet.id,
+            cabinetName: cabinet.name,
+            clusterId: cabinet.id,
+            clusterName: cluster.name,
+            siteId: site.id,
+            siteName: site.name,
           },
           keepTrackItems: bin.loadcells
-            .filter((l) => !!l.bin?.id && !!l.item?.id && l.calibration.quantity > 0 && !itemIds.includes(l.item.id))
+            .filter((l) => !!l.bin?.id && !!l.item?.id && l.availableQuantity > 0 && !itemIds.includes(l.item.id))
             .map((l) => ({
               loadcellId: l.id,
               itemId: l.item?.id || '',
               name: l.item?.unwrap()?.name || '',
               binId: l.bin?.id || '',
-              currentQty: l.calibration.quantity,
+              currentQty: l.availableQuantity,
             })),
         });
 
@@ -139,7 +149,7 @@ export class ReplenishItemService {
       // Validation - same pattern as return
       if (neededToReplenish > 0) {
         const totalAvailableSpace = loadcellsForItem.reduce(
-          (sum, lc) => sum + (lc.calibration.calibratedQuantity - lc.calibration.availableQuantity),
+          (sum, lc) => sum + (lc.calibration.calibratedQuantity - lc.availableQuantity),
           0,
         );
 
@@ -168,9 +178,12 @@ export class ReplenishItemService {
     }
 
     const steps: ExecutionStep[] = [];
-    let stepCounter = 1;
+    let stepIndex = 1;
 
     for (const [binId, items] of binGroups) {
+      // now all item in same bin is grouped.
+      const location = items[0].location;
+
       const itemsToReplenish: ItemToReplenish[] = items.map((item) => ({
         itemId: item.itemId,
         name: item.name,
@@ -187,25 +200,25 @@ export class ReplenishItemService {
         });
       });
 
-      // Instructions for replenishment (vs return)
+      // Instructions for replenishment
       const instructions = [
-        `Step ${stepCounter}: Go to ${binId}`,
-        `Open ${binId}`,
+        `Step ${stepIndex}: Go to cabinet ${location.cabinetName} and find bin ${location.binName}`,
         ...itemsToReplenish.map((item) => `Add ${item.requestQty} units of ${item.name}`),
-        `Close ${binId}`,
+        `Close ${location.binName}`,
       ];
 
       steps.push({
-        stepId: `replenish_step_${stepCounter}_${binId}`,
+        stepId: `replenish_step_${stepIndex}_${binId}`,
         binId: binId,
         itemsToIssue: [],
         itemsToReturn: [],
         itemsToReplenish: itemsToReplenish,
         keepTrackItems: Array.from(trackingItemsMap.values()),
         instructions: instructions,
+        location: location,
       });
 
-      stepCounter++;
+      stepIndex++;
     }
 
     return steps;

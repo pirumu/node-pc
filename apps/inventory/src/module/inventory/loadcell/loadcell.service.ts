@@ -1,5 +1,5 @@
 import { PaginatedResult, PaginationMeta } from '@common/dto';
-import { LoadcellEntity, ItemEntity, BinEntity, LoadcellItem } from '@dals/mongo/entities';
+import { LoadcellEntity, ItemEntity, BinEntity, LoadcellMetadata } from '@dals/mongo/entities';
 import { AppHttpException } from '@framework/exception';
 import { PublisherService } from '@framework/publisher';
 import { EntityRepository, FindOptions, ObjectId, Transactional } from '@mikro-orm/mongodb';
@@ -43,6 +43,10 @@ export class LoadcellService {
         total: count,
       }),
     );
+  }
+
+  public async getLoadCell(id: string): Promise<LoadcellEntity> {
+    return this._loadcellRepository.findOneOrFail(new ObjectId(id));
   }
 
   @Transactional()
@@ -157,13 +161,13 @@ export class LoadcellService {
             message: `Data Integrity Error: Loadcell ${sourceLoadcell.id} must have a bin to participate in a swap.`,
           });
         }
-        const tempItem = sourceLoadcell.itemInfo;
-        sourceLoadcell.itemInfo = targetLoadcell.itemInfo;
-        targetLoadcell.itemInfo = tempItem;
+        const sourceMetadata = sourceLoadcell.metadata;
+        sourceLoadcell.metadata = targetLoadcell.metadata;
+        targetLoadcell.metadata = sourceMetadata;
       } else {
         // Subcase A.2: Target loadcell is empty. This is a MOVE.
-        targetLoadcell.itemInfo = sourceLoadcell.itemInfo;
-        sourceLoadcell.itemInfo = new LoadcellItem();
+        targetLoadcell.metadata = sourceLoadcell.metadata;
+        sourceLoadcell.metadata = new LoadcellMetadata();
       }
     } else {
       // Case B: Item is NOT found elsewhere. THIS IS AN INVALID SCENARIO.
@@ -186,9 +190,9 @@ export class LoadcellService {
 
     // The `item` data block is treated as immutable. We only read from it.
     const { zeroWeight, measuredWeight } = calibrateData;
-    const itemData = targetLoadcell.itemInfo;
+    const metadata = targetLoadcell.metadata;
     const netWeight = measuredWeight - zeroWeight;
-    const maxQuantity = itemData.max;
+    const maxQuantity = metadata.max;
     const unitWeight = maxQuantity > 0 ? netWeight / maxQuantity : 0;
     const calculatedQuantity = unitWeight > 0 ? Math.max(0, Math.floor(netWeight / unitWeight)) : 0;
 
@@ -224,12 +228,12 @@ export class LoadcellService {
     this._logger.log(`Re-calibrating loadcell ${loadcell.id} for the same item.`);
 
     const { zeroWeight, measuredWeight } = data;
-    const itemData = loadcell.itemInfo!; // We know item exists from the guard clause in the main function.
+    const metadata = loadcell.metadata; // We know item exists from the guard clause in the main function.
 
     //  Step 1: Recalculate Calibration Parameters
     // Calculate the new reference values based on the provided calibration weights.
     const netWeight = measuredWeight - zeroWeight;
-    const unitWeight = itemData.max > 0 ? netWeight / itemData.max : 0;
+    const unitWeight = metadata.max > 0 ? netWeight / metadata.max : 0;
 
     // This is the theoretical quantity based on the new calibration.
     // It's useful for the calibration record but doesn't reflect the live reading.
@@ -240,7 +244,7 @@ export class LoadcellService {
     // We do NOT touch the `reading` object here.
     Object.assign(loadcell.calibration, {
       quantity: calculatedQuantity, // Update the reference quantity
-      maxQuantity: itemData.max, // Re-affirm the max quantity for this calibration event
+      maxQuantity: metadata.max, // Re-affirm the max quantity for this calibration event
       zeroWeight: zeroWeight, // Set the new zero-point reference
       unitWeight: unitWeight, // Set the new unit weight reference
     });

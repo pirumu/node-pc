@@ -27,7 +27,17 @@ module.exports = {
     //   autorestart: true,
     //   max_memory_restart: '1G',
     //   env: {
-    //     DOTENV_CONFIG_PATH: 'env/worker/.env',
+    //     DOTENV_CONFIG_PATH: 'env/process-worker/.env',
+    //   },
+    // },
+    // {
+    //   name: 'sync-worker',
+    //   script: 'dist/apps/sync-worker/main.js',
+    //   watch: false,
+    //   autorestart: true,
+    //   max_memory_restart: '1G',
+    //   env: {
+    //     DOTENV_CONFIG_PATH: 'env/sync-worker/.env',
     //   },
     // },
   ],

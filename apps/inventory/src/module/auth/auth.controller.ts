@@ -1,5 +1,6 @@
 import { CLIENT_ID_KEY } from '@common/constants';
 import { PaginationResponse } from '@common/dto';
+import { RefHelper } from '@dals/mongo/helpers';
 import { BaseController } from '@framework/controller';
 import { AppHttpException } from '@framework/exception';
 import { ApiDocs, ApiSignatureSecurity, ControllerDocs } from '@framework/swagger';
@@ -10,9 +11,8 @@ import { WsGateway } from '../ws';
 import { AUTH_ROUTES } from './auth.constants';
 import { LoginByPinRequest, GetFacialRecognitionRequest, LoginByFaceRequest, LoginRequest } from './dtos/request';
 import { GetFacialRecognitionResponse, JwtAuthResponse } from './dtos/response';
-import { SignatureGuard } from './guards';
+// import { SignatureGuard } from './guards';
 import { AuthService } from './services';
-import { RefHelper } from '@dals/mongo/helpers';
 
 @ControllerDocs({
   tag: 'Authorization',
@@ -32,7 +32,7 @@ export class AuthController extends BaseController {
     body: LoginByPinRequest,
   })
   @ApiSignatureSecurity()
-  @UseGuards(SignatureGuard)
+  // @UseGuards(SignatureGuard)
   @Post(AUTH_ROUTES.LOGIN_BY_PIN_PASS)
   public async loginByPin(@Headers(CLIENT_ID_KEY) clientId: string, @Body() payload: LoginByPinRequest): Promise<JwtAuthResponse> {
     return this._authService.loginByPin(clientId, payload);
@@ -55,7 +55,7 @@ export class AuthController extends BaseController {
     paginatedResponseSchema: GetFacialRecognitionResponse,
   })
   @ApiSignatureSecurity()
-  @UseGuards(SignatureGuard)
+  // @UseGuards(SignatureGuard)
   @Post(AUTH_ROUTES.FACIAL_RECOGNITION)
   public async getFacialRecognitions(
     @Query() query: GetFacialRecognitionRequest,
@@ -80,7 +80,7 @@ export class AuthController extends BaseController {
     body: LoginByPinRequest,
   })
   @ApiSignatureSecurity()
-  @UseGuards(SignatureGuard)
+  // @UseGuards(SignatureGuard)
   @Post(AUTH_ROUTES.LOGIN_BY_FACE)
   public async loginByFaceData(
     @Headers(CLIENT_ID_KEY) clientId: string,
@@ -113,8 +113,22 @@ export class AuthController extends BaseController {
     if (process.env.NODE_ENV === 'production') {
       throw AppHttpException.forbidden();
     }
-    const res = await this._authService.loginByCard(cardId);
-    this._wsGateway.sendMessage('scan-employee' as any, res);
-    return { msg: 'emitted' };
+    try {
+      const responses = await this._authService.loginByCard(cardId);
+
+      responses.forEach((res) => {
+        if (res[0] === 'none') {
+          this._wsGateway.sendMessage('scan-employee' as any, { success: true, data: res[1] });
+        } else {
+          this._wsGateway.sendTo('scan-employee' as any, { success: true, data: res[1] }, [res[0]]);
+        }
+      });
+
+      return { msg: 'emitted' };
+    } catch (err) {
+      this._wsGateway.sendMessage('scan-employee' as any, { success: false, data: null });
+
+      throw err;
+    }
   }
 }

@@ -26,6 +26,7 @@ export class ConditionController extends BaseController {
   @Get(CONDITION_ROUTES.GET_CONDITIONS)
   public async getConditions(@Query() query: GetConditionsRequest): Promise<GetConditionsResponse[]> {
     const results = await this._service.getConditions(query.excludeName);
+    console.log(results.map((r) => r.toPOJO()));
     return results.map((item) => this.toDto<GetConditionsResponse>(GetConditionsResponse, item.toPOJO()));
   }
 }

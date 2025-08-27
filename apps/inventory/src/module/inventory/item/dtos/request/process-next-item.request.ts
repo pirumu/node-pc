@@ -1,7 +1,11 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsBoolean } from 'class-validator';
+import { IsBoolean, IsMongoId } from 'class-validator';
 
 export class ProcessNextItemRequest {
+  @ApiProperty()
+  @IsMongoId()
+  transactionId: string;
+
   @ApiProperty()
   @IsBoolean()
   isNextRequestItem: boolean;

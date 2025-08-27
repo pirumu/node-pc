@@ -27,7 +27,7 @@ export class CabinetController extends BaseController {
   @Get(CABINET_ROUTES.GET_CABINETS)
   public async getCabinets(@Query() queries: GetCabinetsRequest): Promise<any> {
     const result = await this._cabinetService.getCabinets(queries);
-    return { rows: result.map((cabinet) => this.toDto<GetCabinetsResponse>(GetCabinetsResponse, cabinet)), count: result.length };
+    return { rows: result.map((cabinet) => this.toDto<GetCabinetsResponse>(GetCabinetsResponse, cabinet.toPOJO())), count: result.length };
   }
 
   @ApiDocs({
@@ -36,6 +36,6 @@ export class CabinetController extends BaseController {
   @Get(CABINET_ROUTES.GET_CABINET)
   public async getCabinet(@Param('id') id: string): Promise<GetCabinetResponse> {
     const result = await this._cabinetService.getCabinetById(id);
-    return this.toDto<GetCabinetResponse>(GetCabinetResponse, result);
+    return this.toDto<GetCabinetResponse>(GetCabinetResponse, result.toPOJO());
   }
 }

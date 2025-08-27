@@ -35,6 +35,16 @@ export class LoadcellController extends BaseController {
   }
 
   @ApiDocs({
+    summary: 'Get loadcell',
+    responseSchema: GetLoadcellsResponse,
+  })
+  @Get(LOADCELL_ROUTES.GET_LOADCELL)
+  public async getLoadCell(@Param('id') loadcellId: string): Promise<GetLoadcellsResponse> {
+    const entity = await this._loadcellService.getLoadCell(loadcellId);
+    return this.toDto<GetLoadcellsResponse>(GetLoadcellsResponse, entity.toPOJO());
+  }
+
+  @ApiDocs({
     summary: 'Calibrate loadcell',
     responseSchema: StatusResponse,
   })

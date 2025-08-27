@@ -84,6 +84,7 @@ export class BinEntity extends AbstractEntity {
   @ManyToOne(() => SiteEntity, {
     fieldName: 'siteId',
     ref: true,
+    serializedName: 'siteId',
   })
   site!: Ref<SiteEntity>;
 

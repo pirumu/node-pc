@@ -29,8 +29,8 @@ const EXECUTION_CONFIG = {
 };
 
 @Injectable()
-export class ExecutionService {
-  private readonly _logger = new Logger(ExecutionService.name);
+export class TransactionService {
+  private readonly _logger = new Logger(TransactionService.name);
 
   constructor(
     private readonly _em: EntityManager,
@@ -38,7 +38,7 @@ export class ExecutionService {
   ) {}
 
   @CreateRequestContext()
-  public async startTransaction(transactionId: string): Promise<void> {
+  public async process(transactionId: string): Promise<void> {
     const tx = await this._em.findOneOrFail(TransactionEntity, { id: transactionId });
     this._logger.log(`[${tx.id}] Transaction starting. Total steps: ${tx.executionSteps.length}`);
 
@@ -47,7 +47,6 @@ export class ExecutionService {
     await this._executeStep(tx);
   }
 
-  @OnEvent(EVENT_TYPE.PROCESS.STEP_SUCCESS)
   @CreateRequestContext()
   public async handleStepSuccess(payload: { transactionId: string; stepId: string }): Promise<void> {
     const tx = await this._em.findOneOrFail(TransactionEntity, { id: payload.transactionId });
@@ -66,7 +65,6 @@ export class ExecutionService {
     await this._advanceToNextStep(tx, payload.stepId);
   }
 
-  @OnEvent(EVENT_TYPE.PROCESS.STEP_FAIL)
   @CreateRequestContext()
   public async handleStepFail(payload: { transactionId: string; stepId: string; errors: string[] }): Promise<void> {
     const tx = await this._em.findOneOrFail(TransactionEntity, { id: payload.transactionId });
@@ -75,6 +73,19 @@ export class ExecutionService {
     tx.status = TransactionStatus.AWAITING_CORRECTION;
     tx.lastError = { stepId: payload.stepId, messages: payload.errors };
     await this._em.flush();
+  }
+
+  @CreateRequestContext()
+  public async forceNextStep(transactionId: string): Promise<void> {
+    const tx = await this._em.findOne(TransactionEntity, {
+      _id: new ObjectId(transactionId),
+      status: TransactionStatus.AWAITING_CORRECTION,
+    });
+
+    if (!tx) {
+      return;
+    }
+    const errorStep = tx.executionSteps[tx.executionSteps.length - 1].stepId;
   }
 
   private async _executeStep(transaction: TransactionEntity): Promise<void> {
@@ -116,7 +127,7 @@ export class ExecutionService {
           }),
         );
 
-        if (response.isSuccess && Object.values(response.lockStatuses).every((s) => s === LOCK_STATUS.OPENEDED)) {
+        if (response.isSuccess && Object.values(response.lockStatuses).every((s) => s === LOCK_STATUS.OPENED)) {
           this._logger.log(`[${transaction.id}] Bin ${bin.id} opened successfully.`);
           bin.state.isLocked = false;
           bin.state.failedOpenAttempts = 0;
@@ -166,6 +177,7 @@ export class ExecutionService {
     ]);
 
     await this._publisher.publish(Transport.MQTT, EVENT_TYPE.LOADCELL.START_READING, { hardwareIds: [...hardwareIds] });
+
     await sleep(EXECUTION_CONFIG.LOADCELL_STABILIZATION_MS);
 
     await this._publisher.publish(Transport.MQTT, EVENT_TYPE.BIN.OPENED, {
@@ -283,7 +295,7 @@ export class ExecutionService {
       const actualReturnedQty = event.quantityChanged;
       const loadcell = await this._em.findOne(LoadcellEntity, { id: plannedItem.loadcellId });
       if (loadcell) {
-        loadcell.calibration.damageQuantity += actualReturnedQty;
+        loadcell.damageQuantity += actualReturnedQty;
         this._logger.log(
           `[${transaction.id}] Item ${plannedItem.name} returned as DAMAGED. Updating damage quantity for loadcell ${loadcell.id} by ${actualReturnedQty}.`,
         );

@@ -2,6 +2,7 @@ export const EVENT_TYPE = {
   CARD: {
     SCAN: 'card/scan',
     SCANNED: 'card/scanned',
+    CONNECTED: 'card/connected',
   },
   LOADCELL: {
     // request
@@ -33,6 +34,10 @@ export const EVENT_TYPE = {
 
   /** Events related to core business processes (Issue, Return, Replenish) */
   PROCESS: {
+    START: 'process/start',
+    STEP_SUCCESS: 'process/step-success',
+    STEP_ERROR: 'process/step-error',
+
     QTY_CHANGED: 'process/item-qty-changed',
     INSTRUCTION: 'process/instruction',
     CALCULATE_ITEM: 'process/calculate-item',
@@ -44,7 +49,7 @@ export const EVENT_TYPE = {
     ISSUE_ERROR: 'process/issue-error',
     ISSUE_WARNING: 'process/issue-warning',
 
-    FORCE_NEXT_ITEM: 'process/force-next-item',
+    FORCE_NEXT_STEP: 'process/force-next-step',
 
     RETURN_STEP_SUCCESS: 'process/step/return-success',
     RETURN_STEP_ERROR: 'process/return-error',
@@ -63,6 +68,7 @@ export const EVENT_TYPE = {
     REPLENISH_STEP_WARNING: 'process/replenish-warning',
 
     ITEM_SCANNED: 'process/item-scanned',
+
     TRANSACTION_STARTED: 'process/transaction-started',
     TRANSACTION_COMPLETED: 'process/transaction-completed',
     TRANSACTION_FAILED: 'process/transaction-failed',

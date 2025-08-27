@@ -6,6 +6,7 @@ import {
   OnGatewayDisconnect,
   WebSocketServer,
   MessageBody,
+  ConnectedSocket,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 
@@ -40,6 +41,17 @@ export class WsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     return this.server.emit(channel, data);
   }
 
+  public sendTo(channel: WS_CHANNELS, data: Record<string, any>, to: string[]): boolean {
+    return this.server.to(to).emit(channel, data);
+  }
+
+  public async leave(rooms: string[]): Promise<void> {
+    const socketClient = await this.server.fetchSockets();
+    socketClient.forEach((socket) => {
+      rooms.forEach((room) => socket.leave(room));
+    });
+  }
+
   @SubscribeMessage(WS_CHANNELS.PING)
   public pong(client: Socket): void {
     const lastPongTime = Date.now();
@@ -49,4 +61,11 @@ export class WsGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   @SubscribeMessage(WS_CHANNELS.UPDATE_CARD)
   public updateCard(@MessageBody() msg: any): void {}
+
+  @SubscribeMessage(WS_CHANNELS.REQUEST_SCAN_EMPLOYEE)
+  public joinCluster(@ConnectedSocket() client: Socket, @MessageBody() msg: { clusterId?: string; clientId?: string }): void {
+    if (msg.clusterId) {
+      client.join(msg.clusterId);
+    }
+  }
 }

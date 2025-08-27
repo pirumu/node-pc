@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Expose, Type } from 'class-transformer';
-import { IsEnum, IsNumber, IsOptional } from 'class-validator';
+import { IsNumber } from 'class-validator';
 
 export enum CabinetType {
   MAIN = 'main',
@@ -9,34 +9,33 @@ export enum CabinetType {
 
 export class GetCabinetsResponse {
   @ApiProperty()
+  @Expose()
   @Type(() => String)
   id: number;
 
   @ApiProperty()
+  @Expose()
   @Type(() => String)
   name: string;
 
   @ApiProperty()
-  @IsOptional()
-  @Type(() => String)
-  code: string | null;
-
-  @ApiProperty({
-    name: 'number_of_rows',
-  })
-  @Expose({ name: 'number_of_rows', toPlainOnly: true })
+  @Expose()
   @Type(() => Number)
-  numberOfRows: number;
+  rowNumber: number;
 
-  @ApiProperty({
-    name: 'total_bins',
-  })
-  @Expose({ name: 'total_bins', toPlainOnly: true })
+  @ApiProperty()
+  @Expose()
   @IsNumber()
   @Type(() => Number)
-  totalBins: number;
+  binNumber: number;
 
+  @ApiProperty()
   @Expose({ name: 'type' })
-  @IsEnum(Object.values(CabinetType))
+  @Type(() => String)
   type: CabinetType;
+
+  @ApiProperty()
+  @Expose({ name: 'type' })
+  @Type(() => String)
+  binType: string;
 }

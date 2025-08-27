@@ -22,8 +22,8 @@ export abstract class AbstractEntity extends BaseEntity {
   @Property({ onUpdate: () => new Date() })
   updatedAt?: Date;
 
-  @Embedded(() => Synchronization, { nullable: true })
-  synchronization?: Synchronization;
+  @Embedded(() => Synchronization, {})
+  synchronization: Synchronization = new Synchronization();
 
   protected constructor() {
     super();

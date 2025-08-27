@@ -1,5 +1,12 @@
 export type Location = {
   binId: string;
+  binName: string;
+  cabinetId: string;
+  cabinetName: string;
+  clusterId: string;
+  clusterName: string;
+  siteId: string;
+  siteName: string;
 };
 
 export type AnotherItem = {
@@ -40,8 +47,5 @@ export type ExecutionStep = {
   itemsToReplenish: ItemToReplenish[];
   keepTrackItems: AnotherItem[];
   instructions: string[];
-};
-
-export type RequestPayload = {
-  steps: ExecutionStep[];
+  location: Location;
 };

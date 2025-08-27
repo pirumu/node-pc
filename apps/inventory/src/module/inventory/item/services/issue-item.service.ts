@@ -139,22 +139,32 @@ export class IssueItemService {
           break;
         }
 
-        const availableQty = loadcell.calibration.availableQuantity;
+        const availableQty = loadcell.availableQuantity;
         // Take the minimum of what's needed vs. what's available
         const qtyToTake = Math.min(neededQty, availableQty);
 
         // Add this allocation to the plan
         const item = RefHelper.getRequired(loadcell.item, 'ItemEntity');
         const bin = RefHelper.getRequired(loadcell.bin, 'BinEntity');
+        const cabinet = RefHelper.getRequired(loadcell.cabinet, 'CabinetEntity');
+        const cluster = RefHelper.getRequired(loadcell.cluster, 'ClusterEntity');
+        const site = RefHelper.getRequired(loadcell.site, 'SiteEntity');
 
         plan.push({
           name: item.name,
           itemId: requestedItem.itemId,
           requestQty: qtyToTake,
-          currentQty: loadcell.calibration.quantity,
+          currentQty: loadcell.availableQuantity,
           loadcellId: loadcell.id,
           location: {
             binId: bin.id,
+            binName: `${bin.x}-${bin.y}`,
+            cabinetId: cabinet.id,
+            cabinetName: cabinet.name,
+            clusterId: cabinet.id,
+            clusterName: cluster.name,
+            siteId: site.id,
+            siteName: site.name,
           },
           // IMPORTANT: Track all OTHER items in this bin for validation
           // This prevents users from taking unauthorized items from the same bin
@@ -163,7 +173,7 @@ export class IssueItemService {
               return (
                 // Include only valid loadcells
                 !!l.bin?.id &&
-                !!l.itemInfo?.itemId &&
+                !!l.metadata?.itemId &&
                 // EXCLUDE all requested items (they're authorized to be taken)
                 !itemIds.includes(l.item?.id || '')
               );
@@ -175,7 +185,7 @@ export class IssueItemService {
                 name: l.item?.unwrap()?.name || '',
                 loadcellId: l.id,
                 requestQty: 0,
-                currentQty: l.calibration.availableQuantity,
+                currentQty: l.availableQuantity,
               };
             }),
         });
@@ -186,7 +196,7 @@ export class IssueItemService {
 
       // Validate that we can fulfill the complete request
       if (neededQty > 0) {
-        const availableTotal = loadcellsForItem.reduce((sum, lc) => sum + lc.calibration.quantity, 0);
+        const availableTotal = loadcellsForItem.reduce((sum, lc) => sum + lc.availableQuantity, 0);
         throw AppHttpException.badRequest({
           message: `Not enough stock for item ${requestedItem.itemId}. Requested: ${requestedItem.quantity}, Available: ${availableTotal}.`,
         });
@@ -221,9 +231,11 @@ export class IssueItemService {
 
     // Create one step per bin
     const steps: ExecutionStep[] = [];
-    let stepCounter = 1;
+    let stepIndex = 1;
 
     for (const [binId, items] of binGroups) {
+      // now all item in same bin is grouped.
+      const location = items[0].location;
       // Prepare items to take from this bin
       const itemsToIssue: ItemToTake[] = items.map((item) => ({
         itemId: item.itemId,
@@ -243,24 +255,24 @@ export class IssueItemService {
 
       // Generate simple instructions
       const instructions = [
-        `Step ${stepCounter}: Go to ${binId}`,
-        `Open ${binId}`,
+        `Step ${stepIndex}: Go to cabinet ${location.cabinetName} and bin ${location.binName}`,
         ...itemsToIssue.map((item) => `Take ${item.requestQty} units of ${item.name}`),
         `Close ${binId}`,
       ];
 
       // Create the step
       steps.push({
-        stepId: `step_${stepCounter}_${binId}`,
+        stepId: `issue_step_${stepIndex}_${binId}`,
         binId: binId,
         itemsToIssue: itemsToIssue,
         itemsToReturn: [],
         itemsToReplenish: [],
         keepTrackItems: Array.from(trackingItemsMap.values()),
         instructions: instructions,
+        location: items[0].location,
       });
 
-      stepCounter++;
+      stepIndex++;
     }
 
     return steps;

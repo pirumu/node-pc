@@ -1,10 +1,11 @@
+import { PartialProperties } from '@framework/types';
 import { Entity, Property, ManyToOne, Ref, OneToMany, Collection } from '@mikro-orm/core';
 
 import { AbstractEntity } from './abstract.entity';
 import { ItemTypeEntity } from './item-type.entity';
+// eslint-disable-next-line import/no-cycle
+import { LoadcellEntity } from './loadcell.entity';
 import { SiteEntity } from './site.entity';
-import { PartialProperties } from '@framework/types';
-import { LoadcellEntity } from '@dals/mongo/entities/loadcell.entity';
 
 @Entity({ collection: 'items' })
 export class ItemEntity extends AbstractEntity {
