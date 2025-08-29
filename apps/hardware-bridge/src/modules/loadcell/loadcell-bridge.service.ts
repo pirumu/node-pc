@@ -168,8 +168,13 @@ export class LoadcellBridgeService implements OnModuleInit, OnModuleDestroy {
         windowsPorts.push(`COM${i}`);
       }
     }
+    const sortedPorts = ports
+      .map((p) => p.path)
+      .sort((a, b) => {
+        return a > b ? 1 : a < b ? -1 : 0;
+      });
     // Return unique ports
-    return [...new Set([...ports.map((p) => p.path), ...windowsPorts])];
+    return [...new Set([...sortedPorts, ...windowsPorts])];
   }
 
   private async _verifyLoadcellPort(portPath: string): Promise<boolean> {
