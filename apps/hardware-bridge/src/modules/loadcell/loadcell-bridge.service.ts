@@ -6,12 +6,12 @@ import { LoadcellsService } from '@loadcells';
 import { LoadCellReading } from '@loadcells/loadcells.types';
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { PortDiscoveryService, PortMonitoringService } from '@serialport';
+import { PortMonitoringService } from '@serialport';
 import { InjectSerialManager, ISerialAdapter } from '@serialport/serial';
-import { from, interval, lastValueFrom, Subject } from 'rxjs';
+import { from, interval, Subject } from 'rxjs';
 import { map, take, takeUntil, timeout } from 'rxjs/operators';
 
-import { CHAR_START, LINUX_PORTS, MESSAGE_LENGTH, VERIFY_TIMEOUT } from './loadcell.constants';
+import { CHAR_START, MESSAGE_LENGTH, VERIFY_TIMEOUT } from './loadcell.constants';
 
 @Injectable()
 export class LoadcellBridgeService implements OnModuleInit, OnModuleDestroy {
@@ -186,6 +186,7 @@ export class LoadcellBridgeService implements OnModuleInit, OnModuleDestroy {
         dataBits: 8,
         stopBits: 1,
         parity: 'none',
+        parser: { type: 'bytelength', options: { length: 11 } },
       });
 
       // Create promise to wait for valid response
