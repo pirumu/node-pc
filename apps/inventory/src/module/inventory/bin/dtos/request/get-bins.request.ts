@@ -10,16 +10,32 @@ export class GetBinsRequest extends PaginationRequest {
   @IsMongoId()
   @Type(() => String)
   @IsOptional()
+  siteId?: string;
+
+  @ApiProperty({
+    required: false,
+  })
+  @IsMongoId()
+  @Type(() => String)
+  @IsOptional()
   cabinetId?: string;
 
-  @ApiProperty()
+  @ApiProperty({
+    required: false,
+  })
+  @IsMongoId()
+  @Type(() => String)
+  @IsOptional()
+  binId?: string;
+
+  @ApiProperty({ required: false })
   @Type(() => Boolean)
   @IsOptional()
   enrich?: boolean;
 }
 
 export class GetBinRequest {
-  @ApiProperty()
+  @ApiProperty({ required: false })
   @Type(() => Boolean)
   @IsOptional()
   enrich?: boolean;

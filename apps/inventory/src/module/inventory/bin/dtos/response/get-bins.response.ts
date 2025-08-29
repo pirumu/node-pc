@@ -1,7 +1,7 @@
+import { BIN_TYPES, BinType } from '@dals/mongo/entities';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Expose, Type } from 'class-transformer';
 import { IsBoolean, IsOptional, IsDateString, IsEnum, IsArray, ValidateNested } from 'class-validator';
-import { BIN_TYPES, BinType } from '@dals/mongo/entities';
 
 export class BinItemResponse {
   @ApiProperty({
@@ -157,7 +157,7 @@ export class BinStateResponse {
   })
   @Expose()
   @IsBoolean()
-  isDamage: boolean;
+  isDamaged: boolean;
 }
 
 export class SiteResponse {
@@ -213,6 +213,8 @@ export class CabinetResponse {
   @Type(() => String)
   name: string;
 }
+
+export class LoadcellItem {}
 
 export class LoadcellResponse {
   @ApiProperty({
@@ -332,22 +334,6 @@ export class GetBinResponse {
   @Expose()
   @Type(() => Number)
   y: number;
-
-  @ApiProperty({
-    description: 'Width',
-    example: 50,
-  })
-  @Expose()
-  @Type(() => Number)
-  width: number;
-
-  @ApiProperty({
-    description: 'Height',
-    example: 80,
-  })
-  @Expose()
-  @Type(() => Number)
-  height: number;
 
   @ApiProperty({
     description: 'Minimum quantity',

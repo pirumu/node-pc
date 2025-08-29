@@ -29,8 +29,9 @@ export class TabletService {
 
     await this._tabletRepository.upsert({
       clientId: dto.clientId,
+      site: cluster.site,
       cluster: Reference.create(cluster),
-      publicKey: dto.publicKey,
+      publicKey: 'pk',
       isMfaEnabled: dto.isMfaEnabled,
     });
 

@@ -3,15 +3,15 @@ import { PaginatedResult, PaginationMeta } from '@common/dto';
 import { CuLockRequest } from '@culock/dto';
 import { Command, ProtocolType } from '@culock/protocols';
 import { CuResponse } from '@culock/protocols/cu';
-import { BinEntity } from '@dals/mongo/entities';
+import { BinEntity, IssueHistoryEntity, ItemEntity } from '@dals/mongo/entities';
 import { AppHttpException } from '@framework/exception';
 import { PublisherService, Transport } from '@framework/publisher';
-import { EntityRepository, ObjectId, Transactional } from '@mikro-orm/mongodb';
+import type { FilterQuery } from '@mikro-orm/core/typings';
+import { EntityManager, EntityRepository, ObjectId, Transactional } from '@mikro-orm/mongodb';
 import { InjectRepository } from '@mikro-orm/nestjs';
 import { Injectable, Logger } from '@nestjs/common';
 
 import { OpenCabinetBinRequest } from './dtos/request';
-import type { FilterQuery } from '@mikro-orm/core/typings';
 
 @Injectable()
 export class BinService {
@@ -20,24 +20,33 @@ export class BinService {
   private readonly _logger = new Logger(BinService.name);
   constructor(
     private readonly _publisherService: PublisherService,
+    private readonly _em: EntityManager,
     @InjectRepository(BinEntity) private readonly _binRepository: EntityRepository<BinEntity>,
   ) {}
 
-  public async getBins(page: number, limit: number, cabinetId?: string, enrich?: boolean): Promise<PaginatedResult<BinEntity>> {
-    const conditions: FilterQuery<BinEntity> = cabinetId
-      ? {
-          cabinet: {
-            _id: new ObjectId(cabinetId),
-          },
-        }
-      : {};
+  public async getBins(
+    page: number,
+    limit: number,
+    cabinetId?: string,
+    siteId?: string,
+    enrich?: boolean,
+  ): Promise<PaginatedResult<BinEntity>> {
+    const conditions: FilterQuery<BinEntity> = {};
+
+    if (cabinetId) {
+      conditions.cabinet = new ObjectId(cabinetId);
+    }
+
+    if (siteId) {
+      conditions.site = new ObjectId(siteId);
+    }
 
     const [binEntities, count] = await this._binRepository.findAndCount(
       { ...conditions },
       {
         limit: limit,
         offset: (page - 1) * limit,
-        populate: enrich ? ['site', 'cabinet', 'cluster', 'loadcells'] : [],
+        populate: enrich ? ['site', 'cabinet', 'cluster', 'loadcells', 'loadcells.item'] : [],
       },
     );
 
@@ -48,6 +57,226 @@ export class BinService {
         limit,
         total: count,
       }),
+    };
+  }
+
+  public async getBinCompartments(
+    page: number,
+    limit: number,
+    options: {
+      cabinetId?: string;
+      siteId?: string;
+      binId?: string;
+    },
+  ): Promise<PaginatedResult<any>> {
+    const { cabinetId, siteId, binId } = options;
+    const conditions: FilterQuery<BinEntity> = cabinetId ? { cabinet: { _id: new ObjectId(cabinetId) } } : {};
+
+    if (siteId) {
+      conditions.site = new ObjectId(siteId);
+    }
+
+    if (binId) {
+      conditions._id = new ObjectId(binId);
+    }
+
+    const [bins, total] = await this._em.findAndCount(BinEntity, conditions, {
+      populate: ['loadcells', 'loadcells.item', 'items'],
+      limit: limit,
+      offset: (page - 1) * limit,
+      orderBy: { x: 'ASC', y: 'ASC' },
+    });
+
+    const now = new Date();
+
+    const rows = bins.map((bin) => {
+      let totalQtyOH = 0;
+      let totalItems = 0;
+      let totalItemLoadcells = 0;
+      let hasExpiredItem = false;
+      let status = 'good';
+
+      if (bin.type === 'LOADCELL') {
+        const loadcells = bin.loadcells.getItems();
+        totalQtyOH = loadcells.reduce((sum, lc) => sum + lc.availableQuantity, 0);
+        totalItemLoadcells = loadcells.length;
+        hasExpiredItem = loadcells.some((lc) => lc.metadata.expiryDate && lc.metadata.expiryDate.getTime() < now.getTime());
+      } else {
+        totalQtyOH = bin.items.reduce((sum, item) => sum + item.qty, 0);
+        totalItems = bin.items.length;
+        totalItemLoadcells = 0;
+        hasExpiredItem = bin.items.some((item) => item.expiryDate && item.expiryDate.getTime() < now.getTime());
+      }
+
+      if (totalQtyOH <= 0 || hasExpiredItem) {
+        status = 'unavailable';
+      } else if (totalQtyOH >= bin.minQty && totalQtyOH <= bin.criticalQty) {
+        status = 'low-critical';
+      } else if (totalQtyOH > bin.criticalQty && totalQtyOH <= bin.maxQty) {
+        status = 'average';
+      } else {
+        status = 'good';
+      }
+
+      return {
+        id: bin.id,
+        x: bin.x,
+        y: bin.y,
+        width: bin.width,
+        height: bin.height,
+        type: bin.type,
+        totalQtyOH: totalQtyOH,
+        totalItems: totalItems,
+        totalItemLoadcells: totalItemLoadcells,
+        status: status,
+      };
+    });
+
+    return {
+      rows: rows,
+      meta: new PaginationMeta({
+        page,
+        limit,
+        total,
+      }),
+    };
+  }
+
+  public async getCompartmentDetails(id: string): Promise<any> {
+    const bin = await this._em.findOne(
+      BinEntity,
+      { _id: new ObjectId(id) },
+      {
+        populate: ['loadcells', 'loadcells.item', 'loadcells.item.itemType'],
+      },
+    );
+
+    if (!bin) {
+      throw AppHttpException.badRequest({ message: `Bin with ID ${id} not found.` });
+    }
+
+    const allPossibleItemIds =
+      bin.type === 'LOADCELL'
+        ? bin.loadcells
+            .getItems()
+            .map((lc) => lc.item?.id)
+            .filter((id): id is string => !!id)
+        : bin.items.map((i) => i.itemId.toHexString());
+
+    const onLoanHistories = await this._em.find(
+      IssueHistoryEntity,
+      {
+        item: { id: { $in: allPossibleItemIds } },
+      },
+      { fields: ['item'] },
+    );
+
+    const onLoanItemIds = new Set(onLoanHistories.map((h) => h.item.id));
+
+    const detailedItems: any[] = [];
+    let totalQtyOH = 0;
+
+    if (bin.type === 'LOADCELL') {
+      const loadcells = bin.loadcells.getItems();
+
+      for (const lc of loadcells) {
+        if (lc.item?.isInitialized()) {
+          const item = lc.item.unwrap();
+          const itemType = item.itemType?.unwrap();
+          const quantity = lc.availableQuantity;
+          const criticalThreshold = lc.metadata.critical;
+
+          let itemStatus: 'good' | 'on-loan' | 'low/critical';
+          if (onLoanItemIds.has(item.id)) {
+            itemStatus = 'on-loan';
+          } else if (quantity > 0 && quantity <= criticalThreshold) {
+            itemStatus = 'low/critical';
+          } else {
+            itemStatus = 'good';
+          }
+
+          detailedItems.push({
+            itemId: item.id,
+            type: bin.type,
+            name: item.name,
+            partNo: item.partNo,
+            itemType: itemType?.name || 'N/A',
+            quantity: quantity,
+            status: itemStatus,
+            materialNo: lc.item.unwrap().materialNo,
+            batchNumber: lc.metadata.batchNumber,
+            serialNumber: lc.metadata.serialNumber,
+            expiryDate: lc.metadata.expiryDate,
+          });
+        }
+      }
+      totalQtyOH = loadcells.reduce((sum, lc) => sum + lc.availableQuantity, 0);
+    } else {
+      if (bin.items.length > 0) {
+        const itemIds = bin.items.map((i) => i.itemId);
+        const itemEntities = await this._em.find(ItemEntity, { _id: { $in: itemIds } }, { populate: ['itemType'] });
+        const itemMap = new Map(itemEntities.map((e) => [e.id, e]));
+
+        for (const binItem of bin.items) {
+          const itemEntity = itemMap.get(binItem.itemId.toHexString());
+          if (itemEntity) {
+            const itemType = itemEntity.itemType?.unwrap();
+            const quantity = binItem.qty;
+            const criticalThreshold = binItem.critical;
+
+            // Xác định trạng thái cho item này
+            let itemStatus: 'good' | 'on-loan' | 'low/critical';
+            if (onLoanItemIds.has(itemEntity.id)) {
+              itemStatus = 'on-loan';
+            } else if (quantity > 0 && quantity <= criticalThreshold) {
+              itemStatus = 'low/critical';
+            } else {
+              itemStatus = 'good';
+            }
+
+            detailedItems.push({
+              itemId: itemEntity.id,
+              type: bin.type,
+              name: itemEntity.name,
+              materialNo: itemEntity.materialNo,
+              partNo: itemEntity.partNo,
+              itemType: itemType?.name || 'N/A',
+              quantity: quantity,
+              status: itemStatus, // <-- Thêm trạng thái của item
+              batchNumber: binItem.batchNumber,
+              serialNumber: binItem.serialNumber,
+              expiryDate: binItem.expiryDate,
+            });
+          }
+        }
+      }
+      totalQtyOH = bin.items.reduce((sum, item) => sum + item.qty, 0);
+    }
+
+    // --- BƯỚC 4: TÍNH TOÁN TRẠNG THÁI TỔNG THỂ CHO BIN ---
+    // Trạng thái tổng thể của Bin vẫn có thể hữu ích
+    let binStatus: 'good' | 'on-loan' | 'low/critical';
+    if (onLoanItemIds.size > 0) {
+      binStatus = 'on-loan';
+    } else if (totalQtyOH > 0 && totalQtyOH <= bin.criticalQty) {
+      binStatus = 'low/critical';
+    } else {
+      binStatus = 'good';
+    }
+
+    // --- BƯỚC 5: TRẢ VỀ RESPONSE HOÀN CHỈNH ---
+    return {
+      id: bin.id,
+      x: bin.x,
+      y: bin.y,
+      width: bin.width,
+      height: bin.height,
+      type: bin.type,
+
+      status: binStatus,
+      totalQtyOH: totalQtyOH,
+
+      items: detailedItems,
     };
   }
 

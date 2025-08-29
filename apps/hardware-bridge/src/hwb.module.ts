@@ -1,10 +1,6 @@
-import * as path from 'node:path';
-import * as process from 'node:process';
-
-import { AppConfig, MongoDBConfig } from '@config/contracts';
+import { AppConfig } from '@config/contracts';
 import { CONFIG_KEY } from '@config/core';
-import { API_MODELS, API_MONGO_REPOSITORIES, MongoDALModule } from '@dals/mongo';
-import { DEFAULT_CONFIG, FingerprintScanModule } from '@fingerprint-scanner';
+// import { DEFAULT_CONFIG, FingerprintScanModule } from '@fingerprint-scanner';
 import { TRACING_ID } from '@framework/constants';
 import { AppLoggerModule } from '@framework/logger';
 import { PublisherModule } from '@framework/publisher';
@@ -18,10 +14,10 @@ import { Request } from 'express';
 import { ClsModule } from 'nestjs-cls';
 
 import { configs } from './config';
-import { FingerprintConfig } from './config/fingerprint.config';
+// import { FingerprintConfig } from './config/fingerprint.config';
 import { MqttConfig } from './config/mqtt.config';
 import { HARDWARE_MODULES } from './modules';
-import { FingerprintModule } from './modules/fingerprint';
+// import { FingerprintModule } from './modules/fingerprint';
 
 @Module({
   imports: [
@@ -30,20 +26,22 @@ import { FingerprintModule } from './modules/fingerprint';
       isGlobal: true,
       cache: true,
     }),
-    FingerprintScanModule.forRootAsync({
-      useFactory: (configService: ConfigService) => {
-        const config = configService.getOrThrow<FingerprintConfig>(CONFIG_KEY.FINGERPRINT);
-        return {
-          ...DEFAULT_CONFIG,
-          binaryPath: path.join(process.cwd(), config.binaryPath),
-          devicePort: config.defaultPort,
-          maxCommandAge: 30000, // 30s
-          logLevel: 'debug',
-        };
-      },
-      imports: [ConfigModule],
-      inject: [ConfigService],
-    }),
+    // FingerprintScanModule.forRootAsync({
+    //   useFactory: (configService: ConfigService) => {
+    //     const config = configService.getOrThrow<FingerprintConfig>(CONFIG_KEY.FINGERPRINT);
+    //     return {
+    //       ...DEFAULT_CONFIG,
+    //       binaryPath: path.join(process.cwd(), config.binaryPath),
+    //       devicePort: config.defaultPort,
+    //       maxCommandAge: 30000, // 30s
+    //       logLevel: 'debug',
+    //     };
+    //   },
+    //   imports: [ConfigModule],
+    //   inject: [ConfigService],
+    // }),
+    // FingerprintModule,
+
     ClsModule.forRoot({
       global: true,
       middleware: {
@@ -65,32 +63,6 @@ import { FingerprintModule } from './modules/fingerprint';
       },
       inject: [ConfigService],
     }),
-    MongoDALModule.forRootAsync({
-      useFactory: (configService: ConfigService) => {
-        const mongoConfig = configService.getOrThrow<MongoDBConfig>(CONFIG_KEY.MONGO);
-        return {
-          uri: mongoConfig.uri,
-          maxPoolSize: mongoConfig.maxPoolSize,
-          minPoolSize: mongoConfig.minPoolSize,
-          serverSelectionTimeoutMS: mongoConfig.serverSelectionTimeoutMS,
-          socketTimeoutMS: mongoConfig.socketTimeoutMS,
-          connectTimeoutMS: mongoConfig.connectTimeoutMS,
-          heartbeatFrequencyMS: mongoConfig.heartbeatFrequencyMS,
-          retryWrites: mongoConfig.retryWrites,
-          retryReads: mongoConfig.retryReads,
-          bufferCommands: mongoConfig.bufferCommands,
-          ssl: mongoConfig.ssl,
-          ...(mongoConfig.sslCA && { sslCA: mongoConfig.sslCA }),
-          ...(mongoConfig.sslCert && {
-            sslCert: mongoConfig.sslCert,
-          }),
-          ...(mongoConfig.sslKey && { sslKey: mongoConfig.sslKey }),
-        };
-      },
-      inject: [ConfigService],
-      models: [...API_MODELS],
-      repositories: [...API_MONGO_REPOSITORIES],
-    }),
     PublisherModule.forRootAsync({
       global: true,
       useFactory: (configService: ConfigService) => {
@@ -110,7 +82,6 @@ import { FingerprintModule } from './modules/fingerprint';
       },
       inject: [ConfigService],
     }),
-    HidDeviceModule,
     LoadcellsModule.forRootAsync({
       useFactory: () => {
         return {
@@ -130,7 +101,7 @@ import { FingerprintModule } from './modules/fingerprint';
       inject: [ConfigService],
     }),
     ...HARDWARE_MODULES,
-    FingerprintModule,
+    HidDeviceModule,
   ],
   controllers: [],
   providers: [],

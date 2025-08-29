@@ -136,7 +136,7 @@ export class BinEntity extends AbstractEntity {
   @Embedded(() => BinItem, { array: true, default: [] })
   items: BinItem[] = [];
 
-  @Embedded(() => BinState)
+  @Embedded(() => BinState, { object: true })
   state: BinState;
 
   constructor(data?: Properties<BinEntity>) {

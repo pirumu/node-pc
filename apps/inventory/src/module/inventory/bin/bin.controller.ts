@@ -8,7 +8,7 @@ import { HEADER_KEYS } from '../../../common';
 import { BIN_ROUTES } from './bin.constants';
 import { BinService } from './bin.service';
 import { OpenCabinetBinRequest, GetBinsRequest, GetBinRequest } from './dtos/request';
-import { GetBinResponse } from './dtos/response';
+import { GetBinCompartmentDetail, GetBinCompartmentsResponse, GetBinResponse } from './dtos/response';
 
 @ControllerDocs({
   tag: 'Bin',
@@ -27,13 +27,34 @@ export class BinController extends BaseController {
   })
   @Get(BIN_ROUTES.GET_BINS)
   public async getBins(@Query() query: GetBinsRequest): Promise<PaginationResponse<GetBinResponse>> {
-    const { rows, meta } = await this._binService.getBins(query.page || 1, query.limit || 10, query.cabinetId, query.enrich);
-    const data = rows.map((row) =>
-      this.toDto<GetBinResponse>(GetBinResponse, {
-        ...row.toPOJO(),
-      }),
-    );
+    const { rows, meta } = await this._binService.getBins(query.page || 1, query.limit || 10, query.cabinetId, query.siteId, query.enrich);
+    const data = rows.map((row) => this.toDto<GetBinResponse>(GetBinResponse, row.toPOJO()));
     return new PaginationResponse(data, meta);
+  }
+
+  @ApiDocs({
+    summary: 'Get bin compartments',
+    paginatedResponseSchema: GetBinCompartmentsResponse,
+  })
+  @Get(BIN_ROUTES.GET_BIN_COMPARTMENTS)
+  public async getBinCompartments(@Query() query: GetBinsRequest): Promise<PaginationResponse<GetBinCompartmentsResponse>> {
+    const { rows, meta } = await this._binService.getBinCompartments(query.page || 1, query.limit || 10, {
+      cabinetId: query.cabinetId,
+      siteId: query.siteId,
+      binId: query.binId,
+    });
+    const data = rows.map((row) => this.toDto<GetBinCompartmentsResponse>(GetBinCompartmentsResponse, row));
+    return new PaginationResponse(data, meta);
+  }
+
+  @ApiDocs({
+    summary: 'Get bin compartment details',
+    responseSchema: GetBinCompartmentDetail,
+  })
+  @Get(BIN_ROUTES.GET_BIN_COMPARTMENT_DETAIL)
+  public async getBinCompartmentDetail(@Param('id') binId: string): Promise<GetBinCompartmentDetail> {
+    const result = await this._binService.getCompartmentDetails(binId);
+    return this.toDto<GetBinCompartmentDetail>(GetBinCompartmentDetail, result);
   }
 
   @ApiDocs({

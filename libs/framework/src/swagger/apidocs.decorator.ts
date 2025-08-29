@@ -36,6 +36,7 @@ export const ApiDocs = (options: ApiDocOptions) => {
           allOf: [
             { $ref: getSchemaPath(PaginationResponse) },
             {
+              required: ['data'],
               properties: {
                 data: {
                   type: 'array',

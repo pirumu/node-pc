@@ -262,7 +262,7 @@ export class GetLoadcellsResponse {
   @Type(() => LoadcellItem)
   @Expose({ toClassOnly: true })
   @Default(new LoadcellItem())
-  itemInfo?: LoadcellItem;
+  metadata?: LoadcellItem;
 
   @ApiProperty({ description: 'Calibration data', type: CalibrationData })
   @Type(() => CalibrationData)

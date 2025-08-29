@@ -127,16 +127,16 @@ export class LoadcellEntity extends AbstractEntity {
   @Property({ default: '' })
   label: string = '';
 
-  @Embedded(() => LoadcellMetadata)
+  @Embedded(() => LoadcellMetadata, { object: true })
   metadata = new LoadcellMetadata(); // item.
 
-  @Embedded(() => CalibrationData)
+  @Embedded(() => CalibrationData, { object: true })
   calibration = new CalibrationData();
 
-  @Embedded(() => LiveReading)
+  @Embedded(() => LiveReading, { object: true })
   liveReading = new LiveReading();
 
-  @Embedded(() => LoadcellState)
+  @Embedded(() => LoadcellState, { object: true })
   state = new LoadcellState();
 
   @ManyToOne(() => PortEntity, {

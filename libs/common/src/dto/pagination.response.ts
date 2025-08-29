@@ -21,7 +21,7 @@ export class PaginationMeta {
 }
 
 export class PaginationResponse<T> {
-  @ApiProperty({ isArray: true })
+  @ApiProperty({ isArray: true, required: true, default: [] })
   data: T[];
 
   @ApiProperty({ type: PaginationMeta })

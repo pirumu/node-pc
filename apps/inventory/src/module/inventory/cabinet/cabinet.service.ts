@@ -1,8 +1,8 @@
+import { CabinetEntity } from '@dals/mongo/entities';
+import { EntityManager, ObjectId } from '@mikro-orm/mongodb';
 import { Injectable } from '@nestjs/common';
 
 import { GetCabinetsRequest } from './dtos/request';
-import { EntityManager, ObjectId } from '@mikro-orm/mongodb';
-import { CabinetEntity } from '@dals/mongo/entities';
 
 @Injectable()
 export class CabinetService {

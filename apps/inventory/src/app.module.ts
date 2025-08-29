@@ -6,7 +6,7 @@ import { AppLoggerModule } from '@framework/logger';
 import { PublisherModule } from '@framework/publisher';
 import { snowflakeId } from '@framework/snowflake';
 import { MongoHighlighter } from '@mikro-orm/mongo-highlighter';
-import { MongoDriver } from '@mikro-orm/mongodb';
+import { MongoDriver, MongoNamingStrategy } from '@mikro-orm/mongodb';
 import { Logger, MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
@@ -99,9 +99,6 @@ import { WsModule } from './module/ws';
             checkDuplicateEntities: true,
             checkNonPersistentCompositeProps: true,
           },
-          autoJoinRefsForFilters: false,
-          populateWhere: 'infer',
-
           logger: (msg) => Logger.log(msg, 'MikroORM'),
         };
       },

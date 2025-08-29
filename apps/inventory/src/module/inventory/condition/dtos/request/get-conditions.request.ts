@@ -1,9 +1,14 @@
 import { CONDITION_TYPE } from '@common/constants';
 import { ApiProperty } from '@nestjs/swagger';
 import { Expose, Transform, Type } from 'class-transformer';
-import { IsArray } from 'class-validator';
+import { IsArray, IsMongoId } from 'class-validator';
 
 export class GetConditionsRequest {
+  @ApiProperty()
+  @IsMongoId()
+  @Expose({ toClassOnly: true })
+  siteId: string;
+
   @ApiProperty({
     required: false,
     type: [String],

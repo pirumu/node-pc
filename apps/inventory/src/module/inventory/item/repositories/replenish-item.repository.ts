@@ -1,8 +1,5 @@
 import { PaginatedResult, PaginationMeta } from '@common/dto';
 import { LoadcellEntity } from '@dals/mongo/entities';
-import { RefHelper } from '@dals/mongo/helpers';
-import { AppHttpException } from '@framework/exception';
-import { FilterQuery } from '@mikro-orm/core';
 import { ObjectId, EntityManager } from '@mikro-orm/mongodb';
 import { Injectable } from '@nestjs/common';
 
@@ -15,77 +12,75 @@ export class ReplenishItemRepository {
   public async findReplenishableItems(params: FindReplenishableItemsParams): Promise<PaginatedResult<ReplenishableItemRecord>> {
     const { page, limit, keyword, itemTypeId } = params;
 
-    let itemConditions: Record<string, any> = {};
+    const pipeline: any[] = [];
 
-    if (keyword) {
-      itemConditions = { $or: [{ name: { $ilike: `%${keyword}%` } }, { partNo: { $ilike: `%${keyword}%` } }] };
-    }
-
-    if (itemTypeId) {
-      itemConditions = {
-        ...itemConditions,
-        itemType: {
-          _id: new ObjectId(itemTypeId),
-        },
-      };
-    }
-
-    const where: FilterQuery<LoadcellEntity> = {
-      item: {
-        $ne: null,
-        ...itemConditions,
-      },
-      state: { isCalibrated: true },
-      bin: {
-        $ne: null,
-      },
-      cluster: {
-        $ne: null,
-      },
-      cabinet: {
-        $ne: null,
-      },
+    const initialMatch: any = {
+      ['state.isCalibrated']: true,
+      itemId: { $ne: null },
+      binId: { $ne: null },
+      clusterId: { $ne: null },
+      cabinetId: { $ne: null },
     };
+    pipeline.push({ $match: initialMatch });
+
+    pipeline.push({ $lookup: { from: 'items', localField: 'itemId', foreignField: '_id', as: 'item' } }, { $unwind: '$item' });
+    pipeline.push(
+      { $lookup: { from: 'item_types', localField: 'item.itemTypeId', foreignField: '_id', as: 'item.itemType' } },
+      { $unwind: '$item.itemType' },
+    );
+    pipeline.push({ $lookup: { from: 'bins', localField: 'binId', foreignField: '_id', as: 'bin' } }, { $unwind: '$bin' });
+    pipeline.push({ $lookup: { from: 'cabinets', localField: 'cabinetId', foreignField: '_id', as: 'cabinet' } }, { $unwind: '$cabinet' });
+
+    const secondaryMatch: any = {};
+    if (keyword) {
+      secondaryMatch.$or = [{ ['item.name']: { $regex: keyword, $options: 'i' } }, { ['item.partNo']: { $regex: keyword, $options: 'i' } }];
+    }
+    if (itemTypeId) {
+      secondaryMatch['item.itemType._id'] = new ObjectId(itemTypeId);
+    }
+    if (Object.keys(secondaryMatch).length > 0) {
+      pipeline.push({ $match: secondaryMatch });
+    }
+
+    pipeline.push({
+      $project: {
+        _id: 0,
+        id: '$item._id',
+        binId: '$bin._id',
+        name: '$item.name',
+        partNo: '$item.partNo',
+        materialNo: '$item.materialNo',
+        itemTypeId: '$item.itemType._id',
+        type: '$item.itemType.name',
+        image: '$item.itemImage',
+        description: '$item.description',
+
+        totalQuantity: '$availableQuantity',
+        totalCalcQuantity: '$calibration.calibratedQuantity',
+        binName: {
+          $concat: ['$cabinet.name', '-', { $toString: '$cabinet.rowNumber' }, '-', { $toString: '$bin.x' }, '-', { $toString: '$bin.y' }],
+        },
+        dueDate: '$metadata.expiryDate',
+        canReplenish: {
+          $and: [{ $not: '$bin.state.isFailed' }, { $not: '$bin.state.isDamaged' }],
+        },
+      },
+    });
+
+    const countPipeline = [...pipeline, { $count: 'total' }];
 
     try {
-      const [loadcells, total] = await this._em.findAndCount(LoadcellEntity, where, {
-        populate: ['item', 'item.itemType', 'bin'],
-        populateOrderBy: { bin: { x: 'ASC', y: 'ASC' } },
-        limit: limit,
-        offset: (page - 1) * limit,
-      });
+      const dataPipeline = [...pipeline, { $sort: { binName: 1 } }, { $skip: (page - 1) * limit }, { $limit: limit }];
 
-      const rows: ReplenishableItemRecord[] = loadcells.map((lc) => {
-        const canReplenish = (lc: LoadcellEntity): boolean => {
-          const bin = RefHelper.getRequired(lc.bin, 'BinEntity');
-          return !bin.state.isFailed && !bin.state.isDamaged;
-        };
+      const [totalResult, rows] = await Promise.all([
+        this._em.aggregate(LoadcellEntity, countPipeline),
+        this._em.aggregate(LoadcellEntity, dataPipeline),
+      ]);
 
-        const cabinet = RefHelper.getRequired(lc.cabinet, 'CabinetEntity');
-        const bin = RefHelper.getRequired(lc.bin, 'BinEntity');
-        const item = RefHelper.getRequired(lc.item, 'ItemEntity');
-        const itemType = RefHelper.getRequired(item.itemType, 'ItemTypeEntity');
-
-        return {
-          id: item.id,
-          name: item.name,
-          partNo: item.partNo,
-          materialNo: item.materialNo,
-          itemTypeId: item.itemType.id,
-          type: itemType.name,
-          image: item.itemImage,
-          description: item.description,
-          totalQuantity: lc.availableQuantity,
-          totalCalcQuantity: lc.calibration.calibratedQuantity,
-          binId: bin.id,
-          binName: `${cabinet.name}-${cabinet.rowNumber}-${bin.x}-${bin.y}`,
-          dueDate: lc.metadata?.expiryDate || null,
-          canReplenish: canReplenish(lc),
-        };
-      });
+      const total = totalResult.length > 0 ? totalResult[0].total : 0;
 
       return new PaginatedResult(
-        rows,
+        rows as ReplenishableItemRecord[],
         new PaginationMeta({
           total,
           page,

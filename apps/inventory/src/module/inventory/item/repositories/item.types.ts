@@ -50,7 +50,8 @@ export type ReturnableItemRecord = {
   description?: string;
   issuedQuantity: number;
   locations: string[];
-  itemInfo: Array<{
+  binId: string;
+  metadata: Array<{
     issuedQuantity: number;
     binId: string;
     batchNumber: string;

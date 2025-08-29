@@ -3,6 +3,7 @@ import { Entity, ManyToOne, Property, Ref } from '@mikro-orm/core';
 
 import { AbstractEntity } from './abstract.entity';
 import { ClusterEntity } from './cluster.entity';
+import { SiteEntity } from './site.entity';
 
 @Entity({ collection: 'tablets' })
 export class TabletEntity extends AbstractEntity {
@@ -14,6 +15,9 @@ export class TabletEntity extends AbstractEntity {
 
   @ManyToOne(() => ClusterEntity, { fieldName: 'clusterId', ref: true })
   cluster!: Ref<ClusterEntity>;
+
+  @ManyToOne(() => SiteEntity, { fieldName: 'siteId', ref: true })
+  site!: Ref<SiteEntity>;
 
   @Property({ default: false })
   isMfaEnabled = false;

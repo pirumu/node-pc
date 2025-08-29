@@ -3,15 +3,20 @@ import { Expose, Type } from 'class-transformer';
 import { IsNumber } from 'class-validator';
 
 export enum CabinetType {
-  MAIN = 'main',
-  SUB = 'sub',
+  MAIN = 'MAIN',
+  SUB = 'SUB',
 }
 
 export class GetCabinetsResponse {
   @ApiProperty()
   @Expose()
   @Type(() => String)
-  id: number;
+  id: string;
+
+  @ApiProperty()
+  @Expose()
+  @Type(() => String)
+  siteId: string;
 
   @ApiProperty()
   @Expose()
@@ -30,12 +35,12 @@ export class GetCabinetsResponse {
   binNumber: number;
 
   @ApiProperty()
-  @Expose({ name: 'type' })
+  @Expose()
   @Type(() => String)
   type: CabinetType;
 
   @ApiProperty()
-  @Expose({ name: 'type' })
+  @Expose()
   @Type(() => String)
   binType: string;
 }

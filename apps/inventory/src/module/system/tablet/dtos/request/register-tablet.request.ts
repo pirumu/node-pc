@@ -13,11 +13,11 @@ export class RegisterTabletRequest {
   @IsString()
   public clientId: string;
 
-  @ApiProperty()
-  @Expose()
-  @IsNotEmpty()
-  @IsString()
-  public publicKey: string;
+  // @ApiProperty()
+  // @Expose()
+  // @IsNotEmpty()
+  // @IsString()
+  // public publicKey: string;
 
   @ApiProperty()
   @Expose()

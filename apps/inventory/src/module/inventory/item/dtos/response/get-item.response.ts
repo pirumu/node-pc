@@ -57,6 +57,7 @@ abstract class BaseItemRecordDto {
 export class IssuableItemResponse extends BaseItemRecordDto {
   @ApiProperty({ description: 'Total quantity available for issue' })
   @Expose()
+  @Type(() => Number)
   totalQuantity: number;
 
   @ApiProperty({ description: 'Total calculated quantity', required: false })
@@ -84,7 +85,7 @@ export class IssuableItemResponse extends BaseItemRecordDto {
 export class ReturnableItemResponse extends BaseItemRecordDto {
   @ApiProperty({ description: 'Quantity that was issued to the user' })
   @Expose()
-  issueQuantity: number;
+  issuedQuantity: number;
 
   @ApiProperty({
     description: 'List of bin locations where items can be returned (e.g., ["A-1", "B-2"])',
@@ -92,6 +93,12 @@ export class ReturnableItemResponse extends BaseItemRecordDto {
   })
   @Expose()
   locations: string[];
+
+  @ApiProperty({
+    type: String,
+  })
+  @Expose()
+  binId: string;
 
   @ApiProperty({
     description: 'Detailed item information including batch, serial, and due dates',

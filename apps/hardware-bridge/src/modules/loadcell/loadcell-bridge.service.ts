@@ -12,7 +12,6 @@ import { from, interval, lastValueFrom, Subject } from 'rxjs';
 import { map, take, takeUntil, timeout } from 'rxjs/operators';
 
 import { CHAR_START, LINUX_PORTS, MESSAGE_LENGTH, VERIFY_TIMEOUT } from './loadcell.constants';
-import { IAppEvent } from '@common/interfaces';
 
 @Injectable()
 export class LoadcellBridgeService implements OnModuleInit, OnModuleDestroy {

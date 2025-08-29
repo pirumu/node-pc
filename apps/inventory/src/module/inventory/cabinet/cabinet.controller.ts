@@ -22,12 +22,19 @@ export class CabinetController extends BaseController {
   }
 
   @ApiDocs({
-    responseSchema: PaginationResponse<GetCabinetsResponse>,
+    responseSchema: [GetCabinetsResponse],
   })
   @Get(CABINET_ROUTES.GET_CABINETS)
-  public async getCabinets(@Query() queries: GetCabinetsRequest): Promise<any> {
+  public async getCabinets(@Query() queries: GetCabinetsRequest): Promise<GetCabinetsResponse[]> {
     const result = await this._cabinetService.getCabinets(queries);
-    return { rows: result.map((cabinet) => this.toDto<GetCabinetsResponse>(GetCabinetsResponse, cabinet.toPOJO())), count: result.length };
+    return result.map((cabinet) => {
+      const pojo = cabinet.toPOJO();
+
+      return this.toDto<GetCabinetsResponse>(GetCabinetsResponse, {
+        ...pojo,
+        siteId: pojo.site,
+      });
+    });
   }
 
   @ApiDocs({

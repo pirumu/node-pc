@@ -1,8 +1,7 @@
 import { PaginatedResult, PaginationMeta } from '@common/dto';
 import { IssueHistoryEntity, LoadcellEntity } from '@dals/mongo/entities';
-import { AppHttpException } from '@framework/exception';
-import { EntityManager, FilterQuery, QueryOrder } from '@mikro-orm/core';
-import { ObjectId } from '@mikro-orm/mongodb';
+import { RefHelper } from '@dals/mongo/helpers';
+import { EntityManager, FilterQuery, ObjectId } from '@mikro-orm/mongodb';
 import { Injectable, Logger } from '@nestjs/common';
 
 import { FindIssuableItemsParams, IssuableItemRecord, ItemsForIssueInput } from './item.types';
@@ -16,76 +15,92 @@ export class IssueItemRepository {
   public async findIssuableItems(params: FindIssuableItemsParams): Promise<PaginatedResult<IssuableItemRecord>> {
     const { page, limit, keyword, itemTypeId, expiryDate } = params;
 
-    let itemConditions: Record<string, any> = {};
+    const pipeline: any[] = [];
 
+    pipeline.push({ $lookup: { from: 'items', localField: 'itemId', foreignField: '_id', as: 'item' } }, { $unwind: '$item' });
+    pipeline.push(
+      { $lookup: { from: 'item_types', localField: 'item.itemTypeId', foreignField: '_id', as: 'item.itemType' } },
+      { $unwind: '$item.itemType' },
+    );
+    pipeline.push({ $lookup: { from: 'bins', localField: 'binId', foreignField: '_id', as: 'bin' } }, { $unwind: '$bin' });
+    pipeline.push({ $lookup: { from: 'cabinets', localField: 'cabinetId', foreignField: '_id', as: 'cabinet' } }, { $unwind: '$cabinet' });
+
+    const matchConditions: any = { ['state.isCalibrated']: true };
     if (keyword) {
-      itemConditions = { $or: [{ name: { $ilike: `%${keyword}%` } }, { partNo: { $ilike: `%${keyword}%` } }] };
+      matchConditions.$or = [
+        { ['item.name']: { $regex: keyword, $options: 'i' } },
+        { ['item.partNo']: { $regex: keyword, $options: 'i' } },
+      ];
     }
-
     if (itemTypeId) {
-      itemConditions = {
-        ...itemConditions,
-        itemType: {
-          _id: new ObjectId(itemTypeId),
-        },
-      };
+      matchConditions['item.itemType._id'] = new ObjectId(itemTypeId);
     }
+    pipeline.push({ $match: matchConditions });
 
-    const where: FilterQuery<LoadcellEntity> = {
-      item: {
-        ...itemConditions,
+    pipeline.push({
+      $addFields: {
+        binName: {
+          $concat: ['$cabinet.name', '-', { $toString: '$cabinet.rowNumber' }, '-', { $toString: '$bin.x' }, '-', { $toString: '$bin.y' }],
+        },
+        canIssue: {
+          $and: [
+            { $gt: ['$availableQuantity', 0] },
+            { $not: '$bin.state.isFailed' },
+            { $not: '$bin.state.isDamaged' },
+            { $or: [{ $eq: ['$metadata.expiryDate', null] }, { $gte: ['$metadata.expiryDate', new Date(expiryDate)] }] },
+          ],
+        },
       },
-      state: { isCalibrated: true },
-    };
+    });
+
+    pipeline.push({
+      $sort: {
+        canIssue: -1,
+        ['metadata.expiryDate']: -1,
+        availableQuantity: -1,
+      },
+    });
+
+    pipeline.push({
+      $group: {
+        _id: '$item._id',
+        doc: { $first: '$$ROOT' },
+      },
+    });
+
+    pipeline.push({ $replaceRoot: { newRoot: '$doc' } });
+
+    pipeline.push({
+      $project: {
+        _id: 0,
+        id: '$item._id',
+        binId: '$bin._id',
+        name: '$item.name',
+        partNo: '$item.partNo',
+        materialNo: '$item.materialNo',
+        itemTypeId: '$item.itemType._id',
+        type: '$item.itemType.name',
+        image: '$item.itemImage',
+        description: '$item.description',
+        totalQuantity: '$availableQuantity',
+        totalCalcQuantity: '$calibration.calibratedQuantity',
+        binName: '$binName',
+        dueDate: '$metadata.expiryDate',
+        canIssue: '$canIssue',
+      },
+    });
+
+    const countPipeline = [...pipeline, { $count: 'total' }];
 
     try {
-      const [loadcells, total] = await this._em.findAndCount(LoadcellEntity, where, {
-        populateOrderBy: { bin: { x: QueryOrder.ASC, y: QueryOrder.ASC } },
-        limit: limit,
-        offset: (page - 1) * limit,
-        populate: ['item', 'item.itemType', 'bin'],
-      });
+      const dataPipeline = [...pipeline, { $sort: { name: 1 } }, { $skip: (page - 1) * limit }, { $limit: limit }];
 
-      const rows: IssuableItemRecord[] = loadcells.map((lc) => {
-        const canIssue = (lc: LoadcellEntity): boolean => {
-          if (lc.availableQuantity <= 0) {
-            return false;
-          }
-          if ((lc.metadata?.expiryDate !== null || true) && (lc.metadata?.expiryDate?.getTime() || 0) >= expiryDate) {
-            return true;
-          }
-          const bin = lc.bin?.unwrap();
-          if (!bin) {
-            return false;
-          }
-          return !bin.state.isFailed && !bin.state.isDamaged;
-        };
+      const [totalResult, rows] = await Promise.all([
+        this._em.aggregate(LoadcellEntity, countPipeline),
+        this._em.aggregate(LoadcellEntity, dataPipeline),
+      ]);
 
-        if (!lc.item || !lc.bin || !lc.cabinet) {
-          throw AppHttpException.internalServerError({ message: 'error when handle issuable items' });
-        }
-        const cabinet = lc.cabinet.unwrap();
-        const bin = lc.bin.unwrap();
-        const item = lc.item.unwrap();
-        const itemType = item.itemType.unwrap();
-
-        return {
-          id: item.id,
-          name: item.name,
-          partNo: item.partNo,
-          materialNo: item.materialNo,
-          itemTypeId: item.itemType.id,
-          type: itemType.name,
-          image: item.itemImage,
-          description: item.description,
-          totalQuantity: lc.availableQuantity,
-          totalCalcQuantity: lc.calibration.calibratedQuantity,
-          binId: lc.bin.id,
-          binName: `${cabinet.name}-${cabinet.rowNumber}-${bin.x}-${bin.y}`,
-          dueDate: lc.metadata?.expiryDate || null,
-          canIssue: canIssue(lc),
-        };
-      });
+      const total = totalResult.length > 0 ? totalResult[0].total : 0;
 
       return new PaginatedResult(
         rows,
@@ -96,7 +111,7 @@ export class IssueItemRepository {
         }),
       );
     } catch (error) {
-      this._logger.error('Failed to find issuable items:', error);
+      this._logger.error('Failed to find issuable items using aggregate:', error);
       throw error;
     }
   }
@@ -113,20 +128,12 @@ export class IssueItemRepository {
       timeConditions = { $or: [{ expiryDate: { $gte: new Date(expiryDate) } }, { expiryDate: null }] };
     }
     const where: FilterQuery<LoadcellEntity> = {
-      item: {
-        _id: { $in: itemIds.map((id) => new ObjectId(id)) },
-      },
+      item: { $in: itemIds.map((id) => new ObjectId(id)) },
       metadata: {
         ...timeConditions,
       },
       state: { isCalibrated: true },
       availableQuantity: { $gt: 0 },
-      bin: {
-        state: {
-          isFailed: false,
-          isDamaged: false,
-        },
-      },
     };
 
     const loadcells = await this._em.find(LoadcellEntity, where, {
@@ -136,7 +143,10 @@ export class IssueItemRepository {
     if (loadcells.length === 0) {
       return [];
     }
-    return loadcells;
+    return loadcells.filter((l) => {
+      const bin = RefHelper.get(l.bin);
+      return bin && !bin.state.isDamaged && !bin.state.isFailed;
+    });
   }
 
   public async findUserIssueHistories(userId: string, itemIds: string[]): Promise<IssueHistoryEntity[]> {

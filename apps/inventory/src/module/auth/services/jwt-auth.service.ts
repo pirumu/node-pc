@@ -21,13 +21,18 @@ export class JwtAuthService {
 
   public async generateToken(user: UserEntity): Promise<string> {
     try {
-      return await this._jwtService.signAsync({
-        id: user.id,
-        cardId: user.cardId,
-        employeeId: user.employeeId,
-        username: user.username,
-        role: user.role.id,
-      });
+      return await this._jwtService.signAsync(
+        {
+          id: user.id,
+          cardId: user.cardId,
+          employeeId: user.employeeId,
+          username: user.username,
+          role: user.role.id,
+        },
+        {
+          expiresIn: '1d',
+        },
+      );
     } catch (error) {
       throw AppHttpException.internalServerError({
         message: 'Failed to generate token',

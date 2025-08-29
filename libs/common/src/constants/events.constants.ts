@@ -92,6 +92,8 @@ export const EVENT_TYPE = {
     WARNING: 'system/warning',
     MAINTENANCE_MODE: 'system/maintenance-mode',
     CALIBRATION_MODE: 'system/calibration-mode',
+
+    PORT_DISCOVERING: 'system/port-discovering',
   },
 
   /** User and authentication events */

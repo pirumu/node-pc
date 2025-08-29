@@ -1,12 +1,9 @@
 import { PaginatedResult, PaginationMeta } from '@common/dto';
-import { IssueHistoryEntity, LoadcellEntity } from '@dals/mongo/entities';
-import { EntityManager, FilterQuery } from '@mikro-orm/core';
-import { ObjectId } from '@mikro-orm/mongodb';
+import { IssueHistoryEntity } from '@dals/mongo/entities';
+import { ObjectId, EntityManager } from '@mikro-orm/mongodb';
 import { Injectable, Logger } from '@nestjs/common';
 
 import { FindReturnableItemsParams, ReturnableItemRecord } from './item.types';
-import { AppHttpException } from '@framework/exception';
-import { RefHelper } from '@dals/mongo/helpers';
 
 @Injectable()
 export class ReturnItemRepository {
@@ -17,108 +14,106 @@ export class ReturnItemRepository {
   public async findReturnableItems(params: FindReturnableItemsParams): Promise<PaginatedResult<ReturnableItemRecord>> {
     const { userId, page, limit, keyword, itemTypeId } = params;
 
-    let itemConditions: Record<string, any> = {};
+    const pipeline: any[] = [];
 
-    if (keyword) {
-      itemConditions = {
-        $or: [{ name: { $ilike: `%${keyword}%` } }, { partNo: { $ilike: `%${keyword}%` } }],
-      };
-    }
-
-    if (itemTypeId) {
-      itemConditions = {
-        ...itemConditions,
-        itemType: {
-          _id: new ObjectId(itemTypeId),
-        },
-      };
-    }
-
-    const where: FilterQuery<IssueHistoryEntity> = {
-      item: {
-        $ne: null,
-        ...itemConditions,
-      },
-      user: {
-        _id: new ObjectId(userId),
-      },
+    const initialMatch: any = {
+      userId: new ObjectId(userId),
+      itemId: { $ne: null },
     };
+    pipeline.push({ $match: initialMatch });
+
+    pipeline.push({ $lookup: { from: 'items', localField: 'itemId', foreignField: '_id', as: 'item' } }, { $unwind: '$item' });
+    pipeline.push(
+      { $lookup: { from: 'item_types', localField: 'item.itemTypeId', foreignField: '_id', as: 'item.itemType' } },
+      { $unwind: '$item.itemType' },
+    );
+
+    const secondaryMatch: any = {};
+    if (keyword) {
+      secondaryMatch.$or = [{ ['item.name']: { $regex: keyword, $options: 'i' } }, { ['item.partNo']: { $regex: keyword, $options: 'i' } }];
+    }
+    if (itemTypeId) {
+      secondaryMatch['item.itemType._id'] = new ObjectId(itemTypeId);
+    }
+    if (Object.keys(secondaryMatch).length > 0) {
+      pipeline.push({ $match: secondaryMatch });
+    }
+
+    pipeline.push({ $unwind: '$locations' });
+    pipeline.push(
+      { $lookup: { from: 'loadcells', localField: 'locations.loadcellId', foreignField: '_id', as: 'loadcell' } },
+      { $unwind: '$loadcell' },
+    );
+    pipeline.push({ $lookup: { from: 'bins', localField: 'loadcell.binId', foreignField: '_id', as: 'bin' } }, { $unwind: '$bin' });
+    pipeline.push(
+      { $lookup: { from: 'cabinets', localField: 'bin.cabinetId', foreignField: '_id', as: 'cabinet' } },
+      { $unwind: '$cabinet' },
+    );
+
+    pipeline.push({
+      $project: {
+        _id: 0,
+        id: '$item._id',
+        name: '$item.name',
+        partNo: '$item.partNo',
+        materialNo: '$item.materialNo',
+        itemTypeId: '$item.itemType._id',
+        type: '$item.itemType.name',
+        image: '$item.itemImage',
+        description: '$item.description',
+        binId: '$bin._id',
+        issuedQuantity: '$totalIssuedQuantity',
+        itemInfo: [
+          {
+            binId: '$bin._id',
+            issuedQuantity: '$locations.quantity', // Số lượng của riêng location này
+            location: {
+              $concat: [
+                '$cabinet.name',
+                '-',
+                { $toString: '$cabinet.rowNumber' },
+                '-',
+                { $toString: '$bin.x' },
+                '-',
+                { $toString: '$bin.y' },
+              ],
+            },
+            batchNumber: '$loadcell.metadata.batchNumber',
+            serialNumber: '$loadcell.metadata.serialNumber',
+            dueDate: '$loadcell.metadata.expiryDate',
+          },
+        ],
+        locations: [
+          {
+            $concat: [
+              '$cabinet.name',
+              '-',
+              { $toString: '$cabinet.rowNumber' },
+              '-',
+              { $toString: '$bin.x' },
+              '-',
+              { $toString: '$bin.y' },
+            ],
+          },
+        ],
+        workingOrders: [],
+      },
+    });
+
+    const countPipeline = [...pipeline, { $count: 'total' }];
 
     try {
-      const [histories, total] = await this._em.findAndCount(IssueHistoryEntity, where, {
-        populate: ['item', 'item.itemType', 'user'],
-        limit: limit,
-        offset: (page - 1) * limit,
-      });
+      const dataPipeline = [...pipeline, { $sort: { name: 1, locations: 1 } }, { $skip: (page - 1) * limit }, { $limit: limit }];
 
-      const loadcellIds = histories
-        .flatMap((h) => h.locations.map((l) => l.loadcellId))
-        .filter((id, index, arr) => arr.findIndex((otherId) => otherId.equals(id)) === index);
+      const [totalResult, rows] = await Promise.all([
+        this._em.aggregate(IssueHistoryEntity, countPipeline),
+        this._em.aggregate(IssueHistoryEntity, dataPipeline),
+      ]);
 
-      const loadcells = await this._em.find(
-        LoadcellEntity,
-        { _id: { $in: loadcellIds } },
-        { populate: ['bin', 'bin.loadcells', 'cabinet'] },
-      );
-
-      const loadcellsMap = new Map<string, LoadcellEntity>();
-
-      loadcells.forEach((loadcell) => {
-        if (loadcell.bin) {
-          loadcellsMap.set(loadcell.id, loadcell);
-        }
-      });
-
-      const rows: ReturnableItemRecord[] = histories.map((history) => {
-        const locationNames: string[] = [];
-
-        const itemInfo = history.locations
-          .map((l) => {
-            const loadcell = loadcellsMap.get(l.loadcellId.toHexString());
-            if (!loadcell || !loadcell.bin || !loadcell.cabinet || !loadcell.item) {
-              return null;
-            }
-            const bin = RefHelper.getRequired(loadcell.bin, 'BinEntity');
-            const cabinet = RefHelper.getRequired(loadcell.cabinet, 'CabinetEntity');
-
-            const location = `${cabinet.name}-${cabinet.rowNumber}-${bin.x}-${bin.y}`;
-            locationNames.push(location);
-
-            return {
-              binId: l.binId.toHexString(),
-              issuedQuantity: l.quantity,
-              location: location,
-              batchNumber: loadcell.metadata.batchNumber,
-              serialNumber: loadcell.metadata.serialNumber,
-              dueDate: loadcell.metadata.expiryDate,
-            };
-          })
-          .filter((i) => i !== null);
-
-        if (!history.item) {
-          throw AppHttpException.internalServerError({ message: 'Error when enrich return items' });
-        }
-        const item = history.item.unwrap();
-        const itemType = item.itemType.unwrap();
-
-        return {
-          id: item.id,
-          name: item.name,
-          partNo: item.partNo,
-          materialNo: item.materialNo,
-          itemTypeId: item.itemType.id,
-          type: itemType.name,
-          image: item.itemImage,
-          description: item.description,
-          issuedQuantity: history.totalIssuedQuantity,
-          locations: locationNames,
-          itemInfo: itemInfo,
-          workingOrders: [],
-        };
-      });
+      const total = totalResult.length > 0 ? totalResult[0].total : 0;
 
       return new PaginatedResult(
-        rows,
+        rows as ReturnableItemRecord[],
         new PaginationMeta({
           total,
           page,
@@ -126,7 +121,7 @@ export class ReturnItemRepository {
         }),
       );
     } catch (error) {
-      this._logger.error('Failed to find returnable items:', error);
+      this._logger.error('Failed to find returnable items using aggregate:', error);
       throw error;
     }
   }
