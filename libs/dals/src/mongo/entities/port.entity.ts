@@ -16,7 +16,7 @@ export class PortEntity extends AbstractEntity {
   @Property()
   name!: string;
 
-  @Property()
+  @Property({ unique: true })
   path!: string;
 
   @Property({ nullable: true })

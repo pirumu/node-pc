@@ -18,7 +18,7 @@ export class PortDetectionService implements OnModuleInit {
         path: port.path,
       }));
       Logger.log('Port found', data, PortDetectionService.name);
-      await this._publisherService.publish(Transport.MQTT, EVENT_TYPE.SYSTEM.PORT_DISCOVERING, { ports: data });
+      await this._publisherService.publish(Transport.MQTT, EVENT_TYPE.SYSTEM.PORT_DISCOVERING, { ports: data }, {}, { async: true });
     } catch (error) {
       Logger.error(
         'Can not discovery ports',
