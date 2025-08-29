@@ -13,13 +13,13 @@ export type PortStatus = (typeof PORT_STATUS)[keyof typeof PORT_STATUS];
 
 @Entity({ collection: 'ports' })
 export class PortEntity extends AbstractEntity {
-  @Property()
+  @Property({ type: 'string' })
   name!: string;
 
-  @Property({ unique: true })
+  @Property({ type: 'string', unique: true })
   path!: string;
 
-  @Property({ nullable: true })
+  @Property({ type: 'integer', nullable: true })
   heartbeat?: number;
 
   @Enum({ items: () => PORT_STATUS })

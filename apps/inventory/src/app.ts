@@ -12,6 +12,7 @@ import { NestFactory } from '@nestjs/core';
 
 import { AppModule } from './app.module';
 import { MqttConfig } from './config/mqtt.config';
+import { MqttOptions, Transport } from '@nestjs/microservices';
 
 export class Application {
   private static async _bootstrapMicroservices(app: INestApplication, configService: ConfigService): Promise<void> {
@@ -30,19 +31,19 @@ export class Application {
 
   private static async _connectMqtt(app: INestApplication, configService: ConfigService): Promise<void> {
     const mqttConfig = configService.getOrThrow<MqttConfig>(CONFIG_KEY.MQTT);
-    // app.connectMicroservice<MqttOptions>(
-    //   {
-    //     transport: Transport.MQTT,
-    //     options: {
-    //       ...mqttConfig.consumer,
-    //       resubscribe: true,
-    //       reschedulePings: true,
-    //       // use v5 to support userProperties
-    //       protocolVersion: 5,
-    //     },
-    //   },
-    //   { inheritAppConfig: true },
-    // );
+    app.connectMicroservice<MqttOptions>(
+      {
+        transport: Transport.MQTT,
+        options: {
+          ...mqttConfig.consumer,
+          resubscribe: true,
+          reschedulePings: true,
+          // use v5 to support userProperties
+          protocolVersion: 5,
+        },
+      },
+      { inheritAppConfig: true },
+    );
   }
 
   private static _setupSwagger(app: INestApplication, configService: ConfigService) {
