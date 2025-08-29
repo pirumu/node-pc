@@ -183,9 +183,7 @@ export class LoadcellBridgeService implements OnModuleInit, OnModuleDestroy {
     try {
       await this._serialAdapter.open(portPath, {
         baudRate: 9600,
-        dataBits: 8,
-        stopBits: 1,
-        parity: 'none',
+        autoOpen: false,
         parser: { type: 'bytelength', options: { length: 11 } },
       });
 
