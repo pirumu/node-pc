@@ -26,7 +26,6 @@ export class LoadcellBridgeService implements OnModuleInit, OnModuleDestroy {
     private readonly _serialAdapter: ISerialAdapter,
     private readonly _configService: ConfigService,
     private readonly _loadcellsService: LoadcellsService,
-    private readonly _portDiscovery: PortDiscoveryService,
     private readonly _portMonitoring: PortMonitoringService,
     private readonly _publisherService: PublisherService,
   ) {}
@@ -160,13 +159,7 @@ export class LoadcellBridgeService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async _getAllPossiblePorts(): Promise<string[]> {
-    const ports = await lastValueFrom(this._portDiscovery.availablePorts$().pipe(take(1)));
-
-    // Ports with a manufacturer
-    const usbPorts = ports.filter((p) => p.manufacturer).map((p) => p.path);
-
-    // Add Linux serial ports
-    const linuxPorts = LINUX_PORTS;
+    const ports = await this._serialAdapter.listPorts(true);
 
     // Windows COM ports if needed
     const windowsPorts: string[] = [];
@@ -176,7 +169,7 @@ export class LoadcellBridgeService implements OnModuleInit, OnModuleDestroy {
       }
     }
     // Return unique ports
-    return [...new Set([...usbPorts, ...linuxPorts, ...windowsPorts])];
+    return [...new Set([...ports.map((p) => p.path), ...windowsPorts])];
   }
 
   private async _verifyLoadcellPort(portPath: string): Promise<boolean> {

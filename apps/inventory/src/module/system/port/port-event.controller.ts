@@ -1,6 +1,7 @@
 import { EVENT_TYPE } from '@common/constants';
 import { Controller } from '@nestjs/common';
 import { EventPattern, Payload } from '@nestjs/microservices';
+
 import { PortEventService } from './port-event.service';
 
 @Controller()
