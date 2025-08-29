@@ -91,7 +91,7 @@ export class LoadcellBridgeService implements OnModuleInit, OnModuleDestroy {
               });
             });
         }
-        this._logger.error(`Loadcell error`, reading);
+        this._logger.log(`Loadcell raw`, reading);
       },
       onError: (error: Error, context?: string) => {
         this._logger.error(`LoadCell error in ${context}:`, error);

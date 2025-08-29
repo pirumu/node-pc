@@ -17,6 +17,7 @@ export class PortDetectionService implements OnModuleInit {
       const data = availablePorts.map((port) => ({
         path: port.path,
       }));
+      Logger.log('Port found', data, PortDetectionService.name);
       await this._publisherService.publish(Transport.MQTT, EVENT_TYPE.SYSTEM.PORT_DISCOVERING, { ports: data });
     } catch (error) {
       Logger.error(
