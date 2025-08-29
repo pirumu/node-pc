@@ -70,13 +70,13 @@ export const getMongoDBConfig = (): MongoDBConfig => {
     }),
 
     // SSL/TLS Settings
-    ssl: resolve('MONGO_SSL', (v) => v === 'true', { default: false }),
-    sslCA: resolve('MONGO_SSL_CA', String, { default: undefined }),
-    sslCert: resolve('MONGO_SSL_CERT', String, { default: undefined }),
-    sslKey: resolve('MONGO_SSL_KEY', String, { default: undefined }),
+    // ssl: resolve('MONGO_SSL', (v) => v === 'true', { default: false }),
+    // sslCA: resolve('MONGO_SSL_CA', String, { default: undefined }),
+    // sslCert: resolve('MONGO_SSL_CERT', String, { default: undefined }),
+    // sslKey: resolve('MONGO_SSL_KEY', String, { default: undefined }),
 
     // Debug Settings
     debug: resolve('MONGO_DEBUG', (v) => v === 'true', { default: false }),
     logLevel: resolve('MONGO_LOG_LEVEL', String, { default: 'info' }) as 'error' | 'warn' | 'info' | 'debug',
-  };
+  } as any;
 };
