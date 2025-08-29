@@ -56,7 +56,7 @@ export class ControlUnitLockService implements OnModuleInit {
     }
 
     const msg = protocol.createMessage({
-      command: request.command,
+      command: request.command as any,
       deviceId: request.deviceId,
       lockId: 0,
     });
@@ -84,7 +84,7 @@ export class ControlUnitLockService implements OnModuleInit {
     }
 
     const messages = protocol.createMessages({
-      command: request.command,
+      command: request.command as any,
       deviceId: request.deviceId,
       lockIds: request.lockIds,
     });

@@ -5,18 +5,13 @@ import { IContextualResponse, FINGERPRINT_CMD, FingerprintScanService, Fingerpri
 import { Inject, Injectable, InternalServerErrorException, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { lastValueFrom, timeout } from 'rxjs';
 
-import { FINGERPRINT_REPOSITORY_TOKEN, IFingerprintRepository } from './repositories';
-
 @Injectable()
 export class FingerprintService implements OnModuleInit, OnModuleDestroy {
   private static _verificationTimeout = 5000; // 5s
 
   private readonly _logger = new Logger(FingerprintService.name);
   private _fingerprintContext: FingerprintContextInstance;
-  constructor(
-    @Inject(FingerprintScanService) private readonly _fingerprintScanService: FingerprintScanService,
-    @Inject(FINGERPRINT_REPOSITORY_TOKEN) private readonly _repository: IFingerprintRepository,
-  ) {}
+  constructor(@Inject(FingerprintScanService) private readonly _fingerprintScanService: FingerprintScanService) {}
 
   public onModuleInit(): void {
     // this._fingerprintScanService.getProcessStatus$().subscribe({
@@ -58,8 +53,9 @@ export class FingerprintService implements OnModuleInit, OnModuleDestroy {
 
   private async _getVerificationData(): Promise<string> {
     try {
-      const entities = await this._repository.findAll();
-      return entities.map((finger) => finger.objectId + finger.feature).join('');
+      // const entities = await this._repository.findAll();
+      // return entities.map((finger) => finger.objectId + finger.feature).join('');
+      return '';
     } catch (error) {
       this._logger.error('Failed to create fingerprint verification data', error);
       throw new InternalServerErrorException('Unable to prepare fingerprint data');
