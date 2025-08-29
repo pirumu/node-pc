@@ -13,7 +13,7 @@ export class PortDetectionService implements OnModuleInit {
 
   public async onModuleInit(): Promise<void> {
     try {
-      const availablePorts = await this._serialAdapter.listPorts();
+      const availablePorts = await this._serialAdapter.listPorts(true);
       const data = availablePorts.map((port) => ({
         path: port.path,
       }));

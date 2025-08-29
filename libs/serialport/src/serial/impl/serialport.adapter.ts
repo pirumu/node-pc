@@ -401,21 +401,23 @@ export class SerialPortAdapter implements ISerialAdapter, OnModuleDestroy {
 
   // PUBLIC METHODS
 
-  public async listPorts(): Promise<SerialPortInfo[]> {
+  public async listPorts(loadUnknownManufacturer = false): Promise<SerialPortInfo[]> {
     if (this._isDestroyed) {
       return [];
     }
 
     const ports = await SerialPort.list();
-    return ports
-      .map((p) => ({
-        path: p.path,
-        manufacturer: p.manufacturer,
-        serialNumber: p.serialNumber,
-        vendorId: p.vendorId,
-        productId: p.productId,
-      }))
-      .filter((p) => !!p.manufacturer);
+    const detectedPorts = ports.map((p) => ({
+      path: p.path,
+      manufacturer: p.manufacturer,
+      serialNumber: p.serialNumber,
+      vendorId: p.vendorId,
+      productId: p.productId,
+    }));
+    if (loadUnknownManufacturer) {
+      return detectedPorts;
+    }
+    return detectedPorts.filter((p) => !!p.manufacturer);
   }
 
   //callbacks auto-restored

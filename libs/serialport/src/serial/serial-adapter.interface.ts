@@ -74,7 +74,7 @@ export type ConnectionStats = {
 };
 
 export interface ISerialAdapter {
-  listPorts(): Promise<SerialPortInfo[]>;
+  listPorts(loadUnknownManufacturer?: boolean): Promise<SerialPortInfo[]>;
   open(path: string, options: SerialOptions): Promise<SerialPortState>;
   close(path: string): Promise<void>;
   write(path: string, data: string | Buffer): Promise<boolean>;
