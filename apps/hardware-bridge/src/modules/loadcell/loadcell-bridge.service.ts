@@ -185,6 +185,7 @@ export class LoadcellBridgeService implements OnModuleInit, OnModuleDestroy {
         baudRate: 9600,
         autoOpen: false,
         parser: { type: 'bytelength', options: { length: 11 } },
+        maxReconnectAttempts: 1,
       });
 
       // Create promise to wait for valid response
