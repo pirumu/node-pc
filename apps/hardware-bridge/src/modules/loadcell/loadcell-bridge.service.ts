@@ -194,7 +194,7 @@ export class LoadcellBridgeService implements OnModuleInit, OnModuleDestroy {
 
           const subscription = from(this._serialAdapter.onData(portPath))
             .pipe(
-              take(10), // Check first 10 messages max
+              take(1), // Check first 10 messages max
               timeout(VERIFY_TIMEOUT),
               map((data: Buffer | string) => {
                 return Buffer.isBuffer(data) ? data : Buffer.from(data, 'hex');
