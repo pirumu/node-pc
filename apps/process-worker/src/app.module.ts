@@ -7,20 +7,15 @@ import { PublisherModule } from '@framework/publisher';
 import { snowflakeId } from '@framework/snowflake';
 import { MongoHighlighter } from '@mikro-orm/mongo-highlighter';
 import { MongoDriver } from '@mikro-orm/mongodb';
-import { Logger, MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
+import { Logger, Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { JwtModule } from '@nestjs/jwt';
-import { ServicesModule } from '@services';
 import { Request } from 'express';
 import { ClsModule } from 'nestjs-cls';
 
 import { configs } from './config';
-import { AuthConfig } from './config/auth.config';
 import { MqttConfig } from './config/mqtt.config';
-import { AuthModule, JwtAuthMiddleware } from './module/auth';
-import { INVENTORY_MODULES } from './module/inventory';
-import { SYSTEM_MODULES } from './module/system';
-import { WsModule } from './module/ws';
+import { TcpConfig } from './config/tcp.config';
+import { LoadcellModule } from './modules/loadcell';
 
 @Module({
   imports: [
@@ -50,23 +45,9 @@ import { WsModule } from './module/ws';
       },
       inject: [ConfigService],
     }),
-    JwtModule.registerAsync({
-      global: true,
-      inject: [ConfigService],
-      useFactory: (configService: ConfigService) => {
-        const jwtConfig = configService.getOrThrow<AuthConfig>(CONFIG_KEY.AUTH);
-        return {
-          secret: jwtConfig.secret,
-          signOptions: {
-            expiresIn: jwtConfig.expiresIn,
-          },
-        };
-      },
-    }),
     MongoDALModule.forRootAsync({
       useFactory: (configService: ConfigService) => {
         const mongoConfig = configService.getOrThrow<MongoDBConfig>(CONFIG_KEY.MONGO);
-        const sslConfig = buildSSLConfig(mongoConfig.ssl);
         const driverOptions: Record<string, any> = {
           maxPoolSize: mongoConfig.maxPoolSize,
           minPoolSize: mongoConfig.minPoolSize,
@@ -78,6 +59,7 @@ import { WsModule } from './module/ws';
           retryReads: mongoConfig.retryReads,
         };
 
+        const sslConfig = buildSSLConfig(mongoConfig.ssl);
         if (sslConfig) {
           driverOptions.connection.ssl = sslConfig;
           driverOptions.connection.tls = true;
@@ -88,18 +70,11 @@ import { WsModule } from './module/ws';
           entities: ALL_ENTITIES,
           clientUrl: mongoConfig.uri,
           driverOptions,
-          // serialization: {
-          //   forceObject: true,
-          // },
           debug: true,
+          ensureDatabase: true,
           logLevel: mongoConfig.logLevel || 'info',
           highlighter: new MongoHighlighter(),
-          discovery: {
-            checkDuplicateFieldNames: true,
-            checkDuplicateEntities: true,
-            checkNonPersistentCompositeProps: true,
-          },
-          logger: (msg) => Logger.log(msg, 'MikroORM'),
+          logger: (msg) => Logger.log(msg, 'MikroORM-ProcessWorker'),
         };
       },
       inject: [ConfigService],
@@ -109,33 +84,22 @@ import { WsModule } from './module/ws';
     PublisherModule.forRootAsync({
       global: true,
       useFactory: (configService: ConfigService) => {
-        const config = configService.getOrThrow<MqttConfig>(CONFIG_KEY.MQTT);
+        const mqttConfig = configService.getOrThrow<MqttConfig>(CONFIG_KEY.MQTT);
+        const tcpConfig = configService.getOrThrow<TcpConfig>(CONFIG_KEY.TCP);
         return {
           tcp: {
             enabled: true,
-            options: {
-              host: '192.168.0.107',
-              port: 3002,
-            },
+            options: tcpConfig.publisher as any,
           },
           mqtt: {
-            options: config.publisher,
+            options: mqttConfig.publisher,
             enabled: true,
           },
         };
       },
       inject: [ConfigService],
     }),
-    ServicesModule,
-    AuthModule,
-    ...INVENTORY_MODULES,
-    ...SYSTEM_MODULES,
-    WsModule,
+    LoadcellModule,
   ],
 })
-export class AppModule implements NestModule {
-  public configure(consumer: MiddlewareConsumer): void {
-    // consumer.apply(DeviceKeyAuthMiddleware).forRoutes(...['/ports']);
-    consumer.apply(JwtAuthMiddleware).forRoutes(...['/items', '/users']);
-  }
-}
+export class AppModule {}

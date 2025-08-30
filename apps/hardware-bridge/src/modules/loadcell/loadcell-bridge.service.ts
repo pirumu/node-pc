@@ -78,7 +78,7 @@ export class LoadcellBridgeService implements OnModuleInit, OnModuleDestroy {
           });
 
           this._publisherService
-            .publish(Transport.MQTT, event.getChannel(), event.getPayload())
+            .publish(Transport.MQTT, event.getChannel(), event.getPayload(), {}, { async: true })
             .then(() => {
               this._logger.log(`Published loadcell event`, event);
             })
@@ -195,7 +195,7 @@ export class LoadcellBridgeService implements OnModuleInit, OnModuleDestroy {
 
           const subscription = from(this._serialAdapter.onData(portPath))
             .pipe(
-              take(1), // Check first 10 messages max
+              take(1), // Check first 1 message max
               timeout(VERIFY_TIMEOUT),
               map((data: Buffer | string) => {
                 return Buffer.isBuffer(data) ? data : Buffer.from(data, 'hex');

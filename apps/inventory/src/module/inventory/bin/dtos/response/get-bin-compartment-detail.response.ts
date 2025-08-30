@@ -1,6 +1,46 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Expose, Type } from 'class-transformer';
 
+export class CalibrationDto {
+  @ApiProperty({})
+  @Expose()
+  zeroWeight: number;
+
+  @ApiProperty({})
+  @Expose()
+  calculatedWeight: number;
+
+  @ApiProperty({})
+  @Expose()
+  unitWeight: number;
+
+  @ApiProperty({})
+  @Expose()
+  calibratedQuantity: number;
+
+  @ApiProperty({})
+  @Expose()
+  calibrationDue: Date | null = null;
+}
+
+export class LoadcellDto {
+  @ApiProperty({})
+  @Expose()
+  id: string;
+
+  @ApiProperty({})
+  @Expose()
+  hardwareId: number;
+
+  @ApiProperty({})
+  @Expose()
+  code: string;
+
+  @ApiProperty({})
+  @Expose()
+  label: string;
+}
+
 export class ItemDto {
   @ApiProperty({
     description: 'Item ID',
@@ -73,6 +113,36 @@ export class ItemDto {
   @ApiProperty({})
   @Expose()
   materialNo: string;
+
+  @ApiProperty({})
+  @Expose()
+  critical: number = 0;
+
+  @ApiProperty({})
+  @Expose()
+  min: number = 0;
+
+  @ApiProperty({})
+  @Expose()
+  max: number = 0;
+
+  @ApiProperty({})
+  @Expose()
+  isCalibrated: boolean;
+
+  @ApiProperty({})
+  @Type(() => CalibrationDto)
+  @Expose()
+  calibration: CalibrationDto;
+
+  @ApiProperty({})
+  @Type(() => LoadcellDto)
+  @Expose()
+  loadcell?: LoadcellDto;
+
+  @ApiProperty({})
+  @Expose()
+  liveReading: any;
 }
 
 export class GetBinCompartmentDetail {

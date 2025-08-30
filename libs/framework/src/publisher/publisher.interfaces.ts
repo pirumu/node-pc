@@ -15,22 +15,22 @@ type PublisherOptions<T = Transport> = {
       ? { options: HTTPPublishConfigOptions }
       : never);
 
-export interface PublisherModuleOptions {
+export type PublisherModuleOptions = {
   mqtt?: PublisherOptions<Transport.MQTT>;
   tcp?: PublisherOptions<Transport.TCP>;
   http?: PublisherOptions<Transport.HTTP>;
   global?: boolean;
   imports?: ModuleMetadata['imports'];
-}
+};
 
-export interface PublisherOptionsFactory {
+export type PublisherOptionsFactory = {
   createPublisherOptions(): Promise<PublisherModuleOptions> | PublisherModuleOptions;
-}
+};
 
-export interface PublisherModuleAsyncOptions extends Pick<ModuleMetadata, 'imports'> {
+export type PublisherModuleAsyncOptions = Pick<ModuleMetadata, 'imports'> & {
   global?: boolean;
   useExisting?: Type<PublisherOptionsFactory>;
   useClass?: Type<PublisherOptionsFactory>;
   useFactory?: (...args: any[]) => Promise<PublisherModuleOptions> | PublisherModuleOptions;
   inject?: any[];
-}
+};

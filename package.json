@@ -13,8 +13,10 @@
     "start:inventory:dev": "DOTENV_CONFIG_PATH=env/inventory/.env nest start inventory --debug --watch",
     "start:hardware-bridge": "DOTENV_CONFIG_PATH=env/hardware-bridge/.env nest start hardware-bridge",
     "start:hardware-bridge:dev": "DOTENV_CONFIG_PATH=env/hardware-bridge/.env nest start hardware-bridge --debug --watch",
-    "start:worker": "DOTENV_CONFIG_PATH=env/worker/.env nest start worker",
-    "start:worker:dev": "DOTENV_CONFIG_PATH=env/worker/.env nest start worker --debug --watch",
+
+    "start:process-worker": "DOTENV_CONFIG_PATH=env/process-worker/.env nest start process-worker",
+    "start:process-worker:dev": "DOTENV_CONFIG_PATH=env/process-worker/.env nest start process-worker --debug --watch",
+
     "start:cli": "DOTENV_CONFIG_PATH=env/cli/.env nest start cli",
     "start:cli:dev": "DOTENV_CONFIG_PATH=env/cli/.env nest start cli --debug --watch",
     "test": "jest",

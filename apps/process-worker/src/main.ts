@@ -1,8 +1,4 @@
-import { NestFactory } from '@nestjs/core';
-import { ProcessWorkerModule } from './process-worker.module';
+import '@framework/extensions';
+import { Application } from './app';
 
-async function bootstrap() {
-  const app = await NestFactory.create(ProcessWorkerModule);
-  await app.listen(process.env.port ?? 3000);
-}
-bootstrap();
+Application.start();
