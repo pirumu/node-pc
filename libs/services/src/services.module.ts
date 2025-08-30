@@ -1,6 +1,5 @@
 import { HttpModule, HttpClientType } from '@framework/http-client';
 import { Global, Module } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 
 import { CloudService } from './cloud/cloud.service';
 
@@ -8,7 +7,7 @@ import { CloudService } from './cloud/cloud.service';
 @Module({
   imports: [
     HttpModule.forRegisterAsync({
-      useFactory: (configService: ConfigService) => {
+      useFactory: () => {
         return {
           clientType: HttpClientType.FETCH,
           clientOptions: {
@@ -17,7 +16,6 @@ import { CloudService } from './cloud/cloud.service';
           },
         };
       },
-      inject: [ConfigService],
     }),
   ],
   providers: [CloudService],

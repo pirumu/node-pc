@@ -1,8 +1,4 @@
-import { NestFactory } from '@nestjs/core';
-import { SyncWorkerModule } from './sync-worker.module';
+import '@framework/extensions';
+import { SyncWorkerApplication } from './app';
 
-async function bootstrap() {
-  const app = await NestFactory.create(SyncWorkerModule);
-  await app.listen(process.env.port ?? 3000);
-}
-bootstrap();
+SyncWorkerApplication.start();

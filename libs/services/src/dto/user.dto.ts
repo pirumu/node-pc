@@ -1,0 +1,20 @@
+export type UserDto = {
+  id: string;
+  username: string;
+  fullname: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  address: string;
+  phone: string;
+  avatar: string | null;
+  roleKey: string;
+  status: string;
+  siteIds: Array<{ $oid: string }>;
+  permissions: string[];
+  createdBy: string;
+  updatedBy: string;
+  updatedAt: string;
+  createdAt: string;
+  remember_token: string;
+};
