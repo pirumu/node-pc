@@ -29,7 +29,7 @@ export class LoadcellState {
   status: LoadcellStatus = LOADCELL_STATUS.CREATED;
 
   @Property({ default: false })
-  isCalibrated: boolean;
+  isCalibrated = false;
 
   @Property({ default: false })
   isRunning = false;
@@ -56,25 +56,25 @@ export class LiveReading {
   currentWeight = 0;
 
   @Property({ default: 0 })
-  pendingChange: number;
+  pendingChange = 0;
 }
 
 @Embeddable()
 export class LoadcellMetadata {
-  @Property()
-  itemId!: ObjectId;
+  @Property({ default: null, nullable: true })
+  itemId: ObjectId | null = null;
 
-  @Property()
-  qty!: number;
+  @Property({ default: 0 })
+  qty: number = 0;
 
-  @Property()
-  critical!: number;
+  @Property({ default: 0 })
+  critical: number = 0;
 
-  @Property()
-  min!: number;
+  @Property({ default: 0 })
+  min: number = 0;
 
-  @Property()
-  max!: number;
+  @Property({ default: 0 })
+  max: number = 0;
 
   @Property({ default: '' })
   description: string = '';
@@ -106,8 +106,8 @@ export class LoadcellMetadata {
 
 @Entity({ collection: 'loadcells' })
 export class LoadcellEntity extends AbstractEntity {
-  @ManyToOne(() => SiteEntity, { fieldName: 'siteId', ref: true })
-  site!: Ref<SiteEntity>;
+  @ManyToOne(() => SiteEntity, { fieldName: 'siteId', ref: true, nullable: true })
+  site: Ref<SiteEntity> | null;
 
   @ManyToOne(() => ClusterEntity, { ref: true, fieldName: 'clusterId', nullable: true })
   cluster: Ref<ClusterEntity> | null;
@@ -122,7 +122,7 @@ export class LoadcellEntity extends AbstractEntity {
   item: Ref<ItemEntity> | null;
 
   @Property()
-  code: string;
+  code: string = '';
 
   @Property({ default: '' })
   label: string = '';

@@ -59,6 +59,16 @@ export class LoadcellsResponse {
   label: string;
 
   @ApiProperty()
+  @Type(() => String)
+  @Expose({ toClassOnly: true })
+  code: string;
+
+  @ApiProperty()
+  @Type(() => Number)
+  @Expose({ toClassOnly: true })
+  hardwareId: number;
+
+  @ApiProperty()
   @Type(() => CalibrationData)
   @Expose({ toClassOnly: true })
   data: CalibrationData;

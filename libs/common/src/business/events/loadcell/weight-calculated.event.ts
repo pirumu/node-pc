@@ -2,26 +2,32 @@ import { EVENT_TYPE, LoadcellEventType } from '@common/constants';
 import { IAppEvent } from '@common/interfaces';
 import { Properties } from '@framework/types';
 import { Expose, Type } from 'class-transformer';
+import { IsOptional } from 'class-validator';
 
 export class WeightCalculatedEvent implements IAppEvent {
   @Type(() => String)
   @Expose()
+  @IsOptional()
   portPath: string;
 
   @Type(() => Number)
   @Expose()
+  @IsOptional()
   hardwareId: number;
 
   @Type(() => String)
   @Expose()
+  @IsOptional()
   weight: number;
 
   @Type(() => String)
   @Expose()
+  @IsOptional()
   status: string;
 
   @Type(() => String)
   @Expose()
+  @IsOptional()
   timestamp: string;
 
   constructor(props: Properties<WeightCalculatedEvent>) {

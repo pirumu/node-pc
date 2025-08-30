@@ -1,7 +1,7 @@
 import { WeightCalculatedEvent } from '@common/business/events';
 import { LOADCELL_STATUS, LoadcellEntity, PORT_STATUS, PortEntity } from '@dals/mongo/entities';
 import { RefHelper } from '@dals/mongo/helpers';
-import { CreateRequestContext, EntityManager, Reference } from '@mikro-orm/mongodb';
+import { EntityManager, Reference } from '@mikro-orm/mongodb';
 import { Injectable, Logger } from '@nestjs/common';
 
 @Injectable()
@@ -15,34 +15,32 @@ export class LoadcellService {
    * It iterates through payloads and delegate processing, ensuring one failure does not stop others.
    */
   public async onWeighCalculated(payloads: WeightCalculatedEvent[]): Promise<void> {
-    const processingPromises = payloads.map(async (payload) => this._processSinglePayload(payload));
-    const results = await Promise.allSettled(processingPromises);
+    const results = await Promise.allSettled(payloads.map(async (payload) => this._processSinglePayload(payload)));
 
     results.forEach((result, index) => {
       if (result.status === 'rejected') {
-        this._logger.error(
-          `Failed to process payload for path ${payloads[index].portPath} and hardwareId ${payloads[index].hardwareId}`,
-          result.reason,
-        );
+        this._logger.error(`Failed to process payload for path ${payloads[index].portPath} and hardwareId ${payloads[index].hardwareId}`, {
+          reason: result.reason,
+        });
       }
     });
   }
 
-  @CreateRequestContext()
   private async _processSinglePayload(payload: WeightCalculatedEvent): Promise<void> {
-    if (payload.status !== LOADCELL_STATUS.RUNNING) {
-      this._logger.warn('Skipping. Loadcell not running');
+    if (payload.status !== LOADCELL_STATUS.RUNNING && payload.status.toUpperCase() !== LOADCELL_STATUS.RUNNING) {
+      Logger.warn('Skipping. Loadcell not running');
       return;
     }
 
     try {
+      const em = this._em.fork();
       // Part 1: Auto-detect and create the loadcell if it doesn't exist.
-      const loadcell = await this._provisionOrGetLoadcell(payload);
+      const loadcell = await this._provisionOrGetLoadcell(em, payload);
 
       // Part 2: Update business logic for the existing loadcell.
-      await this._processLoadcellUpdate(loadcell, payload.weight);
+      await this._processLoadcellUpdate(em, loadcell, payload.weight);
     } catch (error) {
-      this._logger.error(`An unexpected error occurred while processing hardwareId ${payload.hardwareId}`, error.stack);
+      Logger.error(`An unexpected error occurred while processing hardwareId ${payload.hardwareId}`, error.stack);
       throw error;
     }
   }
@@ -51,15 +49,15 @@ export class LoadcellService {
   // PART 1: AUTO-DETECT AND CREATE (PROVISIONING)
   // =================================================================
 
-  private async _provisionOrGetLoadcell(payload: WeightCalculatedEvent): Promise<LoadcellEntity> {
+  private async _provisionOrGetLoadcell(em: EntityManager, payload: WeightCalculatedEvent): Promise<LoadcellEntity> {
     const { hardwareId, portPath } = payload;
-    const loadcell = await this._em.findOne(LoadcellEntity, { hardwareId }, { populate: ['port'] });
+    const loadcell = await em.findOne(LoadcellEntity, { hardwareId }, { populate: ['port'] });
 
     if (loadcell) {
       let port = RefHelper.get(loadcell.port);
 
       if (!port || port.path !== portPath) {
-        port = await this._findOrCreatePort(portPath);
+        port = await this._findOrCreatePort(em, portPath);
       }
 
       port.heartbeat = Date.now();
@@ -68,28 +66,33 @@ export class LoadcellService {
       return loadcell;
     }
 
-    this._logger.log(`New loadcell detected. Provisioning hardwareId ${hardwareId} on port ${portPath}.`);
+    Logger.log(`New loadcell detected. Provisioning hardwareId ${hardwareId} on port ${portPath}.`);
 
-    const port = await this._findOrCreatePort(portPath);
+    const port = await this._findOrCreatePort(em, portPath);
 
     const newLoadcell = new LoadcellEntity({
       hardwareId,
       port: Reference.create(port),
       code: `RAW-${hardwareId}`,
+      label: `LC#${hardwareId}`,
+      liveReading: {
+        currentWeight: payload.weight,
+        pendingChange: 0,
+      },
     });
 
-    await this._em.persistAndFlush(newLoadcell);
+    await em.persistAndFlush(newLoadcell);
     return newLoadcell;
   }
 
-  private async _findOrCreatePort(path: string): Promise<PortEntity> {
-    let port = await this._em.findOne(PortEntity, { path });
+  private async _findOrCreatePort(em: EntityManager, path: string): Promise<PortEntity> {
+    let port = await em.findOne(PortEntity, { path });
     if (!port) {
       port = new PortEntity({ path, name: path, status: PORT_STATUS.CONNECTED });
     }
     port.heartbeat = Date.now();
     port.status = PORT_STATUS.CONNECTED;
-    this._em.persist(port);
+    em.persist(port);
     return port;
   }
 
@@ -97,34 +100,34 @@ export class LoadcellService {
   // PART 2: BUSINESS LOGIC UPDATE (PROCESSING)
   // =================================================================
 
-  private async _processLoadcellUpdate(loadcell: LoadcellEntity, newWeight: number): Promise<void> {
+  private async _processLoadcellUpdate(em: EntityManager, loadcell: LoadcellEntity, newWeight: number): Promise<void> {
     loadcell.heartbeat = Date.now();
 
     if (!loadcell.state.isCalibrated) {
-      this._logger.debug(`Skipping weight update for uncalibrated loadcell with hardwareId: ${loadcell.hardwareId}`, {
+      Logger.debug(`Skipping weight update for uncalibrated loadcell with hardwareId: ${loadcell.hardwareId}`, {
         hardwareId: loadcell.hardwareId,
         newWeight: newWeight,
       });
       loadcell.liveReading.currentWeight = newWeight;
-      await this._em.flush();
+      await em.flush();
       return;
     }
 
     // Step 1: Handle initial state: setting the zero-weight for the first time.
     if (!loadcell.state.isCalibrated && !loadcell.state.isUpdatedWeight) {
-      this._logger.log(`Performing initial zero-weight set for loadcell ${loadcell.id}.`);
+      Logger.log(`Performing initial zero-weight set for loadcell ${loadcell.id}.`);
       loadcell.calibration.zeroWeight = newWeight;
       loadcell.liveReading.currentWeight = newWeight;
       loadcell.state.isUpdatedWeight = true;
-      await this._em.flush();
+      await em.flush();
       return;
     }
 
     // Step 2: Check if the associated Bin is locked. This dictates the entire logic flow.
-    await this._em.populate(loadcell, ['bin']); // Ensure bin.state is loaded
+    await em.populate(loadcell, ['bin']); // Ensure bin.state is loaded
     const bin = RefHelper.getRequired(loadcell.bin, 'BinEntity');
     if (bin.state.isLocked) {
-      await this._handleLockedBinUpdate(loadcell, newWeight);
+      await this._handleLockedBinUpdate(em, loadcell, newWeight);
       return;
     }
 
@@ -149,20 +152,20 @@ export class LoadcellService {
     if (changeInQuantity !== 0) {
       loadcell.liveReading.pendingChange += changeInQuantity;
       loadcell.synchronization.localToCloud.isSynced = false;
-      this._logger.log(
+      Logger.log(
         `Detected change of ${changeInQuantity} for loadcell ${loadcell.id}. Pending change is now ${loadcell.liveReading.pendingChange}.`,
       );
     }
 
-    await this._em.flush();
+    await em.flush();
   }
 
   /**
    * Handles the specific update logic when a bin is locked.
    * This "commits" the pending changes to the official `calibration.quantity`.
    */
-  private async _handleLockedBinUpdate(loadcell: LoadcellEntity, newWeight: number): Promise<void> {
-    this._logger.log(`Handling update for LOCKED bin associated with loadcell ${loadcell.id}.`);
+  private async _handleLockedBinUpdate(em: EntityManager, loadcell: LoadcellEntity, newWeight: number): Promise<void> {
+    Logger.log(`Handling update for LOCKED bin associated with loadcell ${loadcell.id}.`);
     const pendingChange = loadcell.liveReading.pendingChange;
 
     if (pendingChange !== 0) {
@@ -173,7 +176,7 @@ export class LoadcellService {
     loadcell.liveReading.pendingChange = 0;
     loadcell.liveReading.currentWeight = newWeight;
 
-    await this._em.flush();
+    await em.flush();
   }
 
   /**

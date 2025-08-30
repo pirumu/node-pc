@@ -207,6 +207,13 @@ export class BinService {
             batchNumber: lc.metadata.batchNumber,
             serialNumber: lc.metadata.serialNumber,
             expiryDate: lc.metadata.expiryDate,
+            max: lc.metadata.max || 1,
+            min: lc.metadata.min || 1,
+            critical: lc.metadata.critical || 1,
+            isCalibrated: !!lc.metadata.itemId && lc.state.isCalibrated !== undefined && lc.state.isCalibrated,
+            calibration: lc.calibration,
+            loadcell: lc,
+            liveReading: lc.liveReading,
           });
         }
       }
@@ -224,7 +231,6 @@ export class BinService {
             const quantity = binItem.qty;
             const criticalThreshold = binItem.critical;
 
-            // Xác định trạng thái cho item này
             let itemStatus: 'good' | 'on-loan' | 'low/critical';
             if (onLoanItemIds.has(itemEntity.id)) {
               itemStatus = 'on-loan';
@@ -242,10 +248,14 @@ export class BinService {
               partNo: itemEntity.partNo,
               itemType: itemType?.name || 'N/A',
               quantity: quantity,
-              status: itemStatus, // <-- Thêm trạng thái của item
+              status: itemStatus,
               batchNumber: binItem.batchNumber,
               serialNumber: binItem.serialNumber,
               expiryDate: binItem.expiryDate,
+              max: binItem.max || 1,
+              min: binItem.min || 1,
+              critical: binItem.critical || 1,
+              isCalibrated: true,
             });
           }
         }
@@ -322,7 +332,7 @@ export class BinService {
         cuLockId: binEntity.cuLockId,
       });
 
-      await this._publisherService.publish(Transport.MQTT, EVENT_TYPE.BIN.OPENED, {
+      await this._publisherService.publish(Transport.MQTT, EVENT_TYPE.LOADCELL.START_READING, {
         bindId: binEntity.id,
         ...payload,
       });
