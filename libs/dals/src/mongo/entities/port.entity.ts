@@ -7,6 +7,7 @@ import { AbstractEntity } from './abstract.entity';
 export const PORT_STATUS = {
   CONNECTED: 'CONNECTED',
   DISCONNECTED: 'DISCONNECTED',
+  LOADED: 'LOADED',
 } as const;
 
 export type PortStatus = (typeof PORT_STATUS)[keyof typeof PORT_STATUS];

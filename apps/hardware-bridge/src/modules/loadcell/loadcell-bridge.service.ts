@@ -6,12 +6,12 @@ import { LoadcellsService } from '@loadcells';
 import { LoadCellReading } from '@loadcells/loadcells.types';
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { PortDiscoveryService, PortMonitoringService } from '@serialport';
+import { PortMonitoringService } from '@serialport';
 import { InjectSerialManager, ISerialAdapter } from '@serialport/serial';
-import { from, interval, lastValueFrom, Subject } from 'rxjs';
+import { from, interval, Subject } from 'rxjs';
 import { map, take, takeUntil, timeout } from 'rxjs/operators';
 
-import { CHAR_START, LINUX_PORTS, MESSAGE_LENGTH, VERIFY_TIMEOUT } from './loadcell.constants';
+import { CHAR_START, MESSAGE_LENGTH, VERIFY_TIMEOUT } from './loadcell.constants';
 
 @Injectable()
 export class LoadcellBridgeService implements OnModuleInit, OnModuleDestroy {
@@ -26,7 +26,6 @@ export class LoadcellBridgeService implements OnModuleInit, OnModuleDestroy {
     private readonly _serialAdapter: ISerialAdapter,
     private readonly _configService: ConfigService,
     private readonly _loadcellsService: LoadcellsService,
-    private readonly _portDiscovery: PortDiscoveryService,
     private readonly _portMonitoring: PortMonitoringService,
     private readonly _publisherService: PublisherService,
   ) {}
@@ -160,13 +159,7 @@ export class LoadcellBridgeService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async _getAllPossiblePorts(): Promise<string[]> {
-    const ports = await lastValueFrom(this._portDiscovery.availablePorts$().pipe(take(1)));
-
-    // Ports with a manufacturer
-    const usbPorts = ports.filter((p) => p.manufacturer).map((p) => p.path);
-
-    // Add Linux serial ports
-    const linuxPorts = LINUX_PORTS;
+    const ports = await this._serialAdapter.listPorts(true);
 
     // Windows COM ports if needed
     const windowsPorts: string[] = [];
@@ -175,8 +168,13 @@ export class LoadcellBridgeService implements OnModuleInit, OnModuleDestroy {
         windowsPorts.push(`COM${i}`);
       }
     }
+    const sortedPorts = ports
+      .map((p) => p.path)
+      .sort((a, b) => {
+        return a > b ? 1 : a < b ? -1 : 0;
+      });
     // Return unique ports
-    return [...new Set([...usbPorts, ...linuxPorts, ...windowsPorts])];
+    return [...new Set([...sortedPorts, ...windowsPorts])];
   }
 
   private async _verifyLoadcellPort(portPath: string): Promise<boolean> {
@@ -185,9 +183,9 @@ export class LoadcellBridgeService implements OnModuleInit, OnModuleDestroy {
     try {
       await this._serialAdapter.open(portPath, {
         baudRate: 9600,
-        dataBits: 8,
-        stopBits: 1,
-        parity: 'none',
+        autoOpen: false,
+        parser: { type: 'bytelength', options: { length: 11 } },
+        maxReconnectAttempts: 1,
       });
 
       // Create promise to wait for valid response
@@ -197,7 +195,7 @@ export class LoadcellBridgeService implements OnModuleInit, OnModuleDestroy {
 
           const subscription = from(this._serialAdapter.onData(portPath))
             .pipe(
-              take(10), // Check first 10 messages max
+              take(1), // Check first 10 messages max
               timeout(VERIFY_TIMEOUT),
               map((data: Buffer | string) => {
                 return Buffer.isBuffer(data) ? data : Buffer.from(data, 'hex');

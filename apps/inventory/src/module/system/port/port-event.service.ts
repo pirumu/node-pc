@@ -1,4 +1,4 @@
-import { PortEntity } from '@dals/mongo/entities';
+import { PORT_STATUS, PortEntity } from '@dals/mongo/entities';
 import { EntityManager } from '@mikro-orm/mongodb';
 import { Injectable, Logger } from '@nestjs/common';
 
@@ -15,10 +15,9 @@ export class PortEventService {
           new PortEntity({
             name: path,
             path: path,
-            status: 'CONNECTED',
+            status: PORT_STATUS.LOADED,
           }),
       );
-      console.log(ports);
       await em.insertMany(PortEntity, ports);
     } catch (error) {
       Logger.warn('Can not register port', {

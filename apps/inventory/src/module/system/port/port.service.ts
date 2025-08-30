@@ -33,6 +33,7 @@ export class PortService {
       limit: limit,
       offset: (page - 1) * limit,
       populate: populate ? ['loadcells'] : [],
+      orderBy: { name: 'ASC', path: 'ASC' },
     };
     const [rows, count] = await this._portRepository.findAndCount(where, options);
     return new PaginatedResult(
