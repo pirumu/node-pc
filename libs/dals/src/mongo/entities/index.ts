@@ -18,3 +18,4 @@ export * from './role.entity';
 export * from './site.entity';
 export * from './system.entity';
 export * from './sync-info.entity';
+export * from './working-order.entity';
