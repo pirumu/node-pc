@@ -122,6 +122,7 @@ export class ReplenishItemService {
           requestQty: qtyToReplenishHere,
           currentQty: loadcell.availableQuantity,
           loadcellId: loadcell.id,
+          loadcellHardwareId: loadcell.hardwareId,
           location: {
             binId: bin.id,
             binName: `${bin.x}-${bin.y}`,
@@ -136,6 +137,7 @@ export class ReplenishItemService {
             .filter((l) => !!l.bin?.id && !!l.item?.id && l.availableQuantity > 0 && !itemIds.includes(l.item.id))
             .map((l) => ({
               loadcellId: l.id,
+              loadcellHardwareId: l.hardwareId,
               itemId: l.item?.id || '',
               name: l.item?.unwrap()?.name || '',
               binId: l.bin?.id || '',
@@ -189,6 +191,7 @@ export class ReplenishItemService {
         name: item.name,
         requestQty: item.requestQty,
         loadcellId: item.loadcellId,
+        loadcellHardwareId: item.loadcellHardwareId,
         conditionId: item.conditionId,
         currentQty: item.currentQty,
       }));

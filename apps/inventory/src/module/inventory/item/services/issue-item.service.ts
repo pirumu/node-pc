@@ -160,6 +160,7 @@ export class IssueItemService {
           requestQty: qtyToTake,
           currentQty: loadcell.availableQuantity,
           loadcellId: loadcell.id,
+          loadcellHardwareId: loadcell.hardwareId,
           location: {
             binId: bin.id,
             binName: `${bin.x}-${bin.y}`,
@@ -190,6 +191,7 @@ export class IssueItemService {
                 loadcellId: l.id,
                 requestQty: 0,
                 currentQty: l.availableQuantity,
+                loadcellHardwareId: l.hardwareId,
               };
             }),
         });
@@ -247,6 +249,7 @@ export class IssueItemService {
         requestQty: item.requestQty,
         currentQty: item.currentQty,
         loadcellId: item.loadcellId,
+        loadcellHardwareId: item.loadcellHardwareId,
       }));
 
       // Merge and deduplicate tracking items from all items in this bin

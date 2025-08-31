@@ -32,13 +32,6 @@ export abstract class AbstractEntity extends BaseEntity {
       this._id = new ObjectId();
     }
 
-    if (props) {
-      Object.assign(this, props);
-      if (!this.synchronization) {
-        this.synchronization = new Synchronization();
-      }
-    } else {
-      this.synchronization = new Synchronization();
-    }
+    this.synchronization = new Synchronization();
   }
 }

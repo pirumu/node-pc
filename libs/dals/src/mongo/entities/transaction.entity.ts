@@ -33,10 +33,7 @@ export class TransactionEntity extends AbstractEntity {
   @ManyToOne(() => UserEntity, { fieldName: 'userId', ref: true })
   user!: Ref<UserEntity>;
 
-  @OneToMany(() => TransactionEventEntity, (event) => event.transaction, {
-    orphanRemoval: true,
-    persist: false,
-  })
+  @OneToMany(() => TransactionEventEntity, (event) => event.transaction)
   events = new Collection<TransactionEventEntity>(this);
 
   @Property()
@@ -128,8 +125,11 @@ export class TxItemToTake {
   currentQty: number;
   @Property({ type: 'integer' })
   requestQty: number;
-  @Property({ type: 'integer' })
+  @Property({ type: 'string' })
   loadcellId: string;
+
+  @Property({ type: 'integer' })
+  loadcellHardwareId: number;
 
   constructor(props: Properties<TxItemToTake>) {
     Object.assign(this, props);
@@ -138,11 +138,18 @@ export class TxItemToTake {
 
 @Embeddable()
 export class TxAnotherItem {
+  @Property({ type: 'string' })
   binId: string;
+  @Property({ type: 'string' })
   name: string;
+  @Property({ type: 'string' })
   itemId: string;
+  @Property({ type: 'string' })
   loadcellId: string;
+  @Property({ type: 'integer' })
   currentQty: number;
+  @Property({ type: 'integer' })
+  loadcellHardwareId: number;
 
   constructor(props: Properties<TxAnotherItem>) {
     Object.assign(this, props);
@@ -150,20 +157,43 @@ export class TxAnotherItem {
 }
 
 @Embeddable()
-export class TXItemToReturn extends TxItemToTake {
+export class TXItemToReturn {
+  @Property({ type: 'string' })
+  itemId: string;
+  @Property({ type: 'string' })
+  name: string;
+  @Property({ type: 'integer' })
+  currentQty: number;
+  @Property({ type: 'integer' })
+  requestQty: number;
+  @Property({ type: 'string' })
+  loadcellId: string;
+
+  @Property({ type: 'integer' })
+  loadcellHardwareId: number;
   @Property({ type: 'string' })
   conditionId: string;
 
   constructor(props: Properties<TXItemToReturn>) {
-    super(props);
     Object.assign(this, props);
   }
 }
 
 @Embeddable()
-export class TxItemToReplenish extends TxItemToTake {
+export class TxItemToReplenish {
+  @Property({ type: 'string' })
+  binId: string;
+  @Property({ type: 'string' })
+  name: string;
+  @Property({ type: 'string' })
+  itemId: string;
+  @Property({ type: 'string' })
+  loadcellId: string;
+  @Property({ type: 'integer' })
+  currentQty: number;
+  @Property({ type: 'integer' })
+  loadcellHardwareId: number;
   constructor(props: Properties<TxItemToReplenish>) {
-    super(props);
     Object.assign(this, props);
   }
 }

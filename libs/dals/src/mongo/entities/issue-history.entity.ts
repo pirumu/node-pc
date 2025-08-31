@@ -1,4 +1,4 @@
-import { PartialProperties } from '@framework/types';
+import { PartialProperties, Properties } from '@framework/types';
 import { Entity, Property, ManyToOne, Unique, Embeddable, Embedded } from '@mikro-orm/core';
 import { ObjectId, Ref } from '@mikro-orm/mongodb';
 
@@ -16,6 +16,10 @@ export class IssuedItemLocation {
 
   @Property()
   quantity!: number;
+
+  constructor(props: Properties<IssuedItemLocation>) {
+    Object.assign(this, props);
+  }
 }
 
 @Entity({ collection: 'issue_histories' })
@@ -30,7 +34,7 @@ export class IssueHistoryEntity extends AbstractEntity {
   @Property()
   totalIssuedQuantity!: number;
 
-  @Embedded(() => IssuedItemLocation, { default: [] })
+  @Embedded(() => IssuedItemLocation, { array: true, default: [] })
   locations: IssuedItemLocation[] = [];
 
   constructor(data?: PartialProperties<IssueHistoryEntity>) {

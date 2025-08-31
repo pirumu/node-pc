@@ -15,6 +15,7 @@ export const EVENT_TYPE = {
     STATUS_CHANGED: 'loadcell/status-changed',
     ALL_COMPUTED: 'loadcell/all-computed',
     WEIGHT_CALCULATED: 'loadcell/weight-calculated',
+    QUANTITY_CALCULATED: 'loadcell/quantity-calculated',
     ERROR: 'loadcell/error',
   },
 
@@ -34,11 +35,15 @@ export const EVENT_TYPE = {
 
   /** Events related to core business processes (Issue, Return, Replenish) */
   PROCESS: {
+    BIN_FAILED: 'process/bin/failed',
     START: 'process/start',
+    STEP_START: 'process/step-start',
     STEP_SUCCESS: 'process/step-success',
     STEP_ERROR: 'process/step-error',
+    STEP_WARNING: 'process/step-warning',
 
     QTY_CHANGED: 'process/item-qty-changed',
+
     INSTRUCTION: 'process/instruction',
     CALCULATE_ITEM: 'process/calculate-item',
     ISSUE_STEP_SUCCESS: 'process/step/issue-success',

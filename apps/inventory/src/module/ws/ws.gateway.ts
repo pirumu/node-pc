@@ -89,14 +89,17 @@ export class WsGateway implements OnGatewayConnection, OnGatewayDisconnect {
       client.join(msg.room);
       client.data = { room: msg.room };
       const m = msg.room.split('_');
-      if (m[1] && m[1] !== '0') {
-        this._publisherService.publish(
-          Transport.MQTT,
-          EVENT_TYPE.LOADCELL.START_READING,
-          { hardwareIds: [parseInt(m[1])] },
-          {},
-          { async: true },
-        );
+      if (m[0] === 'loadcell') {
+        const loadcellHardwareId = m[1];
+        if (loadcellHardwareId && loadcellHardwareId !== '0') {
+          this._publisherService.publish(
+            Transport.MQTT,
+            EVENT_TYPE.LOADCELL.START_READING,
+            { hardwareIds: [parseInt(m[1])] },
+            {},
+            { async: true },
+          );
+        }
       }
     }
   }

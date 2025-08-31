@@ -3,10 +3,18 @@ import { EVENT_TYPE, ProcessEventType } from '@common/constants';
 import { CuLockRequest } from '@culock/dto';
 import { LOCK_STATUS, ProtocolType } from '@culock/protocols';
 import { CuResponse } from '@culock/protocols/cu';
-import { BinEntity, LoadcellEntity, TransactionEntity, TransactionEventEntity, TransactionType } from '@dals/mongo/entities';
+import {
+  BinEntity,
+  LoadcellEntity,
+  Synchronization,
+  TransactionEntity,
+  TransactionEventEntity,
+  TransactionType,
+} from '@dals/mongo/entities';
 import { PublisherService, Transport } from '@framework/publisher';
 import { Nullable } from '@framework/types';
-import { EntityManager, ObjectId, Reference, CreateRequestContext } from '@mikro-orm/mongodb';
+import { MikroORM, RequestContext } from '@mikro-orm/core';
+import { MongoEntityManager, ObjectId } from '@mikro-orm/mongodb';
 import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 
 const WEIGHT_POLLING_INTERVAL_MS = 1000;
@@ -46,7 +54,7 @@ export class QuantityCheckingService implements OnModuleDestroy {
   private _activePollingLockStatusLoops = new Map<string, LockPollingContext>();
 
   constructor(
-    private readonly _em: EntityManager,
+    private readonly _orm: MikroORM,
     private readonly _publisher: PublisherService,
   ) {}
 
@@ -64,157 +72,201 @@ export class QuantityCheckingService implements OnModuleDestroy {
     this._activePollingLockStatusLoops.clear();
   }
 
-  @CreateRequestContext()
   public async handleBinOpened(event: { transactionId: string; binId: string }): Promise<void> {
-    const { transactionId, binId } = event;
+    return RequestContext.create(this._orm.em, async () => {
+      const em = RequestContext.getEntityManager()!;
+      const { transactionId, binId } = event;
 
-    this._stopPolling(transactionId);
-    this._stopLockPolling(transactionId);
-
-    this._logger.log(`[${transactionId}] Bin ${binId} opened. Starting real-time DB polling.`);
-
-    const tx = await this._em.findOneOrFail(TransactionEntity, { id: transactionId });
-    const step = tx.currentStep(tx.currentStepId);
-
-    if (!step || step.binId !== binId) {
-      return;
-    }
-
-    // start keep track bin lock status.
-    const lockStatusIntervalId = setInterval(async () => this._lockStatusPollingCycle(transactionId), LOCK_POLLING_INTERVAL_MS);
-    this._activePollingLockStatusLoops.set(transactionId, {
-      intervalId: lockStatusIntervalId,
-      step: step as any, // stupid TypeScript
-    });
-
-    const loadcells = await this._em.find(LoadcellEntity, {
-      bin: new ObjectId(binId),
-      item: { $ne: null },
-    });
-
-    const initialQuantities = new Map<string, number>();
-
-    loadcells.forEach((lc) => {
-      initialQuantities.set(lc.id, lc.availableQuantity);
-    });
-
-    const intervalId = setInterval(async () => this._pollingCycle(transactionId, tx.type), WEIGHT_POLLING_INTERVAL_MS);
-
-    this._activePollingWeightLoops.set(transactionId, {
-      intervalId,
-      step: step as any, // stupid TypeScript
-      initialQuantities,
-      lastSentMessages: new Map(),
-    });
-
-    await this._publisher.publish(Transport.MQTT, EVENT_TYPE.PROCESS.INSTRUCTION, {
-      transactionId,
-      instructions: step.instructions,
-    });
-  }
-
-  @CreateRequestContext()
-  public async handleBinClosed(event: { transactionId: string; binId: string }): Promise<void> {
-    const { transactionId, binId } = event;
-
-    this._stopPolling(transactionId);
-    this._stopLockPolling(transactionId);
-
-    this._logger.log(`[${transactionId}] Bin ${binId} closed. Persisting final results.`);
-
-    const tx = await this._em.findOneOrFail(TransactionEntity, { id: transactionId });
-    const step = tx.currentStep(tx.currentStepId);
-    if (!step || step.binId !== binId) {
-      return;
-    }
-
-    const finalLoadcells = await this._em.find(LoadcellEntity, {
-      bin: new ObjectId(binId),
-      item: { $ne: null },
-    });
-
-    const result = this._calculateFinalStepResult(tx, step as any, finalLoadcells);
-
-    if (result.events.length > 0) {
-      await this._em.persistAndFlush(result.events);
-    }
-
-    const eventType = result.isValid ? this._getSuccessTopic(tx.type) : this._getErrorTopic(tx.type);
-
-    const internalEventType = result.isValid ? EVENT_TYPE.PROCESS.STEP_SUCCESS : EVENT_TYPE.PROCESS.STEP_ERROR;
-
-    await Promise.all([
-      this._publisher.publish(Transport.MQTT, eventType, {
-        transactionId,
-        stepId: step.stepId,
-        errors: result.errorMessages,
-      }),
-      this._publisher.publish(Transport.MQTT, internalEventType, {
-        transactionId,
-        stepId: step.stepId,
-        errors: result.errorMessages,
-      }),
-    ]);
-  }
-
-  private async _pollingCycle(transactionId: string, transactionType: TransactionType): Promise<void> {
-    const context = this._activePollingWeightLoops.get(transactionId);
-    if (!context) {
       this._stopPolling(transactionId);
-      return;
-    }
+      this._stopLockPolling(transactionId);
 
-    const { step, initialQuantities, lastSentMessages } = context;
-    const loadcellsInBin = await this._em.find(LoadcellEntity, {
-      bin: new ObjectId(step.binId),
-      item: { $ne: null },
-    });
+      this._logger.log(`[${transactionId}] Bin ${binId} opened. Starting real-time DB polling.`);
 
-    for (const loadcell of loadcellsInBin) {
-      const initialQty = initialQuantities.get(loadcell.id);
-      if (initialQty === undefined) {
-        continue;
+      const tx = await em.findOneOrFail(TransactionEntity, new ObjectId(transactionId));
+      const step = tx.currentStep(tx.currentStepId);
+
+      if (!step || step.binId !== binId) {
+        return;
       }
 
-      const currentQty = this._calculateCurrentQuantityFromWeight(loadcell);
-      const changedQty = currentQty - initialQty;
+      // start keep track bin lock status.
+      const lockStatusIntervalId = setInterval(async () => this._lockStatusPollingCycle(em, transactionId), LOCK_POLLING_INTERVAL_MS);
+      this._activePollingLockStatusLoops.set(transactionId, {
+        intervalId: lockStatusIntervalId,
+        step: step as any, // stupid TypeScript
+      });
 
-      const plannedAction = this._findPlannedActionForLoadcell(step, loadcell.id);
-      if (!plannedAction) {
-        continue;
-      }
+      const loadcells = await em.find(LoadcellEntity, {
+        bin: new ObjectId(binId),
+        item: { $ne: null },
+      });
 
-      const takenOrReturnedQty = plannedAction.type === PlanActionType.ISSUE ? -changedQty : changedQty;
-      const message = `Taken: ${takenOrReturnedQty}/${plannedAction.item.requestQty}`;
+      const initialQuantities = new Map<string, number>();
 
-      if (lastSentMessages.get(plannedAction.item.itemId) !== message) {
-        await this._publisher.publish(Transport.MQTT, EVENT_TYPE.PROCESS.QTY_CHANGED, {
+      loadcells.forEach((lc) => {
+        initialQuantities.set(lc.id, lc.availableQuantity);
+      });
+
+      const intervalId = setInterval(async () => this._pollingCycle(em, transactionId, tx.type), WEIGHT_POLLING_INTERVAL_MS);
+
+      this._activePollingWeightLoops.set(transactionId, {
+        intervalId,
+        step: step as any, // stupid TypeScript
+        initialQuantities,
+        lastSentMessages: new Map(),
+      });
+
+      await this._publisher.publish(
+        Transport.MQTT,
+        EVENT_TYPE.PROCESS.INSTRUCTION,
+        {
           transactionId,
-          itemId: plannedAction.item.itemId,
-          message: message,
-        });
-        lastSentMessages.set(plannedAction.item.itemId, message);
-      }
-
-      const validationError = this._validateChange(changedQty, plannedAction);
-      const errorKey = `error-${plannedAction.item.itemId}`;
-      if (validationError) {
-        if (lastSentMessages.get(errorKey) !== validationError) {
-          await this._publisher.publish(Transport.MQTT, this._getWarningTopic(transactionType), {
-            transactionId,
-            message: validationError,
-          });
-          lastSentMessages.set(errorKey, validationError);
-        }
-      } else {
-        if (lastSentMessages.has(errorKey)) {
-          lastSentMessages.delete(errorKey);
-        }
-      }
-    }
+          instructions: step.instructions,
+        },
+        {},
+        { async: true },
+      );
+    });
   }
 
-  private async _lockStatusPollingCycle(transactionId: string): Promise<void> {
+  public async handleBinClosed(event: { transactionId: string; binId: string }): Promise<void> {
+    return RequestContext.create(this._orm.em, async () => {
+      const { transactionId, binId } = event;
+      const em = RequestContext.getEntityManager()! as MongoEntityManager;
+      this._stopPolling(transactionId);
+      this._stopLockPolling(transactionId);
+
+      this._logger.log(`[${transactionId}] Bin ${binId} closed. Persisting final results.`);
+
+      const tx = await em.findOneOrFail(TransactionEntity, new ObjectId(transactionId));
+
+      const step = tx.currentStep(tx.currentStepId);
+      if (!step || step.binId !== binId) {
+        return;
+      }
+
+      const finalLoadcells = await em.find(LoadcellEntity, {
+        bin: new ObjectId(binId),
+        item: { $ne: null },
+      });
+
+      const result = this._calculateFinalStepResult(em, step as any, finalLoadcells);
+      if (result.events.length > 0) {
+        const events = result.events.map((e) => {
+          return {
+            transactionId: tx._id,
+            itemId: e.item._id,
+            loadcell: e.loadcell._id,
+            stepId: e.stepId,
+            output: result,
+            quantityBefore: e.quantityBefore,
+            quantityAfter: e.quantityAfter,
+            quantityChanged: e.quantityChanged,
+            synchronization: new Synchronization(),
+          };
+        });
+        await em.getDriver().nativeInsertMany('transaction_events', events);
+      }
+      const eventType = result.isValid ? this._getSuccessTopic(tx.type) : this._getErrorTopic(tx.type);
+      const internalEventType = result.isValid ? EVENT_TYPE.PROCESS.STEP_SUCCESS : EVENT_TYPE.PROCESS.STEP_ERROR;
+      await Promise.all([
+        this._publisher.publish(
+          Transport.MQTT,
+          eventType,
+          {
+            transactionId,
+            stepId: step.stepId,
+            errors: result.errorMessages,
+          },
+          {},
+          { async: true },
+        ),
+        this._publisher.publish(
+          Transport.MQTT,
+          internalEventType,
+          {
+            transactionId,
+            stepId: step.stepId,
+            errors: result.errorMessages,
+          },
+          {},
+          { async: true },
+        ),
+      ]);
+    });
+  }
+
+  private async _pollingCycle(em: any, transactionId: string, transactionType: TransactionType): Promise<void> {
+    // const context = this._activePollingWeightLoops.get(transactionId);
+    // if (!context) {
+    //   this._stopPolling(transactionId);
+    //   return;
+    // }
+    //
+    // const { step, initialQuantities, lastSentMessages } = context;
+    // const loadcellsInBin = await em.find(LoadcellEntity, {
+    //   bin: new ObjectId(step.binId),
+    //   item: { $ne: null },
+    // });
+    //
+    // for (const loadcell of loadcellsInBin) {
+    //   const initialQty = initialQuantities.get(loadcell.id);
+    //   if (initialQty === undefined) {
+    //     continue;
+    //   }
+    //
+    //   const currentQty = this._calculateCurrentQuantityFromWeight(loadcell);
+    //   const changedQty = currentQty - initialQty;
+    //
+    //   const plannedAction = this._findPlannedActionForLoadcell(step, loadcell.id);
+    //   if (!plannedAction) {
+    //     continue;
+    //   }
+    //
+    //   const takenOrReturnedQty = plannedAction.type === PlanActionType.ISSUE ? -changedQty : changedQty;
+    //   const message = `Taken: ${takenOrReturnedQty}/${plannedAction.item.requestQty}`;
+    //
+    //   if (lastSentMessages.get(plannedAction.item.itemId) !== message) {
+    //     await this._publisher.publish(
+    //       Transport.MQTT,
+    //       EVENT_TYPE.PROCESS.QTY_CHANGED,
+    //       {
+    //         transactionId,
+    //         itemName: plannedAction.item.name,
+    //         itemId: plannedAction.item.itemId,
+    //         message: message,
+    //       },
+    //       {},
+    //       { async: true },
+    //     );
+    //     lastSentMessages.set(plannedAction.item.itemId, message);
+    //   }
+    //
+    //   const validationError = this._validateChange(changedQty, plannedAction);
+    //   const errorKey = `error-${plannedAction.item.itemId}`;
+    //   if (validationError) {
+    //     if (lastSentMessages.get(errorKey) !== validationError) {
+    //       await this._publisher.publish(
+    //         Transport.MQTT,
+    //         this._getWarningTopic(transactionType),
+    //         {
+    //           transactionId,
+    //           message: validationError,
+    //         },
+    //         {},
+    //         { async: true },
+    //       );
+    //       lastSentMessages.set(errorKey, validationError);
+    //     }
+    //   } else {
+    //     if (lastSentMessages.has(errorKey)) {
+    //       lastSentMessages.delete(errorKey);
+    //     }
+    //   }
+    // }
+  }
+
+  private async _lockStatusPollingCycle(em: any, transactionId: string): Promise<void> {
     const context = this._activePollingWeightLoops.get(transactionId);
     if (!context) {
       this._stopLockPolling(transactionId);
@@ -222,7 +274,7 @@ export class QuantityCheckingService implements OnModuleDestroy {
     }
     const { step } = context;
 
-    const bin = await this._em.findOneOrFail(BinEntity, new ObjectId(step.binId), {
+    const bin: BinEntity = await em.findOneOrFail(BinEntity, new ObjectId(step.binId), {
       cache: true,
     });
 
@@ -237,10 +289,18 @@ export class QuantityCheckingService implements OnModuleDestroy {
     );
 
     if (status.isSuccess && Object.values(status.lockStatuses).every((s) => s === LOCK_STATUS.CLOSED)) {
-      await this._publisher.publish(Transport.MQTT, EVENT_TYPE.BIN.CLOSED, {
-        transactionId,
-        binId: step.binId,
-      });
+      bin.state.isLocked = true;
+      await em.nativeUpdate(BinEntity, { _id: bin._id }, { state: { isLocked: true } });
+      await this._publisher.publish(
+        Transport.MQTT,
+        EVENT_TYPE.BIN.CLOSED,
+        {
+          transactionId,
+          binId: step.binId,
+        },
+        {},
+        { async: true },
+      );
     }
   }
 
@@ -260,11 +320,7 @@ export class QuantityCheckingService implements OnModuleDestroy {
     }
   }
 
-  private _calculateFinalStepResult(
-    transaction: TransactionEntity,
-    step: ExecutionStep,
-    finalLoadcells: LoadcellEntity[],
-  ): StepCalculationResult {
+  private _calculateFinalStepResult(em: any, step: ExecutionStep, finalLoadcells: LoadcellEntity[]): StepCalculationResult {
     const result: StepCalculationResult = {
       isValid: true,
       events: [],
@@ -285,21 +341,21 @@ export class QuantityCheckingService implements OnModuleDestroy {
       const quantityAfter = loadcell.availableQuantity + loadcell.liveReading.pendingChange;
       const quantityChanged = quantityAfter - quantityBefore;
 
-      // FIX 1: Logic for "user did nothing" error
       if (plannedAction.type !== PlanActionType.KEEP_TRACK && quantityChanged === 0) {
         result.isValid = false;
         result.errorMessages.push(`No action was taken for item ${plannedAction.item.itemId}.`);
       }
 
       if (quantityChanged !== 0) {
-        // FIX 2: Use Reference.create() for relations
         const transactionEvent = new TransactionEventEntity({
-          transaction: Reference.create(transaction),
-          loadcell: Reference.create(loadcell),
-          item: Reference.create(loadcell.item!),
           quantityBefore,
           quantityAfter,
           quantityChanged,
+          stepId: step.stepId,
+        });
+        em.assign(transactionEvent, {
+          loadcell: loadcell,
+          item: loadcell.item!,
         });
         result.events.push(transactionEvent);
       }
@@ -400,13 +456,13 @@ export class QuantityCheckingService implements OnModuleDestroy {
   private _getWarningTopic(type: TransactionType): ProcessEventType {
     switch (type) {
       case TransactionType.ISSUE:
-        return EVENT_TYPE.PROCESS.ISSUE_STEP_WARNING;
+        return EVENT_TYPE.PROCESS.STEP_WARNING;
       case TransactionType.RETURN:
-        return EVENT_TYPE.PROCESS.RETURN_STEP_WARNING;
+        return EVENT_TYPE.PROCESS.STEP_WARNING;
       case TransactionType.REPLENISH:
-        return EVENT_TYPE.PROCESS.REPLENISH_STEP_WARNING;
+        return EVENT_TYPE.PROCESS.STEP_WARNING;
       default:
-        return EVENT_TYPE.PROCESS.ISSUE_STEP_WARNING;
+        return EVENT_TYPE.PROCESS.STEP_WARNING;
     }
   }
 

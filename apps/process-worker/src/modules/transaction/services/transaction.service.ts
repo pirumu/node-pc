@@ -1,3 +1,4 @@
+import { ExecutionStep } from '@common/business/types';
 import { CONDITION_TYPE, EVENT_TYPE } from '@common/constants';
 import { CuLockRequest } from '@culock/dto';
 import { LOCK_STATUS, ProtocolType } from '@culock/protocols';
@@ -14,11 +15,12 @@ import {
   TransactionEventEntity,
   ITEM_TYPE_CATEGORY,
   ConditionEntity,
+  IssuedItemLocation,
 } from '@dals/mongo/entities';
 import { RefHelper } from '@dals/mongo/helpers';
 import { PublisherService, Transport } from '@framework/publisher';
 import { sleep } from '@framework/time/sleep';
-import { EntityManager, Reference, CreateRequestContext, ObjectId } from '@mikro-orm/mongodb';
+import { EntityManager, Reference, ObjectId } from '@mikro-orm/mongodb';
 import { Injectable, Logger } from '@nestjs/common';
 
 // Constants for retry logic
@@ -37,7 +39,7 @@ export class TransactionService {
     private readonly _publisher: PublisherService,
   ) {}
 
-  public async process(transactionId: string): Promise<void> {
+  public async process(transactionId: string): Promise<TransactionEntity> {
     const em = this._em.fork();
     const tx = await em.findOneOrFail(TransactionEntity, new ObjectId(transactionId));
     this._logger.log(`[${tx.id}] Transaction starting. Total steps: ${tx.executionSteps.length}`);
@@ -45,6 +47,7 @@ export class TransactionService {
     tx.status = TransactionStatus.PROCESSING;
     await em.flush();
     await this._executeStep(em, tx);
+    return tx;
   }
 
   public async handleStepSuccess(em: EntityManager, payload: { transactionId: string; stepId: string }): Promise<void> {
@@ -62,6 +65,45 @@ export class TransactionService {
     }
 
     await this._advanceToNextStep(em, tx, payload.stepId);
+  }
+
+  public async handleTxComplete(em: EntityManager, payload: { transactionId: string }): Promise<void> {
+    const tx = await em.findOneOrFail(TransactionEntity, new ObjectId(payload.transactionId));
+    this._logger.log(`TX [${tx.id}]  completed successfully.`);
+    try {
+      for (const step of tx.executionSteps) {
+        await this._stopRealtimeServices(tx, step.stepId);
+      }
+    } catch (error) {
+      this._logger.warn('_stopRealtimeServices error', error);
+    }
+  }
+
+  public async handleTxError(em: EntityManager, payload: { transactionId: string }): Promise<void> {
+    const tx = await em.findOneOrFail(TransactionEntity, new ObjectId(payload.transactionId));
+    this._logger.log(`TX [${tx.id}]  completed error.`);
+    try {
+      for (const step of tx.executionSteps) {
+        await this._stopRealtimeServices(tx, step.stepId);
+      }
+    } catch (error) {
+      this._logger.warn('_stopRealtimeServices error', error);
+    }
+  }
+
+  private async _stopRealtimeServices(tx: TransactionEntity, stepId: string): Promise<void> {
+    const step = tx.currentStep(stepId);
+    if (!step) {
+      return;
+    }
+    const hardwareIds = new Set<number>([
+      ...step.itemsToIssue.map((i) => i.loadcellHardwareId),
+      ...step.itemsToReturn.map((i) => i.loadcellHardwareId),
+      ...step.itemsToReplenish.map((i) => i.loadcellHardwareId),
+      ...step.keepTrackItems.map((i) => i.loadcellHardwareId),
+    ]);
+
+    await this._publisher.publish(Transport.MQTT, EVENT_TYPE.LOADCELL.STOP_READING, { hardwareIds: [...hardwareIds] }, {}, { async: true });
   }
 
   public async handleStepFail(em: EntityManager, payload: { transactionId: string; stepId: string; errors: string[] }): Promise<void> {
@@ -102,10 +144,29 @@ export class TransactionService {
       return;
     }
 
+    const items = [...step.itemsToIssue, ...step.itemsToReturn, ...step.itemsToReplenish];
+    const keepTrackItems = step.keepTrackItems;
+    const instructions = step.instructions;
+
+    await this._publisher.publish(
+      Transport.MQTT,
+      EVENT_TYPE.PROCESS.STEP_START,
+      {
+        transactionId: transaction.id,
+        label: `${step.location.cabinetName}/${step.location.binName}`,
+        type: transaction.type,
+        items: items,
+        keepTrackItems: keepTrackItems,
+        instructions: instructions,
+      },
+      {},
+      { async: true },
+    );
+
     const wasLockOpened = await this._attemptToOpenLockWithRetry(em, transaction, bin);
 
     if (wasLockOpened) {
-      await this._triggerRealtimeServices(transaction, step);
+      await this._triggerRealtimeServices(transaction, step as any);
     }
   }
 
@@ -158,29 +219,47 @@ export class TransactionService {
   private async _handleLockOpenFailure(em: EntityManager, bin: BinEntity, attempt: number): Promise<void> {
     bin.state.failedOpenAttempts = (bin.state.failedOpenAttempts || 0) + 1;
     await em.flush();
-    await this._publisher.publish(Transport.MQTT, EVENT_TYPE.LOCK.OPEN_FAIL, {
-      binId: bin.id,
-      attempt: attempt,
-      totalAttempts: EXECUTION_CONFIG.MAX_LOCK_OPEN_ATTEMPTS,
-    });
+    await this._publisher.publish(
+      Transport.MQTT,
+      EVENT_TYPE.LOCK.OPEN_FAIL,
+      {
+        binId: bin.id,
+        attempt: attempt,
+        totalAttempts: EXECUTION_CONFIG.MAX_LOCK_OPEN_ATTEMPTS,
+      },
+      {},
+      { async: true },
+    );
   }
 
-  private async _triggerRealtimeServices(transaction: TransactionEntity, step: any): Promise<void> {
+  private async _triggerRealtimeServices(transaction: TransactionEntity, step: ExecutionStep): Promise<void> {
     const hardwareIds = new Set<number>([
-      ...step.itemsToIssue.map((i: any) => i.loadcellHardwareId),
-      ...step.itemsToReturn.map((i: any) => i.loadcellHardwareId),
-      ...step.itemsToReplenish.map((i: any) => i.loadcellHardwareId),
-      ...step.keepTrackItems.map((i: any) => i.loadcellHardwareId),
+      ...step.itemsToIssue.map((i) => i.loadcellHardwareId),
+      ...step.itemsToReturn.map((i) => i.loadcellHardwareId),
+      ...step.itemsToReplenish.map((i) => i.loadcellHardwareId),
+      ...step.keepTrackItems.map((i) => i.loadcellHardwareId),
     ]);
 
-    await this._publisher.publish(Transport.MQTT, EVENT_TYPE.LOADCELL.START_READING, { hardwareIds: [...hardwareIds] });
+    await this._publisher.publish(
+      Transport.MQTT,
+      EVENT_TYPE.LOADCELL.START_READING,
+      { hardwareIds: [...hardwareIds] },
+      {},
+      { async: true },
+    );
 
     await sleep(EXECUTION_CONFIG.LOADCELL_STABILIZATION_MS);
 
-    await this._publisher.publish(Transport.MQTT, EVENT_TYPE.BIN.OPENED, {
-      transactionId: transaction.id,
-      binId: step.binId,
-    });
+    await this._publisher.publish(
+      Transport.MQTT,
+      EVENT_TYPE.BIN.OPENED,
+      {
+        transactionId: transaction.id,
+        binId: step.binId,
+      },
+      {},
+      { async: true },
+    );
   }
 
   private async _advanceToNextStep(em: EntityManager, transaction: TransactionEntity, completedStepId: string): Promise<void> {
@@ -199,7 +278,13 @@ export class TransactionService {
     transaction.status = TransactionStatus.COMPLETED;
     transaction.completedAt = new Date();
     await em.flush();
-    await this._publisher.publish(Transport.MQTT, EVENT_TYPE.PROCESS.TRANSACTION_COMPLETED, { transactionId: transaction.id });
+    await this._publisher.publish(
+      Transport.MQTT,
+      EVENT_TYPE.PROCESS.TRANSACTION_COMPLETED,
+      { transactionId: transaction.id },
+      {},
+      { async: true },
+    );
   }
 
   private async _failTransaction(em: EntityManager, transaction: TransactionEntity, reason: string): Promise<void> {
@@ -207,7 +292,13 @@ export class TransactionService {
     transaction.lastError = { message: reason };
     transaction.completedAt = new Date();
     await em.flush();
-    await this._publisher.publish(Transport.MQTT, EVENT_TYPE.PROCESS.TRANSACTION_FAILED, { transactionId: transaction.id, reason });
+    await this._publisher.publish(
+      Transport.MQTT,
+      EVENT_TYPE.PROCESS.TRANSACTION_FAILED,
+      { transactionId: transaction.id, reason },
+      {},
+      { async: true },
+    );
   }
 
   private async _processIssueHistoryOnIssueSuccess(
@@ -218,7 +309,7 @@ export class TransactionService {
     this._logger.log(`[${transaction.id}] Processing issue history for completed ISSUE step ${completedStepId}.`);
     const events = await em.find(
       TransactionEventEntity,
-      { transaction: transaction.id, stepId: completedStepId },
+      { transaction: new ObjectId(transaction.id), stepId: completedStepId },
       { populate: ['loadcell', 'loadcell.bin'] },
     );
     const nonTrackableTypes = (await em.find(ItemTypeEntity, { category: { $ne: ITEM_TYPE_CATEGORY.CONSUMABLE } })).map((it) => it.id);
@@ -227,7 +318,7 @@ export class TransactionService {
       if (event.quantityChanged >= 0) {
         continue;
       }
-      const item = await em.findOne(ItemEntity, { id: event.item.id });
+      const item = await em.findOne(ItemEntity, new ObjectId(event.item.id));
       if (!item || nonTrackableTypes.includes(item.itemType.id)) {
         continue;
       }
@@ -239,22 +330,23 @@ export class TransactionService {
       const bin = RefHelper.getRequired(loadcell.bin, 'BinEntity');
 
       let issueHistory = await em.findOne(IssueHistoryEntity, { user: userRef, item: itemRef });
+
       if (issueHistory) {
         issueHistory.totalIssuedQuantity += issuedQty;
         const locationIndex = issueHistory.locations.findIndex((loc) => loc.loadcellId.toString() === event.loadcell.id.toString());
         if (locationIndex > -1) {
           issueHistory.locations[locationIndex].quantity += issuedQty;
         } else {
-          issueHistory.locations.push({ binId: bin._id, loadcellId: loadcell._id, quantity: issuedQty });
+          issueHistory.locations.push(new IssuedItemLocation({ binId: bin._id, loadcellId: loadcell._id, quantity: issuedQty }));
         }
       } else {
         issueHistory = new IssueHistoryEntity({
           user: userRef,
           item: itemRef,
           totalIssuedQuantity: issuedQty,
-          locations: [{ binId: bin._id, loadcellId: loadcell._id, quantity: issuedQty }],
+          locations: [new IssuedItemLocation({ binId: bin._id, loadcellId: loadcell._id, quantity: issuedQty })],
         });
-        this._em.persist(issueHistory);
+        em.persist(issueHistory);
       }
     }
     await em.flush();
@@ -310,7 +402,11 @@ export class TransactionService {
 
     if (binsToMarkAsDamaged.size > 0) {
       this._logger.log(`[${transaction.id}] Marking bins as damaged: ${Array.from(binsToMarkAsDamaged).join(', ')}`);
-      await em.nativeUpdate(BinEntity, { id: { $in: Array.from(binsToMarkAsDamaged) } }, { state: { isDamaged: true } });
+      await em.nativeUpdate(
+        BinEntity,
+        { _id: { $in: Array.from(binsToMarkAsDamaged).map((id) => new ObjectId(id)) } },
+        { state: { isDamaged: true } },
+      );
     }
     await em.flush();
   }
