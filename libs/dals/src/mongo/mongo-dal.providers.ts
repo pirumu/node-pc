@@ -17,6 +17,7 @@ import { TabletEntity } from './entities/tablet.entity';
 import { TransactionEventEntity } from './entities/transaction-event.entity';
 import { TransactionEntity } from './entities/transaction.entity';
 import { UserEntity } from './entities/user.entity';
+import { WorkingOrderEntity } from './entities/working-order.entity';
 
 export const ALL_ENTITIES = [
   AreaEntity,
@@ -38,6 +39,7 @@ export const ALL_ENTITIES = [
   TransactionEntity,
   TransactionEventEntity,
   UserEntity,
+  WorkingOrderEntity,
 ];
 
 export const PROCESS_WORKER_ENTITIES = [];

@@ -23,7 +23,7 @@ export class TabletEntity extends AbstractEntity {
   isMfaEnabled = false;
 
   constructor(data?: PartialProperties<TabletEntity>) {
-    super();
+    super(data);
     if (data) {
       Object.assign(this, data);
     }

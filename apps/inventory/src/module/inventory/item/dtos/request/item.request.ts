@@ -13,6 +13,7 @@ export class WorkingOrder {
   @IsMongoId()
   @Type(() => String)
   @Expose({ toClassOnly: true })
+  @IsOptional()
   areaId: string;
 }
 
@@ -21,6 +22,11 @@ export class RequestItem {
   @IsMongoId()
   @Type(() => String)
   itemId: string;
+
+  @ApiProperty({ description: 'Bin id' })
+  @IsMongoId()
+  @Type(() => String)
+  binId: string;
 
   @ApiProperty({ description: 'Quantity to issue' })
   @IsNumber()

@@ -12,7 +12,7 @@ export class AreaEntity extends AbstractEntity {
   torque!: number;
 
   constructor(data?: PartialProperties<AreaEntity>) {
-    super();
+    super(data);
     if (data) {
       Object.assign(this, data);
     }

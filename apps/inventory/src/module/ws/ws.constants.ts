@@ -3,4 +3,6 @@ export enum WS_CHANNELS {
   PONG = 'pong',
   UPDATE_CARD = 'update-card',
   REQUEST_SCAN_EMPLOYEE = 'request-scan-employee',
+  JOIN = 'join',
+  LEAVE = 'leave',
 }

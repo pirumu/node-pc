@@ -4,7 +4,7 @@ import { RefHelper } from '@dals/mongo/helpers';
 import { BaseController } from '@framework/controller';
 import { AppHttpException } from '@framework/exception';
 import { ApiDocs, ApiSignatureSecurity, ControllerDocs } from '@framework/swagger';
-import { Body, Controller, Headers, Param, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Headers, Param, Post, Query } from '@nestjs/common';
 
 import { WsGateway } from '../ws';
 
@@ -115,7 +115,6 @@ export class AuthController extends BaseController {
     }
     try {
       const responses = await this._authService.loginByCard(cardId);
-
       responses.forEach((res) => {
         if (res[0] === 'none') {
           this._wsGateway.sendMessage('scan-employee' as any, { success: true, data: res[1] });

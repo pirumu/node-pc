@@ -16,32 +16,67 @@ export class PortService {
       portId?: string;
       status?: PortStatus;
     },
-    populate?: boolean,
   ): Promise<PaginatedResult<PortEntity>> {
     const { status, portId } = filter;
 
-    const where: FilterQuery<PortEntity> = {};
+    const matchStage: any = {};
 
     if (status) {
-      where.status = status;
+      matchStage.status = status;
     }
 
     if (portId) {
-      where.port._id = new ObjectId(portId);
+      matchStage._id = new ObjectId(portId);
     }
-    const options: FindOptions<PortEntity, keyof PortEntity> = {
-      limit: limit,
-      offset: (page - 1) * limit,
-      populate: populate ? ['loadcells'] : [],
-      orderBy: { name: 'ASC', path: 'ASC' },
-    };
-    const [rows, count] = await this._portRepository.findAndCount(where, options);
+
+    const pipeline = [
+      ...(Object.keys(matchStage).length > 0 ? [{ $match: matchStage }] : []),
+      {
+        $lookup: {
+          from: 'loadcells',
+          localField: '_id',
+          foreignField: 'portId',
+          as: 'loadcells',
+        },
+      },
+      {
+        $match: {
+          loadcells: { $ne: [], $exists: true },
+        },
+      },
+      {
+        $project: {
+          _id: 1,
+          name: 1,
+          path: 1,
+          status: 1,
+          createdAt: 1,
+          updatedAt: 1,
+          loadcells: 1,
+        },
+      },
+      { $sort: { name: 1, path: 1 } },
+      {
+        $facet: {
+          data: [{ $skip: (page - 1) * limit }, { $limit: limit }],
+          count: [{ $count: 'total' }],
+        },
+      },
+    ];
+
+    const result = await this._portRepository.aggregate(pipeline);
+
+    const data = result[0]?.data || [];
+    const total = result[0]?.count[0]?.total || 0;
+
+    const entities = data.map((item: any) => this._portRepository.map(item));
+
     return new PaginatedResult(
-      rows,
+      entities,
       new PaginationMeta({
         limit,
         page,
-        total: count,
+        total,
       }),
     );
   }

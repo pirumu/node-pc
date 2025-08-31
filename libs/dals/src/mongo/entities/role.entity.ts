@@ -33,7 +33,7 @@ export class RoleEntity extends AbstractEntity {
   ownerKeys: RoleKey[] = [];
 
   constructor(data?: PartialProperties<RoleEntity>) {
-    super();
+    super(data);
     if (data) {
       Object.assign(this, data);
     }

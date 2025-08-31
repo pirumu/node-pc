@@ -46,6 +46,9 @@ export class CalibrationData {
   @Property({ default: 0 })
   calibratedQuantity = 0;
 
+  @Property({ default: 0 })
+  calculatedWeight = 0;
+
   @Property({ default: null, nullable: true })
   calibrationDue: Date | null = null;
 }
@@ -159,18 +162,20 @@ export class LoadcellEntity extends AbstractEntity {
   heartbeat: number = 0;
 
   constructor(data?: PartialProperties<LoadcellEntity>) {
-    super();
+    super(data);
     if (data) {
       Object.assign(this, data);
     }
   }
 
-  public unassign(): void {
-    this.metadata = new LoadcellMetadata();
-    this.item = Reference.create(new ItemEntity());
-    this.bin = Reference.create(new BinEntity());
-    this.liveReading = new LiveReading();
+  public reset(): void {
+    this.hardwareId = 0;
+    this.port = null;
     this.state = new LoadcellState();
+    this.liveReading = new LiveReading();
     this.calibration = new CalibrationData();
+    this.availableQuantity = 0;
+    this.availableQuantity = 0;
+    this.damageQuantity = 0;
   }
 }

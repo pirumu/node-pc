@@ -89,7 +89,7 @@ export class ItemEntity extends AbstractEntity {
   loadcells = new Collection<LoadcellEntity>(this);
 
   constructor(data?: PartialProperties<ItemEntity>) {
-    super();
+    super(data);
     if (data) {
       Object.assign(this, data);
     }

@@ -1,11 +1,10 @@
-import { Nullable, PartialProperties } from '@framework/types';
+import { Nullable, PartialProperties, Properties } from '@framework/types';
 import { Entity, Property, Enum, ManyToOne, OneToMany, Collection, Ref, Embeddable, Embedded } from '@mikro-orm/core';
 
 import { AbstractEntity } from './abstract.entity';
 // eslint-disable-next-line import/no-cycle
 import { TransactionEventEntity } from './transaction-event.entity';
 import { UserEntity } from './user.entity';
-import { AnotherItem, ItemToReplenish, ItemToReturn, ItemToTake, Location } from '@common/business/types';
 
 export enum TransactionType {
   ISSUE = 'ISSUE',
@@ -46,8 +45,11 @@ export class TransactionEntity extends AbstractEntity {
   @Property()
   currentStepId: string;
 
-  @Embedded(() => ExecutionStep)
-  executionSteps: ExecutionStep[] = [];
+  @Embedded(() => TxExecutionStep, { array: true })
+  executionSteps: TxExecutionStep[] = [];
+
+  @Embedded(() => TxWorkingOrder, { array: true })
+  workingOrders: TxWorkingOrder[] = [];
 
   @Property({ type: 'json', nullable: true })
   lastError?: Record<string, any>;
@@ -56,7 +58,7 @@ export class TransactionEntity extends AbstractEntity {
   completedAt?: Date;
 
   constructor(data?: PartialProperties<TransactionEntity>) {
-    super();
+    super(data);
     if (data) {
       Object.assign(this, data);
     }
@@ -66,11 +68,11 @@ export class TransactionEntity extends AbstractEntity {
     this.currentStepId = stepId;
   }
 
-  public currentStep(stepId: string): Nullable<ExecutionStep> {
+  public currentStep(stepId: string): Nullable<TxExecutionStep> {
     return this.executionSteps.find((es) => es.stepId === stepId) || null;
   }
 
-  public nextStep(stepId: string): Nullable<ExecutionStep> {
+  public nextStep(stepId: string): Nullable<TxExecutionStep> {
     const index = this.executionSteps.findIndex((es) => es.stepId === stepId);
     return this.executionSteps[index + 1] || null;
   }
@@ -81,28 +83,118 @@ export class TransactionEntity extends AbstractEntity {
 }
 
 @Embeddable()
-export class ExecutionStep {
+export class TxWorkingOrder {
+  @Property({ type: 'string' })
+  workingOderId: string;
+  @Property({ type: 'string', nullable: true })
+  areaId: string | null;
+
+  constructor(props: Properties<TxWorkingOrder>) {
+    Object.assign(this, props);
+  }
+}
+
+@Embeddable()
+export class TxLocation {
+  @Property({ type: 'string' })
+  binId: string;
+  @Property({ type: 'string' })
+  binName: string;
+  @Property({ type: 'string' })
+  cabinetId: string;
+  @Property({ type: 'string' })
+  cabinetName: string;
+  @Property({ type: 'string' })
+  clusterId: string;
+  @Property({ type: 'string' })
+  clusterName: string;
+  @Property({ type: 'string' })
+  siteId: string;
+  @Property({ type: 'string' })
+  siteName: string;
+
+  constructor(props: Properties<TxLocation>) {
+    Object.assign(this, props);
+  }
+}
+
+@Embeddable()
+export class TxItemToTake {
+  @Property({ type: 'string' })
+  itemId: string;
+  @Property({ type: 'string' })
+  name: string;
+  @Property({ type: 'integer' })
+  currentQty: number;
+  @Property({ type: 'integer' })
+  requestQty: number;
+  @Property({ type: 'integer' })
+  loadcellId: string;
+
+  constructor(props: Properties<TxItemToTake>) {
+    Object.assign(this, props);
+  }
+}
+
+@Embeddable()
+export class TxAnotherItem {
+  binId: string;
+  name: string;
+  itemId: string;
+  loadcellId: string;
+  currentQty: number;
+
+  constructor(props: Properties<TxAnotherItem>) {
+    Object.assign(this, props);
+  }
+}
+
+@Embeddable()
+export class TXItemToReturn extends TxItemToTake {
+  @Property({ type: 'string' })
+  conditionId: string;
+
+  constructor(props: Properties<TXItemToReturn>) {
+    super(props);
+    Object.assign(this, props);
+  }
+}
+
+@Embeddable()
+export class TxItemToReplenish extends TxItemToTake {
+  constructor(props: Properties<TxItemToReplenish>) {
+    super(props);
+    Object.assign(this, props);
+  }
+}
+
+@Embeddable()
+export class TxExecutionStep {
   @Property({ type: 'string' })
   stepId: string;
 
   @Property({ type: 'string' })
   binId: string;
 
-  @Property({ type: 'json' })
-  itemsToIssue: ItemToTake[] = [];
+  @Embedded(() => TxItemToTake, { array: true })
+  itemsToIssue: TxItemToTake[] = [];
 
-  @Property({ type: 'json' })
-  itemsToReturn: ItemToReturn[] = [];
+  @Embedded(() => TXItemToReturn, { array: true })
+  itemsToReturn: TXItemToReturn[] = [];
 
-  @Property({ type: 'json' })
-  itemsToReplenish: ItemToReplenish[] = [];
+  @Embedded(() => TxItemToReplenish, { array: true })
+  itemsToReplenish: TxItemToReplenish[] = [];
 
-  @Property({ type: 'json' })
-  keepTrackItems: AnotherItem[] = [];
+  @Embedded(() => TxAnotherItem, { array: true })
+  keepTrackItems: TxAnotherItem[] = [];
 
-  @Property({ type: 'json' })
-  location: Location;
+  @Embedded(() => TxLocation, { object: true })
+  location: TxLocation;
 
   @Property({ type: 'array' })
   instructions: string[] = [];
+
+  constructor(props: Properties<TxExecutionStep>) {
+    Object.assign(this, props);
+  }
 }

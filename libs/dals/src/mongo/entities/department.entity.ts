@@ -37,7 +37,7 @@ export class DepartmentEntity extends AbstractEntity {
   owner: Ref<UserEntity> | null;
 
   constructor(data?: PartialProperties<DepartmentEntity>) {
-    super();
+    super(data);
     if (data) {
       Object.assign(this, data);
     }

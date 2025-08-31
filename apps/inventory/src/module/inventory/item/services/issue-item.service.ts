@@ -52,12 +52,15 @@ export class IssueItemService {
     // Group the plan by bins to create simple execution steps
     // Each step represents one bin visit with clear instructions
     const steps = this._groupPlanByBin(plan);
-
+    if (!steps || steps.length === 0) {
+      throw AppHttpException.internalServerError({ message: 'Can not issue.' });
+    }
     const transactionId = await this._itemProcessingService.createAndStartTransaction({
       userId: user.id,
       transactionType: TransactionType.ISSUE,
       totalRequestQty: totalRequestQty,
       executionSteps: steps,
+      workingOrders: requestedItems.map((i) => i.workingOrders || []).flat(),
     });
 
     return { transactionId };
@@ -75,12 +78,13 @@ export class IssueItemService {
   private async _planWithdrawal(user: AuthUserDto, requestedItems: ItemRequest['items'], expiryDate: number) {
     // Extract all item IDs from the request for batch queries
     const itemIds = requestedItems.map((item) => item.itemId);
+    const binIds = requestedItems.map((item) => item.binId);
 
     // Fetch data in parallel for performance:
     // 1. Available loadcells (sensors) containing requested items (not expired)
     // 2. User's historical bin usage for these items (for prioritization)
     const [availableLoadcells, userIssueHistories] = await Promise.all([
-      this._repository.findItemsForIssue({ itemIds: itemIds, expiryDate }),
+      this._repository.findItemsForIssue({ itemIds: itemIds, binIds: binIds, expiryDate }),
       this._repository.findUserIssueHistories(user.id, itemIds),
     ]);
 
@@ -257,7 +261,7 @@ export class IssueItemService {
       const instructions = [
         `Step ${stepIndex}: Go to cabinet ${location.cabinetName} and bin ${location.binName}`,
         ...itemsToIssue.map((item) => `Take ${item.requestQty} units of ${item.name}`),
-        `Close ${binId}`,
+        `Close bin ${location.binName}`,
       ];
 
       // Create the step

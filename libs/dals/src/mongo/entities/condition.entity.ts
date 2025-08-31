@@ -20,7 +20,7 @@ export class ConditionEntity extends AbstractEntity {
   description?: string;
 
   constructor(data?: PartialProperties<ConditionEntity>) {
-    super();
+    super(data);
     if (data) {
       Object.assign(this, data);
     }

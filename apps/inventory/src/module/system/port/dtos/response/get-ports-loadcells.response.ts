@@ -13,6 +13,11 @@ export class LoadcellState {
   @Type(() => String)
   @Expose({ toClassOnly: true })
   status: string;
+
+  @ApiProperty()
+  @Type(() => Boolean)
+  @Expose({ toClassOnly: true })
+  isCalibrated: boolean;
 }
 
 export class CalibrationData {

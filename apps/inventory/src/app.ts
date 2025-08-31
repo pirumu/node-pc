@@ -9,10 +9,10 @@ import { INestApplication, Logger } from '@nestjs/common';
 import { ShutdownSignal } from '@nestjs/common/enums/shutdown-signal.enum';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
+import { MqttOptions, Transport } from '@nestjs/microservices';
 
 import { AppModule } from './app.module';
 import { MqttConfig } from './config/mqtt.config';
-import { MqttOptions, Transport } from '@nestjs/microservices';
 
 export class Application {
   private static async _bootstrapMicroservices(app: INestApplication, configService: ConfigService): Promise<void> {

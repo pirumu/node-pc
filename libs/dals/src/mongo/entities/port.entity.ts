@@ -32,7 +32,7 @@ export class PortEntity extends AbstractEntity {
   loadcells = new Collection<LoadcellEntity>(this);
 
   constructor(data?: PartialProperties<PortEntity>) {
-    super();
+    super(data);
     if (data) {
       Object.assign(this, data);
     }

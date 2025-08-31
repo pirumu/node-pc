@@ -34,7 +34,7 @@ export class IssueHistoryEntity extends AbstractEntity {
   locations: IssuedItemLocation[] = [];
 
   constructor(data?: PartialProperties<IssueHistoryEntity>) {
-    super();
+    super(data);
     if (data) {
       Object.assign(this, data);
     }

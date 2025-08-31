@@ -35,7 +35,7 @@ export class TransactionEventEntity extends AbstractEntity {
   quantityChanged!: number;
 
   constructor(data?: PartialProperties<TransactionEventEntity>) {
-    super();
+    super(data);
     if (data) {
       Object.assign(this, data);
     }

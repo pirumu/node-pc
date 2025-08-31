@@ -12,7 +12,7 @@ export class SystemEntity extends AbstractEntity {
   status!: string;
 
   constructor(data?: PartialProperties<SystemEntity>) {
-    super();
+    super(data);
     if (data) {
       Object.assign(this, data);
     }

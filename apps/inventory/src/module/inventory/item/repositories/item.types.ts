@@ -28,7 +28,7 @@ export type PaginatedIssuableItemsOutput = {
   total: number;
 };
 
-export type ItemsForIssueInput = { expiryDate: number; itemIds: string[] };
+export type ItemsForIssueInput = { expiryDate: number; itemIds: string[]; binIds: string[] };
 
 // return
 export type FindReturnableItemsParams = {

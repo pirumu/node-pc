@@ -38,7 +38,14 @@ export class ItemController extends BaseController {
   @Get(ITEM_ROUTES.ISSUE)
   public async getIssuableItems(@Query() query: GetItemRequest): Promise<PaginationResponse<IssuableItemResponse>> {
     const { rows, meta } = await this._issueItemService.getIssuableItems(query);
-    const data = rows.map((row) => this.toDto<IssuableItemResponse>(IssuableItemResponse, row));
+    const data = rows.map((row) =>
+      this.toDto<IssuableItemResponse>(IssuableItemResponse, {
+        ...row,
+        id: row.id.toString(),
+        itemTypeId: row.itemTypeId.toString(),
+        binId: row.binId.toString(),
+      }),
+    );
     return new PaginationResponse(data, meta);
   }
 

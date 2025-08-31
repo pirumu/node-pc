@@ -1,13 +1,23 @@
 import { PaginatedResult, PaginationMeta } from '@common/dto';
-import { LoadcellEntity, ItemEntity, BinEntity, LoadcellMetadata } from '@dals/mongo/entities';
+import {
+  LoadcellEntity,
+  ItemEntity,
+  BinEntity,
+  LoadcellMetadata,
+  BinState,
+  LoadcellState,
+  CalibrationData,
+  LiveReading,
+} from '@dals/mongo/entities';
 import { AppHttpException } from '@framework/exception';
-import { PublisherService } from '@framework/publisher';
-import { EntityRepository, FindOptions, ObjectId, Transactional } from '@mikro-orm/mongodb';
+import { PublisherService, Transport } from '@framework/publisher';
+import { EntityManager, EntityRepository, FindOptions, ObjectId, Reference, Transactional } from '@mikro-orm/mongodb';
 import { InjectRepository } from '@mikro-orm/nestjs';
 import { Injectable, Logger } from '@nestjs/common';
 import { FilterQuery } from 'mongoose';
 
 import { CalibrateLoadcellRequest, GetLoadCellsRequest } from './dtos/request';
+import { EVENT_TYPE } from '@common/constants';
 // import { DeviceActivatedEvent } from './events';
 
 @Injectable()
@@ -16,6 +26,7 @@ export class LoadcellService {
 
   constructor(
     private readonly _publisherService: PublisherService,
+    private readonly _em: EntityManager,
     @InjectRepository(ItemEntity) private readonly _itemRepository: EntityRepository<ItemEntity>,
     @InjectRepository(BinEntity) private readonly _binRepository: EntityRepository<BinEntity>,
     @InjectRepository(LoadcellEntity) private readonly _loadcellRepository: EntityRepository<LoadcellEntity>,
@@ -49,26 +60,50 @@ export class LoadcellService {
     return this._loadcellRepository.findOneOrFail(new ObjectId(id));
   }
 
-  @Transactional()
-  public async unassign(loadcellId: string): Promise<boolean> {
-    const loadcell = await this._loadcellRepository.findOne(new ObjectId(loadcellId), { populate: ['bin'] });
-    if (!loadcell) {
-      throw AppHttpException.badRequest({ message: `loadcell ${loadcellId} not found` });
+  public async unassign(loadcellId: string, itemId: string): Promise<boolean> {
+    const loadcellToDecommission = await this._em.findOne(
+      LoadcellEntity,
+      {
+        _id: new ObjectId(loadcellId),
+        state: { isCalibrated: true },
+        item: new ObjectId(itemId),
+      },
+      { populate: ['item', 'bin', 'port'] },
+    );
+
+    if (!loadcellToDecommission) {
+      return true;
+    }
+    if (!loadcellToDecommission.item) {
+      throw AppHttpException.internalServerError({
+        message: `Data Integrity Error: Calibrated loadcell ${loadcellId} has no item assigned.`,
+      });
+    }
+    if (!loadcellToDecommission.port || !loadcellToDecommission.hardwareId) {
+      throw AppHttpException.internalServerError({
+        message: `Data Integrity Error: Calibrated loadcell ${loadcellId} is missing hardware information.`,
+      });
     }
 
-    const binId = loadcell.bin?._id;
+    const hardwareId = loadcellToDecommission.hardwareId;
+    const port = loadcellToDecommission.port.unwrap();
 
-    loadcell.unassign();
+    const newRawLoadcell = new LoadcellEntity({
+      hardwareId: hardwareId,
+      port: Reference.create(port),
+      code: `RAW-${hardwareId}`,
+      label: `LC#${hardwareId}`,
+      state: new LoadcellState(),
+      calibration: new CalibrationData(),
+      metadata: new LoadcellMetadata(),
+      liveReading: new LiveReading(),
+    });
 
-    await this._loadcellRepository.getEntityManager().persistAndFlush(loadcell);
+    loadcellToDecommission.reset();
 
-    if (binId) {
-      const bin = await this._binRepository.findOne(binId);
-      if (bin) {
-        bin.removeLoadcell(loadcell._id);
-        await this._binRepository.getEntityManager().persistAndFlush(bin);
-      }
-    }
+    this._em.persist(newRawLoadcell);
+
+    await this._em.flush();
     return true;
   }
 
@@ -77,14 +112,9 @@ export class LoadcellService {
     if (!loadcell) {
       throw AppHttpException.badRequest({ message: `Loadcell ${id} not found` });
     }
-    // await this._publisherService.publish(
-    //   Transport.MQTT,
-    //   '',
-    //   new DeviceActivatedEvent({
-    //     deviceId: loadcell.id,
-    //     deviceNumId: loadcell.hardwareId,
-    //   }),
-    // );
+    if (loadcell.hardwareId && loadcell.hardwareId !== 0) {
+      await this._publisherService.publish(Transport.MQTT, EVENT_TYPE.LOADCELL.START_READING, { hardwareIds: [loadcell.hardwareId] });
+    }
     return true;
   }
 
@@ -94,166 +124,101 @@ export class LoadcellService {
    * the operational cluster. It can then be moved or swapped to the target loadcell
    * before calibration. The service does not create new item data blocks.
    */
-  @Transactional()
   public async calibrate(loadcellId: string, calibrateData: CalibrateLoadcellRequest): Promise<boolean> {
-    const { itemId } = calibrateData;
+    const { itemId, zeroWeight, measuredWeight } = calibrateData;
 
-    //  Step 1: Initial Data Fetching and Validation
-    // Fetch all required entities. We must populate 'cluster' to determine the operational scope.
-    const [targetLoadcell, itemToCalibrate] = await Promise.all([
-      this._loadcellRepository.findOne(new ObjectId(loadcellId), { populate: ['bin', 'cluster'] }),
-      this._itemRepository.findOne(new ObjectId(itemId)),
-    ]);
+    const targetLoadcell = await this._loadcellRepository.findOne(new ObjectId(loadcellId), { populate: ['item', 'bin'] });
 
-    // Perform critical initial validations.
     if (!targetLoadcell) {
-      throw AppHttpException.badRequest({ message: `Loadcell ${loadcellId} not found` });
-    }
-    if (!targetLoadcell.bin) {
-      throw AppHttpException.badRequest({ message: `Loadcell ${loadcellId} must be linked to a bin before calibration` });
-    }
-    if (!targetLoadcell.cluster) {
-      throw AppHttpException.internalServerError({
-        message: `Configuration Error: Loadcell ${targetLoadcell.id} is not associated with any cluster.`,
-      });
-    }
-    if (!itemToCalibrate) {
-      throw AppHttpException.badRequest({ message: `Item ${itemId} not found` });
+      throw AppHttpException.badRequest({ message: `Selected Loadcell ${loadcellId} not found.` });
     }
 
-    // Step 2: Define Operational Scope and Fetch Sibling Loadcells
-    // The scope is all loadcells within the same cluster as the target loadcell.
-    const allOtherLoadcellsInScope = await this._loadcellRepository.find(
-      {
-        cluster: targetLoadcell.cluster._id,
-        _id: { $ne: targetLoadcell._id },
-      },
-      { populate: ['bin'] },
-    );
-
-    //  Step 3: Handle Re-calibration Scenario (Guard Clause)
-    // If the target loadcell is already calibrated, it can only be re-calibrated for the SAME item.
     if (targetLoadcell.state.isCalibrated) {
-      if (!targetLoadcell.item || !targetLoadcell.item._id.equals(itemToCalibrate._id)) {
-        throw AppHttpException.badRequest({
-          message: `Loadcell is already calibrated with a different item. Cannot reassign.`,
-        });
-      }
-      return this._recalibrateExistingItem(targetLoadcell, calibrateData);
-    }
+      if (!targetLoadcell.item?._id.equals(itemId)) {
+        // await this._handleSwapLoadcell(targetLoadcell, itemId);
 
-    //  Step 4: Handle Item Assignment: Swap or Move only
-    // Find the source loadcell that currently holds the item we want to calibrate.
-    const sourceLoadcell = allOtherLoadcellsInScope.find((lc) => lc.item!._id.equals(itemToCalibrate._id));
-
-    if (sourceLoadcell) {
-      // Case A: Item is found in a `sourceLoadcell`. This is a SWAP or MOVE operation.
-      if (sourceLoadcell.state.isCalibrated) {
         throw AppHttpException.badRequest({
-          message: `Item "${itemToCalibrate.name}" is already calibrated in loadcell ${sourceLoadcell.id}. Cannot be moved or swapped.`,
+          message: `Loadcell is already calibrated with item "${targetLoadcell.item?.unwrap().name}". Cannot re-calibrate with a different item.`,
         });
       }
 
-      if (targetLoadcell.item) {
-        // Subcase A.1: Target loadcell also has an item. This is a true SWAP.
-        if (!sourceLoadcell.bin?.id) {
-          throw AppHttpException.internalServerError({
-            message: `Data Integrity Error: Loadcell ${sourceLoadcell.id} must have a bin to participate in a swap.`,
-          });
-        }
-        const sourceMetadata = sourceLoadcell.metadata;
-        sourceLoadcell.metadata = targetLoadcell.metadata;
-        targetLoadcell.metadata = sourceMetadata;
-      } else {
-        // Subcase A.2: Target loadcell is empty. This is a MOVE.
-        targetLoadcell.metadata = sourceLoadcell.metadata;
-        sourceLoadcell.metadata = new LoadcellMetadata();
-      }
-    } else {
-      // Case B: Item is NOT found elsewhere. THIS IS AN INVALID SCENARIO.
-      // If the source loadcell for the item cannot be found within the operational scope,
-      // we cannot proceed. The embedded item data (with max, min, etc.) does not exist
-      // in this context, and this service cannot create it from scratch.
-      throw AppHttpException.badRequest({
-        message: `Cannot calibrate with item "${itemToCalibrate.name}". `,
-        data: {
-          description: `The specified item does not exist on any loadcell within this cluster. Please ensure the item is present in the cluster before calibrating.`,
-        },
+      const metadata = targetLoadcell.metadata;
+      const netWeight = measuredWeight - zeroWeight;
+      const maxQuantity = metadata.max;
+      const unitWeight = maxQuantity > 0 ? netWeight / maxQuantity : 0;
+      const calculatedQuantity = unitWeight > 0 ? Math.max(0, Math.floor(netWeight / unitWeight)) : 0;
+
+      Object.assign(targetLoadcell.calibration, {
+        unitWeight: unitWeight,
+        zeroWeight: zeroWeight,
+        calibratedQuantity: calculatedQuantity,
+        calculatedWeight: measuredWeight,
       });
+      targetLoadcell.availableQuantity = calculatedQuantity;
+      targetLoadcell.state.isUpdatedWeight = true;
+    } else {
+      const sourceLoadcell = await this._loadcellRepository.findOne(
+        { item: new ObjectId(itemId), state: { isCalibrated: false } },
+        { populate: ['bin'] },
+      );
+
+      if (!sourceLoadcell) {
+        throw AppHttpException.badRequest({
+          message: `Cloud data for item ${itemId} not found or is already part of another calibrated loadcell.`,
+        });
+      }
+      if (!sourceLoadcell.bin) {
+        throw AppHttpException.internalServerError({ message: `Cloud data for item ${itemId} is not assigned to a Bin.` });
+      }
+      if (targetLoadcell.id === sourceLoadcell.id) {
+        throw AppHttpException.badRequest({ message: `Cannot merge a cloud-synced loadcell with itself.` });
+      }
+
+      sourceLoadcell.code = targetLoadcell.code;
+      sourceLoadcell.hardwareId = targetLoadcell.hardwareId;
+      sourceLoadcell.port = targetLoadcell.port;
+      sourceLoadcell.heartbeat = targetLoadcell.heartbeat;
+
+      const metadata = sourceLoadcell.metadata;
+      const netWeight = measuredWeight - zeroWeight;
+      const maxQuantity = metadata.max;
+      const unitWeight = maxQuantity > 0 ? netWeight / maxQuantity : 0;
+      const calculatedQuantity = unitWeight > 0 ? Math.max(0, Math.floor(netWeight / unitWeight)) : 0;
+
+      if (calculatedQuantity > metadata.max) {
+        sourceLoadcell.metadata.max = calculatedQuantity;
+      }
+
+      Object.assign(sourceLoadcell.calibration, {
+        unitWeight: unitWeight,
+        zeroWeight: zeroWeight,
+        calibratedQuantity: calculatedQuantity,
+        calculatedWeight: measuredWeight,
+      });
+      Object.assign(sourceLoadcell.state, {
+        isUpdatedWeight: true,
+        status: 'IDLE',
+        isCalibrated: true,
+      });
+      sourceLoadcell.availableQuantity = calculatedQuantity;
+
+      const bin = sourceLoadcell.bin.unwrap();
+      if (!bin.state) {
+        bin.state = new BinState();
+      }
+      bin.state.isLocked = true;
+      this._em.remove(targetLoadcell);
     }
-
-    //  Step 5: Perform Calculations and Update Loadcell-Specific Data
-    // At this point, `targetLoadcell` is guaranteed to hold the correct `item` object.
-    if (!targetLoadcell.item || !targetLoadcell.item._id.equals(itemToCalibrate._id)) {
-      throw AppHttpException.internalServerError({ message: `Incorrect item on target loadcell after all operations.` });
-    }
-
-    // The `item` data block is treated as immutable. We only read from it.
-    const { zeroWeight, measuredWeight } = calibrateData;
-    const metadata = targetLoadcell.metadata;
-    const netWeight = measuredWeight - zeroWeight;
-    const maxQuantity = metadata.max;
-    const unitWeight = maxQuantity > 0 ? netWeight / maxQuantity : 0;
-    const calculatedQuantity = unitWeight > 0 ? Math.max(0, Math.floor(netWeight / unitWeight)) : 0;
-
-    // Update only loadcell-specific fields.
-    Object.assign(targetLoadcell.calibration, {
-      quantity: calculatedQuantity,
-      maxQuantity: maxQuantity,
-      zeroWeight: zeroWeight,
-      unitWeight: unitWeight,
-      damageQuantity: 0,
-    });
-
-    Object.assign(targetLoadcell.state, {
-      isUpdatedWeight: true,
-      status: 'idle',
-      isCalibrated: true,
-    });
-    targetLoadcell.bin.unwrap().state.isLocked = true;
-
-    //  Step 6: Persist All Changes
-    await this._loadcellRepository.getEntityManager().flush();
-
+    await this._em.flush();
     return true;
   }
 
-  /**
-   * Handles the logic for re-calibrating an already calibrated loadcell.
-   * This is a separate flow that only updates the 'calibration' data block
-   * with new reference values. It does not alter the 'reading' data, which
-   * is assumed to be updated by a separate hardware-facing process.
-   */
-  private async _recalibrateExistingItem(loadcell: LoadcellEntity, data: CalibrateLoadcellRequest): Promise<boolean> {
-    this._logger.log(`Re-calibrating loadcell ${loadcell.id} for the same item.`);
+  private async _handleSwapLoadcell(targetLoadcell: LoadcellEntity, newItemId: string): Promise<void> {
+    const swapLoadcell = await this._loadcellRepository.findOne(new ObjectId(newItemId));
 
-    const { zeroWeight, measuredWeight } = data;
-    const metadata = loadcell.metadata; // We know item exists from the guard clause in the main function.
-
-    //  Step 1: Recalculate Calibration Parameters
-    // Calculate the new reference values based on the provided calibration weights.
-    const netWeight = measuredWeight - zeroWeight;
-    const unitWeight = metadata.max > 0 ? netWeight / metadata.max : 0;
-
-    // This is the theoretical quantity based on the new calibration.
-    // It's useful for the calibration record but doesn't reflect the live reading.
-    const calculatedQuantity = unitWeight > 0 ? Math.max(0, Math.floor(netWeight / unitWeight)) : 0;
-
-    //  Step 2: Update ONLY the 'calibration' data block
-    // The goal is to set a new "standard" for the loadcell.
-    // We do NOT touch the `reading` object here.
-    Object.assign(loadcell.calibration, {
-      quantity: calculatedQuantity, // Update the reference quantity
-      maxQuantity: metadata.max, // Re-affirm the max quantity for this calibration event
-      zeroWeight: zeroWeight, // Set the new zero-point reference
-      unitWeight: unitWeight, // Set the new unit weight reference
-    });
-
-    //  Step 3: Persist the changes
-    // The @Transactional decorator on the main `calibrate` function will handle the flush.
-    // However, if this function could be called independently, an explicit flush is safer.
-    // Since it's a private helper in a transactional method, we can rely on the main flush.
-    await this._loadcellRepository.getEntityManager().flush(); // This line is optional here.
-    return true;
+    if (swapLoadcell) {
+      targetLoadcell._id = swapLoadcell._id;
+      swapLoadcell._id = targetLoadcell._id;
+    }
   }
 }

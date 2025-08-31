@@ -1,38 +1,40 @@
+import { Properties } from '@framework/types';
 import { ApiProperty } from '@nestjs/swagger';
 import { Expose, Type } from 'class-transformer';
 
-export class JobCardResponse {
+export class WorkingOrderResponse {
   @ApiProperty()
+  @Expose({})
   @Type(() => String)
   id: string;
 
   @ApiProperty()
+  @Expose({})
   @Type(() => String)
   wo: string;
 
   @ApiProperty()
   @Type(() => String)
-  @Expose({ name: 'vehicle_num', toPlainOnly: true })
+  @Expose({})
   @Type(() => String)
   vehicleNum: string;
 
   @ApiProperty()
-  @Expose({ name: 'vehicle_type', toPlainOnly: true })
+  @Expose({})
   @Type(() => String)
   vehicleType: string;
 
   @ApiProperty()
   @Type(() => String)
-  @Expose({ name: 'platform', toPlainOnly: true })
+  @Expose({})
   platform: string;
 
   @ApiProperty()
-  @Type(() => Number)
-  @Expose({ name: 'status', toPlainOnly: true })
-  status: number;
-
-  @ApiProperty()
   @Type(() => String)
-  @Expose({ name: 'card_number', toPlainOnly: true })
+  @Expose({})
   cardNumber: string;
+
+  constructor(props: Properties<WorkingOrderResponse>) {
+    Object.assign(this, props);
+  }
 }
