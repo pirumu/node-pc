@@ -21,6 +21,17 @@ export class Application {
 
   private static async _connectMqtt(app: INestApplication, configService: ConfigService): Promise<void> {
     const mqttConfig = configService.getOrThrow<MqttConfig>(CONFIG_KEY.MQTT);
+    const appConfig = configService.getOrThrow<AppConfig>(CONFIG_KEY.APP);
+    app.connectMicroservice<TcpOptions>(
+      {
+        transport: Transport.TCP,
+        options: {
+          host: '0.0.0.0',
+          port: appConfig.port,
+        },
+      },
+      { inheritAppConfig: true },
+    );
     app.connectMicroservice<MqttOptions>(
       {
         transport: Transport.MQTT,

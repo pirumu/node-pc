@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsMongoId, IsNumber, IsOptional, Min } from 'class-validator';
+import { Transform } from 'class-transformer';
+import { IsMongoId, IsNumber, IsOptional } from 'class-validator';
 
 export class CalibrateLoadcellRequest {
   @ApiProperty({
@@ -14,7 +15,7 @@ export class CalibrateLoadcellRequest {
     example: 5.2,
   })
   @IsNumber()
-  @Min(0)
+  @Transform(({ value }) => Number(value))
   zeroWeight: number;
 
   @ApiProperty({
@@ -22,7 +23,7 @@ export class CalibrateLoadcellRequest {
     example: 805.2,
   })
   @IsNumber()
-  @Min(0)
+  @Transform(({ value }) => Number(value))
   measuredWeight: number;
 
   @ApiProperty({
@@ -31,5 +32,6 @@ export class CalibrateLoadcellRequest {
   })
   @IsNumber()
   @IsOptional()
+  @Transform(({ value }) => Number(value))
   measuredQuantity?: number;
 }

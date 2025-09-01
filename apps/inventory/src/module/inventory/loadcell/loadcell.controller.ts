@@ -69,8 +69,8 @@ export class LoadcellController extends BaseController {
     responseSchema: StatusResponse,
   })
   @Post(LOADCELL_ROUTES.UNASSIGN_LOADCELL)
-  public async unassign(@Param('id') loadCellId: string): Promise<StatusResponse> {
-    const isSuccess = await this._loadcellService.unassign(loadCellId);
+  public async unassign(@Param('id') loadCellId: string, @Param('itemId') itemId: string): Promise<StatusResponse> {
+    const isSuccess = await this._loadcellService.unassign(loadCellId, itemId);
 
     return this.toDto<StatusResponse>(StatusResponse, { status: isSuccess });
   }

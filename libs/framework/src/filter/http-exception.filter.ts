@@ -27,7 +27,6 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         stack: this.isDebug ? exception.stack : null,
       };
     } else {
-      console.log(exception);
       // Handle unexpected errors
       status = HttpStatus.INTERNAL_SERVER_ERROR;
       errorResponse = {

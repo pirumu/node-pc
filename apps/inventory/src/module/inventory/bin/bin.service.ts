@@ -105,10 +105,10 @@ export class BinService {
         totalQtyOH = bin.items.reduce((sum, item) => sum + item.qty, 0);
         totalItems = bin.items.length;
         totalItemLoadcells = 0;
-        hasExpiredItem = bin.items.some((item) => item.expiryDate && item.expiryDate.getTime() < now.getTime());
+        hasExpiredItem = bin.items.every((item) => item.expiryDate && item.expiryDate.getTime() < now.getTime());
       }
 
-      if (totalQtyOH <= 0 || hasExpiredItem) {
+      if (hasExpiredItem) {
         status = 'unavailable';
       } else if (totalQtyOH >= bin.minQty && totalQtyOH <= bin.criticalQty) {
         status = 'low-critical';
@@ -263,8 +263,6 @@ export class BinService {
       totalQtyOH = bin.items.reduce((sum, item) => sum + item.qty, 0);
     }
 
-    // --- BƯỚC 4: TÍNH TOÁN TRẠNG THÁI TỔNG THỂ CHO BIN ---
-    // Trạng thái tổng thể của Bin vẫn có thể hữu ích
     let binStatus: 'good' | 'on-loan' | 'low/critical';
     if (onLoanItemIds.size > 0) {
       binStatus = 'on-loan';
@@ -274,7 +272,6 @@ export class BinService {
       binStatus = 'good';
     }
 
-    // --- BƯỚC 5: TRẢ VỀ RESPONSE HOÀN CHỈNH ---
     return {
       id: bin.id,
       x: bin.x,

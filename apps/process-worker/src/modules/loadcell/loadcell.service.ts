@@ -1,6 +1,7 @@
 import { WeightCalculatedEvent } from '@common/business/events';
-import { LOADCELL_STATUS, LoadcellEntity, PORT_STATUS, PortEntity } from '@dals/mongo/entities';
+import { LOADCELL_STATUS, LoadcellEntity, PORT_STATUS, PortEntity, Synchronization } from '@dals/mongo/entities';
 import { RefHelper } from '@dals/mongo/helpers';
+
 import { EntityManager, Reference } from '@mikro-orm/mongodb';
 import { Injectable, Logger } from '@nestjs/common';
 
@@ -14,22 +15,29 @@ export class LoadcellService {
    * Main handler to process a batch of payloads.
    * It iterates through payloads and delegate processing, ensuring one failure does not stop others.
    */
-  public async onWeighCalculated(payloads: WeightCalculatedEvent[]): Promise<void> {
+  public async onWeighCalculated(payloads: WeightCalculatedEvent[]): Promise<LoadcellEntity[]> {
     const results = await Promise.allSettled(payloads.map(async (payload) => this._processSinglePayload(payload)));
 
-    results.forEach((result, index) => {
-      if (result.status === 'rejected') {
-        this._logger.error(`Failed to process payload for path ${payloads[index].portPath} and hardwareId ${payloads[index].hardwareId}`, {
-          reason: result.reason,
-        });
-      }
-    });
+    return results
+      .map((result, index) => {
+        if (result.status === 'rejected') {
+          this._logger.error(
+            `Failed to process payload for path ${payloads[index].portPath} and hardwareId ${payloads[index].hardwareId}`,
+            {
+              reason: result.reason,
+            },
+          );
+          return null;
+        }
+        return result.value;
+      })
+      .filter((value) => value !== null);
   }
 
-  private async _processSinglePayload(payload: WeightCalculatedEvent): Promise<void> {
+  private async _processSinglePayload(payload: WeightCalculatedEvent): Promise<LoadcellEntity | null> {
     if (payload.status !== LOADCELL_STATUS.RUNNING && payload.status.toUpperCase() !== LOADCELL_STATUS.RUNNING) {
       Logger.warn('Skipping. Loadcell not running');
-      return;
+      return null;
     }
 
     try {
@@ -38,7 +46,7 @@ export class LoadcellService {
       const loadcell = await this._provisionOrGetLoadcell(em, payload);
 
       // Part 2: Update business logic for the existing loadcell.
-      await this._processLoadcellUpdate(em, loadcell, payload.weight);
+      return this._processLoadcellUpdate(em, loadcell, payload.weight);
     } catch (error) {
       Logger.error(`An unexpected error occurred while processing hardwareId ${payload.hardwareId}`, error.stack);
       throw error;
@@ -79,6 +87,7 @@ export class LoadcellService {
         currentWeight: payload.weight,
         pendingChange: 0,
       },
+      synchronization: new Synchronization(),
     });
 
     await em.persistAndFlush(newLoadcell);
@@ -100,17 +109,17 @@ export class LoadcellService {
   // PART 2: BUSINESS LOGIC UPDATE (PROCESSING)
   // =================================================================
 
-  private async _processLoadcellUpdate(em: EntityManager, loadcell: LoadcellEntity, newWeight: number): Promise<void> {
+  private async _processLoadcellUpdate(em: EntityManager, loadcell: LoadcellEntity, newWeight: number): Promise<LoadcellEntity> {
     loadcell.heartbeat = Date.now();
 
     if (!loadcell.state.isCalibrated) {
-      Logger.debug(`Skipping weight update for uncalibrated loadcell with hardwareId: ${loadcell.hardwareId}`, {
+      Logger.warn(`Skipping weight update for uncalibrated loadcell with hardwareId: ${loadcell.hardwareId}`, {
         hardwareId: loadcell.hardwareId,
         newWeight: newWeight,
       });
       loadcell.liveReading.currentWeight = newWeight;
       await em.flush();
-      return;
+      return loadcell;
     }
 
     // Step 1: Handle initial state: setting the zero-weight for the first time.
@@ -120,7 +129,7 @@ export class LoadcellService {
       loadcell.liveReading.currentWeight = newWeight;
       loadcell.state.isUpdatedWeight = true;
       await em.flush();
-      return;
+      return loadcell;
     }
 
     // Step 2: Check if the associated Bin is locked. This dictates the entire logic flow.
@@ -128,7 +137,7 @@ export class LoadcellService {
     const bin = RefHelper.getRequired(loadcell.bin, 'BinEntity');
     if (bin.state.isLocked) {
       await this._handleLockedBinUpdate(em, loadcell, newWeight);
-      return;
+      return loadcell;
     }
 
     // Step 3: Main Logic for Unlocked Bins.
@@ -158,6 +167,7 @@ export class LoadcellService {
     }
 
     await em.flush();
+    return loadcell;
   }
 
   /**

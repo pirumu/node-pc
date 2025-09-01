@@ -180,7 +180,6 @@ export class AuthService {
     for (const clusterId of clusterIds) {
       try {
         const isEnabled = await this._is2FaEnable(undefined, clusterId);
-        console.log(isEnabled);
         if (isEnabled) {
           const key = randomBytes(32).toString('hex');
           this._addSignature(user.id, key);

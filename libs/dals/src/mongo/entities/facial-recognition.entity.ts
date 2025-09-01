@@ -19,7 +19,7 @@ export class FacialRecognitionEntity extends AbstractEntity {
   hik: string;
 
   constructor(data?: PartialProperties<FacialRecognitionEntity>) {
-    super();
+    super(data);
     if (data) {
       Object.assign(this, data);
     }

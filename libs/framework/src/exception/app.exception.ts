@@ -23,17 +23,17 @@ export const CommonErrors = {
   Forbidden: (msg?: string) => ({
     code: 403,
     internal: '403000',
-    message: msg ? 'Forbidden: ' + msg : 'Forbidden',
+    message: msg ? msg : 'Forbidden',
   }),
   BadRequest: (msg?: string) => ({
     code: 400,
     internal: '400000',
-    message: msg ? 'Bad Request: ' + msg : 'Bad Request',
+    message: msg ? msg : 'Bad Request',
   }),
   InternalServerError: (msg?: string) => ({
     code: 500,
     internal: '500000',
-    message: msg ? 'Internal Server Error: ' + msg : 'Internal Server Error',
+    message: msg ? msg : 'Internal Server Error',
   }),
 } as const;
 

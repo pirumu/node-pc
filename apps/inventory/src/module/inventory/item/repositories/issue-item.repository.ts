@@ -40,13 +40,13 @@ export class IssueItemRepository {
     pipeline.push({
       $addFields: {
         binName: {
-          $concat: ['$cabinet.name', '-', { $toString: '$cabinet.rowNumber' }, '-', { $toString: '$bin.x' }, '-', { $toString: '$bin.y' }],
+          $concat: ['$cabinet.name', '-', { $toString: '$bin.x' }, '-', { $toString: '$bin.y' }],
         },
         canIssue: {
           $and: [
             { $gt: ['$availableQuantity', 0] },
-            { $not: '$bin.state.isFailed' },
-            { $not: '$bin.state.isDamaged' },
+            { $eq: ['$bin.state.isFailed', false] },
+            { $eq: ['$bin.state.isDamaged', false] },
             { $or: [{ $eq: ['$metadata.expiryDate', null] }, { $gte: ['$metadata.expiryDate', new Date(expiryDate)] }] },
           ],
         },
@@ -61,14 +61,28 @@ export class IssueItemRepository {
       },
     });
 
+    // Group theo bin + item và sum quantities từ tất cả loadcells
     pipeline.push({
       $group: {
-        _id: '$item._id',
-        doc: { $first: '$$ROOT' },
+        _id: {
+          itemId: '$item._id',
+          binId: '$bin._id',
+        },
+        // Sum quantities từ tất cả loadcells trong cùng bin + item
+        totalQuantity: { $sum: '$availableQuantity' },
+        totalCalcQuantity: { $sum: '$calibration.calibratedQuantity' },
+        // Lấy thông tin khác từ document đầu tiên (vì giống nhau)
+        item: { $first: '$item' },
+        bin: { $first: '$bin' },
+        cabinet: { $first: '$cabinet' },
+        binName: { $first: '$binName' },
+        dueDate: { $first: '$metadata.expiryDate' },
+        // Logic canIssue: nếu có ít nhất 1 loadcell có thể issue
+        canIssue: { $max: '$canIssue' },
+        // Count số loadcells
+        loadcellCount: { $sum: 1 },
       },
     });
-
-    pipeline.push({ $replaceRoot: { newRoot: '$doc' } });
 
     pipeline.push({
       $project: {
@@ -82,11 +96,12 @@ export class IssueItemRepository {
         type: '$item.itemType.name',
         image: '$item.itemImage',
         description: '$item.description',
-        totalQuantity: '$availableQuantity',
-        totalCalcQuantity: '$calibration.calibratedQuantity',
+        totalQuantity: '$totalQuantity', // Tổng quantity từ tất cả loadcells trong bin
+        totalCalcQuantity: '$totalCalcQuantity', // Tổng calibrated quantity
         binName: '$binName',
-        dueDate: '$metadata.expiryDate',
+        dueDate: '$dueDate',
         canIssue: '$canIssue',
+        loadcellCount: '$loadcellCount', // Số lượng loadcells trong bin này
       },
     });
 
@@ -115,26 +130,29 @@ export class IssueItemRepository {
       throw error;
     }
   }
-
   public async findItemsForIssue(params: ItemsForIssueInput): Promise<LoadcellEntity[]> {
-    const { itemIds, expiryDate } = params;
+    const { itemIds, binIds, expiryDate } = params;
     if (!itemIds || itemIds.length === 0) {
       return [];
     }
 
-    let timeConditions: Record<string, any> = {};
-
-    if (expiryDate) {
-      timeConditions = { $or: [{ expiryDate: { $gte: new Date(expiryDate) } }, { expiryDate: null }] };
-    }
-    const where: FilterQuery<LoadcellEntity> = {
+    const baseConditions = {
       item: { $in: itemIds.map((id) => new ObjectId(id)) },
-      metadata: {
-        ...timeConditions,
-      },
+      bin: { $in: binIds.map((id) => new ObjectId(id)) },
       state: { isCalibrated: true },
       availableQuantity: { $gt: 0 },
     };
+
+    let where: FilterQuery<LoadcellEntity>;
+
+    if (expiryDate) {
+      where = {
+        ...baseConditions,
+        // $or: [{ ['metadata.expiryDate' as any]: { $gte: new Date(expiryDate) } }, { ['metadata.expiryDate' as any]: null }],
+      };
+    } else {
+      where = baseConditions;
+    }
 
     const loadcells = await this._em.find(LoadcellEntity, where, {
       populate: ['item', 'item.itemType', 'bin', 'bin.loadcells', 'cabinet', 'cluster', 'site'],
@@ -143,6 +161,7 @@ export class IssueItemRepository {
     if (loadcells.length === 0) {
       return [];
     }
+
     return loadcells.filter((l) => {
       const bin = RefHelper.get(l.bin);
       return bin && !bin.state.isDamaged && !bin.state.isFailed;

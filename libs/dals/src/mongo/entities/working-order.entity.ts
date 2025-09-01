@@ -12,11 +12,23 @@ export class WorkingOrderEntity extends AbstractEntity {
   @Property({ nullable: true })
   description?: string;
 
+  @Property({ nullable: true })
+  wo: string | null;
+
+  @Property({ nullable: true })
+  vehicleNum: string | null;
+
+  @Property({ nullable: true })
+  vehicleType: string | null;
+
+  @Property({ nullable: true })
+  platform: string | null;
+
   @ManyToOne(() => SiteEntity, { fieldName: 'siteId', ref: true })
   site!: Ref<SiteEntity>;
 
   constructor(data?: PartialProperties<WorkingOrderEntity>) {
-    super();
+    super(data);
     if (data) {
       Object.assign(this, data);
     }

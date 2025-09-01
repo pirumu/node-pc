@@ -23,7 +23,7 @@ export class SiteEntity extends AbstractEntity {
   clusters = new Collection<ClusterEntity>(this);
 
   constructor(data?: PartialProperties<SiteEntity>) {
-    super();
+    super(data);
     if (data) {
       Object.assign(this, data);
     }

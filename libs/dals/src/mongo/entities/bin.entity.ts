@@ -149,10 +149,10 @@ export class BinEntity extends AbstractEntity {
   gatewayIp?: string;
 
   @Embedded(() => BinState, { object: true })
-  state: BinState; // local fields
+  state = new BinState();
 
   constructor(data?: Properties<BinEntity>) {
-    super();
+    super(data);
     if (data) {
       Object.assign(this, data);
     }

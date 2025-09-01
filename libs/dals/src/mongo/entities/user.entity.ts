@@ -75,7 +75,8 @@ export class UserEntity extends AbstractEntity {
   }
 
   constructor(data?: PartialProperties<UserEntity>) {
-    super();
+    console.log('constructor', data);
+    super(data);
     if (data) {
       Object.assign(this, data);
     }

@@ -39,6 +39,7 @@ export const ALL_ENTITIES = [
   TransactionEntity,
   TransactionEventEntity,
   UserEntity,
+  WorkingOrderEntity,
 ];
 
 export const PROCESS_WORKER_ENTITIES = [];

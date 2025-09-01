@@ -30,7 +30,7 @@ export class ItemTypeEntity extends AbstractEntity {
   site: Ref<SiteEntity>;
 
   constructor(data?: PartialProperties<ItemTypeEntity>) {
-    super();
+    super(data);
     if (data) {
       Object.assign(this, data);
     }

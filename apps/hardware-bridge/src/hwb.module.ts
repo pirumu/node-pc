@@ -88,7 +88,7 @@ import { HARDWARE_MODULES } from './modules';
           loadCellConfig: {
             enabled: true,
             logLevel: 1,
-            pollingInterval: 1500,
+            pollingInterval: 500,
           },
           healthMonitoringConfig: {
             enabled: true,

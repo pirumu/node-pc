@@ -16,6 +16,7 @@ import { configs } from './config';
 import { MqttConfig } from './config/mqtt.config';
 import { TcpConfig } from './config/tcp.config';
 import { LoadcellModule } from './modules/loadcell';
+import { TransactionModule } from './modules/transaction';
 
 @Module({
   imports: [
@@ -86,6 +87,7 @@ import { LoadcellModule } from './modules/loadcell';
       useFactory: (configService: ConfigService) => {
         const mqttConfig = configService.getOrThrow<MqttConfig>(CONFIG_KEY.MQTT);
         const tcpConfig = configService.getOrThrow<TcpConfig>(CONFIG_KEY.TCP);
+        console.log(tcpConfig.publisher);
         return {
           tcp: {
             enabled: true,
@@ -100,6 +102,7 @@ import { LoadcellModule } from './modules/loadcell';
       inject: [ConfigService],
     }),
     LoadcellModule,
+    TransactionModule,
   ],
 })
 export class AppModule {}

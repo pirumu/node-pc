@@ -94,8 +94,8 @@ export class ItemResponse {
 
   @ApiProperty({ required: false })
   @Type(() => Number)
-  @Expose({ name: 'list_wo', toPlainOnly: true })
-  listWo?: string;
+  @Expose({ name: 'workingOrders', toPlainOnly: true })
+  workingOrders: string[];
 
   @ApiProperty({ required: false })
   @Type(() => String)

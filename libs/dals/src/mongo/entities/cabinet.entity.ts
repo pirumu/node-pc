@@ -39,7 +39,7 @@ export class CabinetEntity extends AbstractEntity {
   loadcellPerBin: number = 1;
 
   constructor(data?: PartialProperties<CabinetEntity>) {
-    super();
+    super(data);
     if (data) {
       Object.assign(this, data);
     }

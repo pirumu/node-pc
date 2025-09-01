@@ -88,9 +88,6 @@ import { WsModule } from './module/ws';
           entities: ALL_ENTITIES,
           clientUrl: mongoConfig.uri,
           driverOptions,
-          // serialization: {
-          //   forceObject: true,
-          // },
           debug: true,
           logLevel: mongoConfig.logLevel || 'info',
           highlighter: new MongoHighlighter(),
@@ -109,7 +106,8 @@ import { WsModule } from './module/ws';
     PublisherModule.forRootAsync({
       global: true,
       useFactory: (configService: ConfigService) => {
-        const config = configService.getOrThrow<MqttConfig>(CONFIG_KEY.MQTT);
+        const mqttConfig = configService.getOrThrow<MqttConfig>(CONFIG_KEY.MQTT);
+
         return {
           tcp: {
             enabled: true,
@@ -119,7 +117,7 @@ import { WsModule } from './module/ws';
             },
           },
           mqtt: {
-            options: config.publisher,
+            options: mqttConfig.publisher,
             enabled: true,
           },
         };

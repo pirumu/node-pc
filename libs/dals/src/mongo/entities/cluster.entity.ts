@@ -25,7 +25,7 @@ export class ClusterEntity extends AbstractEntity {
   isOnline: boolean = false;
 
   constructor(data?: PartialProperties<ClusterEntity>) {
-    super();
+    super(data);
     if (data) {
       Object.assign(this, data);
     }

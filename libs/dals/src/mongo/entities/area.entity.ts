@@ -16,7 +16,7 @@ export class AreaEntity extends AbstractEntity {
   site!: Ref<SiteEntity>;
 
   constructor(data?: PartialProperties<AreaEntity>) {
-    super();
+    super(data);
     if (data) {
       Object.assign(this, data);
     }

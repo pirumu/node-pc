@@ -1,5 +1,18 @@
 import { ExecutionStep } from '@common/business/types';
-import { TransactionEntity, TransactionStatus, TransactionType, Synchronization } from '@dals/mongo/entities';
+import { EVENT_TYPE } from '@common/constants';
+import {
+  TransactionEntity,
+  TransactionStatus,
+  TransactionType,
+  Synchronization,
+  TxExecutionStep,
+  TxItemToTake,
+  TXItemToReturn,
+  TxItemToReplenish,
+  TxAnotherItem,
+  TxLocation,
+  TxWorkingOrder,
+} from '@dals/mongo/entities';
 import { PublisherService, Transport } from '@framework/publisher';
 import { EntityManager, ObjectId } from '@mikro-orm/mongodb';
 import { Injectable } from '@nestjs/common';
@@ -16,8 +29,9 @@ export class ItemProcessingService {
     transactionType: TransactionType;
     totalRequestQty: number;
     executionSteps: ExecutionStep[];
+    workingOrders?: { workingOrderId: string; areaId?: string }[];
   }): Promise<string> {
-    const { userId, transactionType, totalRequestQty, executionSteps } = payload;
+    const { userId, transactionType, totalRequestQty, executionSteps, workingOrders = [] } = payload;
 
     const tx = this._em.create(TransactionEntity, {
       _id: new ObjectId(),
@@ -25,13 +39,31 @@ export class ItemProcessingService {
       status: TransactionStatus.PENDING,
       user: new ObjectId(userId),
       currentStepId: executionSteps[0].stepId,
-      executionSteps: executionSteps as any,
+      executionSteps: executionSteps.map((s) => {
+        return new TxExecutionStep({
+          stepId: s.stepId,
+          binId: s.binId,
+          itemsToIssue: s.itemsToIssue.map((s) => new TxItemToTake(s as any)),
+          itemsToReturn: s.itemsToReturn.map((s) => new TXItemToReturn(s as any)),
+          itemsToReplenish: s.itemsToReplenish.map((s) => new TxItemToReplenish(s as any)),
+          keepTrackItems: s.keepTrackItems.map((s) => new TxAnotherItem(s as any)),
+          instructions: s.instructions,
+          location: new TxLocation(s.location),
+        });
+      }),
       totalRequestQty: totalRequestQty,
       createdAt: new Date(),
       synchronization: new Synchronization(),
+      workingOrders: workingOrders.map(
+        (w) =>
+          new TxWorkingOrder({
+            workingOderId: w.workingOrderId,
+            areaId: w.areaId || null,
+          }),
+      ),
     });
     await this._em.persistAndFlush(tx);
-    await this._publisherService.publish(Transport.MQTT, 'tx/start', { transactionId: tx.id });
+    await this._publisherService.publish(Transport.MQTT, EVENT_TYPE.PROCESS.START, { transactionId: tx.id }, {}, { async: true });
 
     return tx.id;
   }

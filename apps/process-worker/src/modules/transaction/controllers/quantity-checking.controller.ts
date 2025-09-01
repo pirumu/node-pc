@@ -1,6 +1,6 @@
 import { EVENT_TYPE } from '@common/constants';
 import { Controller } from '@nestjs/common';
-import { EventPattern, Payload } from '@nestjs/microservices';
+import { EventPattern } from '@nestjs/microservices';
 
 import { QuantityCheckingService } from '../services';
 
@@ -9,7 +9,7 @@ export class QuantityCheckingController {
   constructor(private readonly _quantityCheckingService: QuantityCheckingService) {}
 
   @EventPattern(EVENT_TYPE.BIN.OPENED)
-  public async onBinOpened(@Payload() payload: { transactionId: string; binId: string }): Promise<void> {
+  public async onBinOpened(payload: { transactionId: string; binId: string }): Promise<void> {
     if (!payload.transactionId) {
       return;
     }
@@ -17,7 +17,7 @@ export class QuantityCheckingController {
   }
 
   @EventPattern(EVENT_TYPE.BIN.CLOSED)
-  public async onBinClosed(@Payload() payload: { transactionId: string; binId: string }): Promise<void> {
+  public async onBinClosed(payload: { transactionId: string; binId: string }): Promise<void> {
     if (!payload.transactionId) {
       return;
     }

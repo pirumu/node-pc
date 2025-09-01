@@ -38,15 +38,10 @@ export class PortController extends BaseController {
   })
   @Get(PORT_ROUTES.GET_PORTS_LOADCELLS)
   public async getPortsLoadcells(@Query() query: GetPortsLoadcellsRequest): Promise<PaginationResponse<GetPortsLoadcellsResponse>> {
-    const { rows, meta } = await this._portService.getPorts(
-      query.page || 1,
-      query.limit || 10,
-      {
-        status: query.status,
-        portId: query.portId,
-      },
-      true,
-    );
+    const { rows, meta } = await this._portService.getPorts(query.page || 1, query.limit || 10, {
+      status: query.status,
+      portId: query.portId,
+    });
     const data = rows.map((port) => this.toDto<GetPortsLoadcellsResponse>(GetPortsLoadcellsResponse, port.toPOJO()));
     return new PaginationResponse(data, meta);
   }
