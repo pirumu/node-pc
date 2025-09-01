@@ -13,7 +13,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
 
     let status: number;
     let errorResponse: any;
-
+    console.log(exception);
     if (exception instanceof AppHttpException) {
       status = exception.getStatus();
       errorResponse = {

@@ -1,7 +1,9 @@
+import { CLIENT_ID_KEY } from '@common/constants';
 import { StatusResponse } from '@common/dto';
 import { BaseController } from '@framework/controller';
 import { ApiDocs, ControllerDocs } from '@framework/swagger';
-import { Body, Controller, Post } from '@nestjs/common';
+import { Body, Controller, Get, Post, Headers } from '@nestjs/common';
+import { ApiHeaders } from '@nestjs/swagger';
 
 import { RegisterTabletRequest } from './dtos/request';
 import { TABLET_ROUTES } from './tablet.constants';
@@ -14,6 +16,22 @@ import { TabletService } from './tablet.service';
 export class TabletController extends BaseController {
   constructor(private readonly _tabletService: TabletService) {
     super();
+  }
+
+  @ApiDocs({
+    summary: 'Get current tablet',
+    responseSchema: StatusResponse,
+  })
+  @Get(TABLET_ROUTES.INFO)
+  @ApiHeaders([
+    {
+      name: CLIENT_ID_KEY,
+      required: true,
+    },
+  ])
+  public async getTabletInfo(@Headers(CLIENT_ID_KEY) clientId: string): Promise<any> {
+    const tablet = await this._tabletService.findByClientId(clientId);
+    return tablet ? tablet.toPOJO() : null;
   }
 
   @ApiDocs({

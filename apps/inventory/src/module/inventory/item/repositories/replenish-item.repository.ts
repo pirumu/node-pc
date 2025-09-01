@@ -43,24 +43,56 @@ export class ReplenishItemRepository {
     }
 
     pipeline.push({
+      $group: {
+        _id: {
+          itemId: '$item._id',
+          binId: '$bin._id',
+        },
+        item: { $first: '$item' },
+        bin: { $first: '$bin' },
+        cabinet: { $first: '$cabinet' },
+        itemType: { $first: '$item.itemType' },
+
+        locations: {
+          $addToSet: {
+            $concat: [
+              '$cabinet.name',
+              '-',
+              { $toString: '$cabinet.rowNumber' },
+              '-',
+              { $toString: '$bin.x' },
+              '-',
+              { $toString: '$bin.y' },
+            ],
+          },
+        },
+
+        dueDates: { $push: '$metadata.expiryDate' },
+        totalQuantity: { $sum: '$availableQuantity' },
+        totalCalcQuantity: { $sum: '$calibration.calibratedQuantity' },
+      },
+    });
+
+    pipeline.push({
       $project: {
         _id: 0,
-        id: '$item._id',
-        binId: '$bin._id',
+        id: '$_id.itemId',
+        binId: '$_id.binId',
         name: '$item.name',
         partNo: '$item.partNo',
         materialNo: '$item.materialNo',
-        itemTypeId: '$item.itemType._id',
-        type: '$item.itemType.name',
+        itemTypeId: '$itemType._id',
+        type: '$itemType.name',
         image: '$item.itemImage',
         description: '$item.description',
+        totalQuantity: 1,
+        totalCalcQuantity: 1,
 
-        totalQuantity: '$availableQuantity',
-        totalCalcQuantity: '$calibration.calibratedQuantity',
-        binName: {
-          $concat: ['$cabinet.name', '-', { $toString: '$cabinet.rowNumber' }, '-', { $toString: '$bin.x' }, '-', { $toString: '$bin.y' }],
-        },
-        dueDate: '$metadata.expiryDate',
+        locations: 1,
+
+        binName: { $arrayElemAt: ['$locations', 0] },
+
+        dueDate: { $min: '$dueDates' },
         canReplenish: {
           $and: [{ $not: '$bin.state.isFailed' }, { $not: '$bin.state.isDamaged' }],
         },
@@ -93,18 +125,29 @@ export class ReplenishItemRepository {
   }
 
   public async findItemsForReplenish(itemIds: string[]): Promise<LoadcellEntity[]> {
-    const pipeline = [
+    const itemObjectIds = itemIds.map((id) => new ObjectId(id));
+    const pipeline: any[] = [
       {
-        $match: {
-          ['item._id']: { $in: itemIds.map((id) => new ObjectId(id)) },
-          ['state.calibration.isCalibrated']: true,
+        $lookup: {
+          from: 'bins',
+          localField: 'binId',
+          foreignField: '_id',
+          as: 'binInfo',
         },
       },
       {
+        $unwind: {
+          path: '$binInfo',
+          preserveNullAndEmptyArrays: false,
+        },
+      },
+
+      {
         $match: {
-          $expr: {
-            $lt: ['$calibration.availableQuantity', '$calibration.calibratedQuantity'],
-          },
+          ['itemId']: { $in: itemObjectIds },
+          ['state.isCalibrated']: true,
+          ['binInfo.state.isFailed']: false,
+          ['binInfo.state.isDamaged']: false,
         },
       },
       {
@@ -114,23 +157,23 @@ export class ReplenishItemRepository {
       },
     ];
 
-    const loadcells: ObjectId[] = await this._em.aggregate(LoadcellEntity, pipeline);
-
-    const replenishableIds = loadcells.map((doc) => doc._id);
-
-    if (replenishableIds.length === 0) {
-      return [];
+    try {
+      const results = await this._em.aggregate(LoadcellEntity, pipeline);
+      const replenishableIds = results.map((doc) => doc._id);
+      if (replenishableIds.length === 0) {
+        return [];
+      }
+      return this._em.find(
+        LoadcellEntity,
+        {
+          _id: { $in: replenishableIds },
+        },
+        {
+          populate: ['item', 'item.itemType', 'bin', 'bin.loadcells', 'cabinet', 'cluster', 'site'],
+        },
+      );
+    } catch (error) {
+      throw error;
     }
-
-    return this._em.find(
-      LoadcellEntity,
-      {
-        _id: { $in: replenishableIds },
-        bin: { state: { isFailed: false, isDamaged: false } },
-      },
-      {
-        populate: ['item', 'bin', 'cabinet', 'cluster', 'site'],
-      },
-    );
   }
 }

@@ -1,7 +1,8 @@
 import { Module } from '@nestjs/common';
 
-import { CONTROLLERS, REPOSITORY_PROVIDERS, SERVICES_EXPORTS, SERVICES_PROVIDERS } from './item.providers';
 import { WsModule } from '../../ws';
+
+import { CONTROLLERS, REPOSITORY_PROVIDERS, SERVICES_EXPORTS, SERVICES_PROVIDERS } from './item.providers';
 
 @Module({
   imports: [WsModule],

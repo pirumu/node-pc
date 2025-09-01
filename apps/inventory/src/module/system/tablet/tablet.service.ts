@@ -12,6 +12,11 @@ export class TabletService {
     @InjectRepository(ClusterEntity) private readonly _clusterRepository: EntityRepository<ClusterEntity>,
     @InjectRepository(TabletEntity) private readonly _tabletRepository: EntityRepository<TabletEntity>,
   ) {}
+  public async findByClientId(clientId: string): Promise<TabletEntity | null> {
+    return this._tabletRepository.findOne({
+      clientId,
+    });
+  }
 
   public async register(dto: RegisterTabletRequest): Promise<boolean> {
     const cluster = await this._clusterRepository.findOne({

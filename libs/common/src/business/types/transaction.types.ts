@@ -15,6 +15,7 @@ export type AnotherItem = {
   itemId: string;
   loadcellId: string;
   loadcellHardwareId: number;
+  loadcellLabel: string;
   currentQty: number;
 };
 
@@ -22,6 +23,7 @@ export type PlannedItem = {
   itemId: string;
   loadcellId: string;
   loadcellHardwareId: number;
+  loadcellLabel: string;
   name: string;
   requestQty: number;
   currentQty: number;
@@ -37,6 +39,7 @@ export type ItemToTake = {
   requestQty: number;
   loadcellId: string;
   loadcellHardwareId: number;
+  loadcellLabel: string;
 };
 
 export type ItemToReturn = ItemToTake & { conditionId?: string };

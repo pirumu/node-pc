@@ -1,9 +1,8 @@
+import { CLIENT_ID_KEY } from '@common/constants';
 import { PaginationResponse, StatusResponse } from '@common/dto';
 import { BaseController } from '@framework/controller';
 import { ApiDocs, ControllerDocs } from '@framework/swagger';
 import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
-
-import { HEADER_KEYS } from '../../../common';
 
 import { CalibrateLoadcellRequest, GetLoadCellsRequest } from './dtos/request';
 import { GetLoadcellsResponse } from './dtos/response';
@@ -13,7 +12,7 @@ import { LoadcellService } from './loadcell.service';
 @ControllerDocs({
   tag: 'Loadcell',
   securitySchema: 'header',
-  securityKey: HEADER_KEYS.DEVICE_KEY,
+  securityKey: CLIENT_ID_KEY,
 })
 @Controller(LOADCELL_ROUTES.GROUP)
 export class LoadcellController extends BaseController {

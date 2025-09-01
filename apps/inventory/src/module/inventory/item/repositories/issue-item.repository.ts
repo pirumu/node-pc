@@ -61,25 +61,20 @@ export class IssueItemRepository {
       },
     });
 
-    // Group theo bin + item và sum quantities từ tất cả loadcells
     pipeline.push({
       $group: {
         _id: {
           itemId: '$item._id',
           binId: '$bin._id',
         },
-        // Sum quantities từ tất cả loadcells trong cùng bin + item
         totalQuantity: { $sum: '$availableQuantity' },
         totalCalcQuantity: { $sum: '$calibration.calibratedQuantity' },
-        // Lấy thông tin khác từ document đầu tiên (vì giống nhau)
         item: { $first: '$item' },
         bin: { $first: '$bin' },
         cabinet: { $first: '$cabinet' },
         binName: { $first: '$binName' },
         dueDate: { $first: '$metadata.expiryDate' },
-        // Logic canIssue: nếu có ít nhất 1 loadcell có thể issue
         canIssue: { $max: '$canIssue' },
-        // Count số loadcells
         loadcellCount: { $sum: 1 },
       },
     });
@@ -96,12 +91,12 @@ export class IssueItemRepository {
         type: '$item.itemType.name',
         image: '$item.itemImage',
         description: '$item.description',
-        totalQuantity: '$totalQuantity', // Tổng quantity từ tất cả loadcells trong bin
-        totalCalcQuantity: '$totalCalcQuantity', // Tổng calibrated quantity
+        totalQuantity: '$totalQuantity',
+        totalCalcQuantity: '$totalCalcQuantity',
         binName: '$binName',
         dueDate: '$dueDate',
         canIssue: '$canIssue',
-        loadcellCount: '$loadcellCount', // Số lượng loadcells trong bin này
+        loadcellCount: '$loadcellCount',
       },
     });
 
@@ -168,10 +163,13 @@ export class IssueItemRepository {
     });
   }
 
-  public async findUserIssueHistories(userId: string, itemIds: string[]): Promise<IssueHistoryEntity[]> {
+  public async findUserIssueHistories(userId: string, itemIds: string[], binIds: string[]): Promise<IssueHistoryEntity[]> {
     return this._em.find(IssueHistoryEntity, {
       user: new ObjectId(userId),
       item: { $in: itemIds.map((id) => new ObjectId(id)) },
+      locations: {
+        binId: { $in: binIds.map((b) => new ObjectId(b)) },
+      },
     });
   }
 }

@@ -1,3 +1,4 @@
+import { CLIENT_ID_KEY } from '@common/constants';
 import { PaginationResponse } from '@common/dto';
 import { BaseController } from '@framework/controller';
 import { ApiDocs, ControllerDocs } from '@framework/swagger';
@@ -10,6 +11,8 @@ import { GetAreasResponse } from './dtos/response';
 
 @ControllerDocs({
   tag: 'Area',
+  securitySchema: 'header',
+  securityKey: CLIENT_ID_KEY,
 })
 @Controller(AREA_ROUTES.GROUP)
 export class AreaController extends BaseController {

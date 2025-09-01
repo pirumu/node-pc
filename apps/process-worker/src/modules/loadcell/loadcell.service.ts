@@ -1,7 +1,6 @@
 import { WeightCalculatedEvent } from '@common/business/events';
-import { LOADCELL_STATUS, LoadcellEntity, PORT_STATUS, PortEntity, Synchronization } from '@dals/mongo/entities';
+import { LOADCELL_STATUS, LoadcellEntity, LoadcellState, PORT_STATUS, PortEntity, Synchronization } from '@dals/mongo/entities';
 import { RefHelper } from '@dals/mongo/helpers';
-
 import { EntityManager, Reference } from '@mikro-orm/mongodb';
 import { Injectable, Logger } from '@nestjs/common';
 
@@ -87,6 +86,12 @@ export class LoadcellService {
         currentWeight: payload.weight,
         pendingChange: 0,
       },
+      state: {
+        status: LOADCELL_STATUS.RUNNING,
+        isUpdatedWeight: false,
+        isCalibrated: false,
+        isRunning: true,
+      },
       synchronization: new Synchronization(),
     });
 
@@ -111,13 +116,18 @@ export class LoadcellService {
 
   private async _processLoadcellUpdate(em: EntityManager, loadcell: LoadcellEntity, newWeight: number): Promise<LoadcellEntity> {
     loadcell.heartbeat = Date.now();
+    if (!loadcell.state) {
+      loadcell.state = new LoadcellState();
+      loadcell.state.status = LOADCELL_STATUS.RUNNING;
+      loadcell.state.isRunning = true;
+    }
 
     if (!loadcell.state.isCalibrated) {
       Logger.warn(`Skipping weight update for uncalibrated loadcell with hardwareId: ${loadcell.hardwareId}`, {
         hardwareId: loadcell.hardwareId,
         newWeight: newWeight,
       });
-      loadcell.liveReading.currentWeight = newWeight;
+      loadcell.liveReading.currentWeight = Number(newWeight);
       await em.flush();
       return loadcell;
     }
@@ -125,8 +135,8 @@ export class LoadcellService {
     // Step 1: Handle initial state: setting the zero-weight for the first time.
     if (!loadcell.state.isCalibrated && !loadcell.state.isUpdatedWeight) {
       Logger.log(`Performing initial zero-weight set for loadcell ${loadcell.id}.`);
-      loadcell.calibration.zeroWeight = newWeight;
-      loadcell.liveReading.currentWeight = newWeight;
+      loadcell.calibration.zeroWeight = Number(newWeight);
+      loadcell.liveReading.currentWeight = Number(newWeight);
       loadcell.state.isUpdatedWeight = true;
       await em.flush();
       return loadcell;
@@ -136,8 +146,7 @@ export class LoadcellService {
     await em.populate(loadcell, ['bin']); // Ensure bin.state is loaded
     const bin = RefHelper.getRequired(loadcell.bin, 'BinEntity');
     if (bin.state.isLocked) {
-      await this._handleLockedBinUpdate(em, loadcell, newWeight);
-      return loadcell;
+      return this._handleLockedBinUpdate(em, loadcell, newWeight);
     }
 
     // Step 3: Main Logic for Unlocked Bins.
@@ -150,14 +159,14 @@ export class LoadcellService {
       const oldNetWeight = oldWeight - zeroWeight;
       const oldCalculatedQuantity = this._calculateRoundedQuantity(oldNetWeight / unitWeight);
 
-      const newNetWeight = newWeight - zeroWeight;
+      const newNetWeight = Number(newWeight) - zeroWeight;
       const newCalculatedQuantity = this._calculateRoundedQuantity(newNetWeight / unitWeight);
 
       changeInQuantity = newCalculatedQuantity - oldCalculatedQuantity;
     }
 
     // Step 4: Update the persistent liveReading object with the latest data.
-    loadcell.liveReading.currentWeight = newWeight;
+    loadcell.liveReading.currentWeight = Number(newWeight);
     if (changeInQuantity !== 0) {
       loadcell.liveReading.pendingChange += changeInQuantity;
       loadcell.synchronization.localToCloud.isSynced = false;
@@ -174,7 +183,7 @@ export class LoadcellService {
    * Handles the specific update logic when a bin is locked.
    * This "commits" the pending changes to the official `calibration.quantity`.
    */
-  private async _handleLockedBinUpdate(em: EntityManager, loadcell: LoadcellEntity, newWeight: number): Promise<void> {
+  private async _handleLockedBinUpdate(em: EntityManager, loadcell: LoadcellEntity, newWeight: number): Promise<LoadcellEntity> {
     Logger.log(`Handling update for LOCKED bin associated with loadcell ${loadcell.id}.`);
     const pendingChange = loadcell.liveReading.pendingChange;
 
@@ -184,9 +193,10 @@ export class LoadcellService {
     }
 
     loadcell.liveReading.pendingChange = 0;
-    loadcell.liveReading.currentWeight = newWeight;
+    loadcell.liveReading.currentWeight = Number(newWeight);
 
     await em.flush();
+    return loadcell;
   }
 
   /**

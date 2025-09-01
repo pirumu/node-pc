@@ -99,11 +99,11 @@ export class BinService {
       if (bin.type === 'LOADCELL') {
         const loadcells = bin.loadcells.getItems();
         totalQtyOH = loadcells.reduce((sum, lc) => sum + lc.availableQuantity, 0);
-        totalItemLoadcells = loadcells.length;
+        totalItemLoadcells = [...new Set(loadcells.map((l) => l.item?.id))].length;
         hasExpiredItem = loadcells.some((lc) => lc.metadata.expiryDate && lc.metadata.expiryDate.getTime() < now.getTime());
       } else {
         totalQtyOH = bin.items.reduce((sum, item) => sum + item.qty, 0);
-        totalItems = bin.items.length;
+        totalItems = [...new Set(bin.items.map((bi) => bi.itemId))].length;
         totalItemLoadcells = 0;
         hasExpiredItem = bin.items.every((item) => item.expiryDate && item.expiryDate.getTime() < now.getTime());
       }

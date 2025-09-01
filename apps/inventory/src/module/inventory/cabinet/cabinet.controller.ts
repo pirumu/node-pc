@@ -1,9 +1,8 @@
+import { CLIENT_ID_KEY } from '@common/constants';
 import { PaginationResponse } from '@common/dto';
 import { BaseController } from '@framework/controller';
 import { ApiDocs, ControllerDocs } from '@framework/swagger';
 import { Controller, Get, Param, Query } from '@nestjs/common';
-
-import { HEADER_KEYS } from '../../../common';
 
 import { CABINET_ROUTES } from './cabinet.constants';
 import { CabinetService } from './cabinet.service';
@@ -11,9 +10,9 @@ import { GetCabinetsRequest } from './dtos/request';
 import { GetCabinetResponse, GetCabinetsResponse } from './dtos/response';
 
 @ControllerDocs({
-  tag: 'Cabinet',
+  tag: 'Bin',
   securitySchema: 'header',
-  securityKey: HEADER_KEYS.DEVICE_KEY,
+  securityKey: CLIENT_ID_KEY,
 })
 @Controller(CABINET_ROUTES.GROUP)
 export class CabinetController extends BaseController {

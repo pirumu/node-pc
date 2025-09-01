@@ -36,9 +36,8 @@ export class RequestItem {
   quantity: number;
 
   @ApiProperty({ description: 'Condition id' })
-  @IsNumber()
-  @IsMongoId()
   @Expose({ toClassOnly: true })
+  @Type(() => String)
   @IsOptional()
   conditionId?: string;
 

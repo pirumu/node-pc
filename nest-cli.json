@@ -27,15 +27,6 @@
         "tsConfigPath": "libs/cache/tsconfig.lib.json"
       }
     },
-    "cli": {
-      "type": "application",
-      "root": "apps/cli",
-      "entryFile": "main",
-      "sourceRoot": "apps/cli/src",
-      "compilerOptions": {
-        "tsConfigPath": "apps/cli/tsconfig.app.json"
-      }
-    },
     "common": {
       "type": "library",
       "root": "libs/common",
@@ -70,15 +61,6 @@
       "sourceRoot": "libs/dals/src",
       "compilerOptions": {
         "tsConfigPath": "libs/dals/tsconfig.lib.json"
-      }
-    },
-    "entity": {
-      "type": "library",
-      "root": "libs/entity",
-      "entryFile": "index",
-      "sourceRoot": "libs/entity/src",
-      "compilerOptions": {
-        "tsConfigPath": "libs/entity/tsconfig.lib.json"
       }
     },
     "fingerprint-scanner": {
@@ -135,15 +117,6 @@
         "tsConfigPath": "libs/loadcells/tsconfig.lib.json"
       }
     },
-    "mapper": {
-      "type": "library",
-      "root": "libs/mapper",
-      "entryFile": "index",
-      "sourceRoot": "libs/mapper/src",
-      "compilerOptions": {
-        "tsConfigPath": "libs/mapper/tsconfig.lib.json"
-      }
-    },
     "process-worker": {
       "type": "application",
       "root": "apps/process-worker",
@@ -178,15 +151,6 @@
       "sourceRoot": "apps/sync-worker/src",
       "compilerOptions": {
         "tsConfigPath": "apps/sync-worker/tsconfig.app.json"
-      }
-    },
-    "worker": {
-      "type": "application",
-      "root": "apps/worker",
-      "entryFile": "main",
-      "sourceRoot": "apps/worker/src",
-      "compilerOptions": {
-        "tsConfigPath": "apps/worker/tsconfig.app.json"
       }
     }
   }

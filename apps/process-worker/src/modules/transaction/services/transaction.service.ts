@@ -4,23 +4,24 @@ import { CuLockRequest } from '@culock/dto';
 import { LOCK_STATUS, ProtocolType } from '@culock/protocols';
 import { CuResponse } from '@culock/protocols/cu';
 import {
-  TransactionEntity,
-  TransactionStatus,
-  TransactionType,
   BinEntity,
-  LoadcellEntity,
-  ItemEntity,
-  IssueHistoryEntity,
-  ItemTypeEntity,
-  TransactionEventEntity,
-  ITEM_TYPE_CATEGORY,
   ConditionEntity,
   IssuedItemLocation,
+  IssueHistoryEntity,
+  ITEM_TYPE_CATEGORY,
+  ItemEntity,
+  ItemTypeEntity,
+  LoadcellEntity,
+  TransactionEntity,
+  TransactionEventEntity,
+  TransactionStatus,
+  TransactionType,
+  TxExecutionStep,
 } from '@dals/mongo/entities';
 import { RefHelper } from '@dals/mongo/helpers';
 import { PublisherService, Transport } from '@framework/publisher';
 import { sleep } from '@framework/time/sleep';
-import { EntityManager, Reference, ObjectId } from '@mikro-orm/mongodb';
+import { EntityManager, ObjectId, Reference } from '@mikro-orm/mongodb';
 import { Injectable, Logger } from '@nestjs/common';
 
 // Constants for retry logic
@@ -59,23 +60,163 @@ export class TransactionService {
         await this._processIssueHistoryOnIssueSuccess(em, tx, payload.stepId);
         break;
       case TransactionType.RETURN:
-        await this._processDamageItemsOnReturnSuccess(em, tx, payload.stepId);
-        await this._processIssueHistoryOnReturnSuccess(em, tx, payload.stepId);
+        await Promise.allSettled([
+          this._processIssueHistoryOnReturnSuccess(em, tx, payload.stepId),
+          this._processDamageItemsOnReturnSuccess(em, tx, payload.stepId),
+        ]);
         break;
     }
 
-    await this._advanceToNextStep(em, tx, payload.stepId);
+    const completedStep = tx.currentStep(payload.stepId);
+
+    if (completedStep) {
+      await this._handleLockedBinUpdateByStep(em, tx.id, completedStep);
+    }
+
+    await this._advanceToNextStep(em, tx, payload.stepId, false);
   }
 
   public async handleTxComplete(em: EntityManager, payload: { transactionId: string }): Promise<void> {
     const tx = await em.findOneOrFail(TransactionEntity, new ObjectId(payload.transactionId));
     this._logger.log(`TX [${tx.id}]  completed successfully.`);
+
     try {
       for (const step of tx.executionSteps) {
         await this._stopRealtimeServices(tx, step.stepId);
       }
     } catch (error) {
       this._logger.warn('_stopRealtimeServices error', error);
+    }
+    await this._handleLockedBinUpdate(em, tx);
+  }
+
+  /**
+   * Back up when loadcell stopped before commit pending change.
+   * @see apps/process-worker/src/modules/loadcell/loadcell.service.ts _handleLockedBinUpdate
+   */
+  private async _handleLockedBinUpdate(em: EntityManager, tx: TransactionEntity): Promise<void> {
+    const loadcellIdStrings = tx.executionSteps.flatMap((step) => [
+      ...step.itemsToIssue.map((i) => i.loadcellId),
+      ...step.itemsToReturn.map((i) => i.loadcellId),
+      ...step.itemsToReplenish.map((i) => i.loadcellId),
+      ...step.keepTrackItems.map((i) => i.loadcellId),
+    ]);
+    const uniqueLoadcellIds = [...new Set(loadcellIdStrings)].map((id) => new ObjectId(id));
+
+    if (uniqueLoadcellIds.length === 0) {
+      this._logger.log(`[Tx ${tx.id}] No loadcells to update for transaction ${tx.id}.`);
+      return;
+    }
+
+    this._logger.log(`[Tx ${tx.id}]] Preparing bulk update for ${uniqueLoadcellIds.length} loadcells in transaction ${tx.id}.`);
+    const loadcellsToUpdate = await em.find(
+      LoadcellEntity,
+      {
+        _id: { $in: uniqueLoadcellIds },
+      },
+      { populate: ['bin'] },
+    );
+
+    const bulkOperations = [];
+
+    for (const loadcell of loadcellsToUpdate) {
+      const pendingChange = loadcell.liveReading.pendingChange;
+      if (pendingChange !== 0) {
+        bulkOperations.push({
+          updateOne: {
+            filter: { _id: loadcell._id },
+            update: {
+              $inc: { availableQuantity: pendingChange },
+              $set: {
+                ['liveReading.pendingChange']: 0,
+                ['synchronization.localToCloud.isSynced']: false,
+                updatedAt: new Date(),
+              },
+            },
+          },
+        });
+      }
+    }
+
+    if (bulkOperations.length === 0) {
+      Logger.log(`[Tx ${tx.id}]] No actual changes to apply to loadcells for transaction ${tx.id}.`);
+      return;
+    }
+    try {
+      const loadcellCollection = em.getCollection(LoadcellEntity);
+
+      const result = await loadcellCollection.bulkWrite(bulkOperations);
+
+      Logger.log(
+        `[Tx ${tx.id}]] Bulk update completed for transaction ${tx.id}. Matched: ${result.matchedCount}, Modified: ${result.modifiedCount}.`,
+      );
+    } catch (error) {
+      Logger.error(`[Tx ${tx.id}]] Failed to perform bulk update for transaction ${tx.id}.`, error);
+    }
+  }
+
+  /**
+   * Back up when loadcell stopped before commit pending change.
+   * @see apps/process-worker/src/modules/loadcell/loadcell.service.ts _handleLockedBinUpdate
+   */
+  private async _handleLockedBinUpdateByStep(em: EntityManager, txId: string, step: TxExecutionStep): Promise<void> {
+    const loadcellIdStrings = [
+      ...step.itemsToIssue.map((i) => i.loadcellId),
+      ...step.itemsToReturn.map((i) => i.loadcellId),
+      ...step.itemsToReplenish.map((i) => i.loadcellId),
+      ...step.keepTrackItems.map((i) => i.loadcellId),
+    ];
+    const uniqueLoadcellIds = [...new Set(loadcellIdStrings)].map((id) => new ObjectId(id));
+
+    if (uniqueLoadcellIds.length === 0) {
+      this._logger.log(`[Tx ${txId}] No loadcells to update for transaction ${txId}.`);
+      return;
+    }
+
+    this._logger.log(`[Tx ${txId}]] Preparing bulk update for ${uniqueLoadcellIds.length} loadcells in transaction ${txId}.`);
+    const loadcellsToUpdate = await em.find(
+      LoadcellEntity,
+      {
+        _id: { $in: uniqueLoadcellIds },
+      },
+      { populate: ['bin'] },
+    );
+
+    const bulkOperations = [];
+
+    for (const loadcell of loadcellsToUpdate) {
+      const pendingChange = loadcell.liveReading.pendingChange;
+      if (pendingChange !== 0) {
+        bulkOperations.push({
+          updateOne: {
+            filter: { _id: loadcell._id },
+            update: {
+              $inc: { availableQuantity: pendingChange },
+              $set: {
+                ['liveReading.pendingChange']: 0,
+                ['synchronization.localToCloud.isSynced']: false,
+                updatedAt: new Date(),
+              },
+            },
+          },
+        });
+      }
+    }
+
+    if (bulkOperations.length === 0) {
+      Logger.log(`[Tx ${txId}]] No actual changes to apply to loadcells for transaction ${txId}.`);
+      return;
+    }
+    try {
+      const loadcellCollection = em.getCollection(LoadcellEntity);
+
+      const result = await loadcellCollection.bulkWrite(bulkOperations);
+
+      Logger.log(
+        `[Tx ${txId}]] Bulk update completed for transaction ${txId}. Matched: ${result.matchedCount}, Modified: ${result.modifiedCount}.`,
+      );
+    } catch (error) {
+      Logger.error(`[Tx ${txId}]] Failed to perform bulk update for transaction ${txId}.`, error);
     }
   }
 
@@ -107,15 +248,24 @@ export class TransactionService {
   }
 
   public async handleStepFail(em: EntityManager, payload: { transactionId: string; stepId: string; errors: string[] }): Promise<void> {
-    const tx = await em.findOneOrFail(TransactionEntity, { id: payload.transactionId });
+    const tx = await em.findOneOrFail(TransactionEntity, new ObjectId(payload.transactionId));
     this._logger.error(`[${tx.id}] Step ${payload.stepId} failed. Errors: ${payload.errors.join(', ')}`);
 
-    tx.status = TransactionStatus.AWAITING_CORRECTION;
-    tx.lastError = { stepId: payload.stepId, messages: payload.errors };
-    await em.flush();
+    await em.nativeUpdate(
+      TransactionEntity,
+      {
+        _id: tx._id,
+      },
+      {
+        status: TransactionStatus.AWAITING_CORRECTION,
+        lastError: { stepId: payload.stepId, messages: payload.errors },
+      },
+    );
+
+    await this._publisher.publish(Transport.MQTT, EVENT_TYPE.PROCESS.TRANSACTION_COMPLETED, { transactionId: tx.id }, {}, { async: true });
   }
 
-  public async forceNextStep(em: EntityManager, transactionId: string): Promise<void> {
+  public async forceNextStep(em: EntityManager, transactionId: string, next: boolean): Promise<any> {
     const tx = await em.findOne(TransactionEntity, {
       _id: new ObjectId(transactionId),
       status: TransactionStatus.AWAITING_CORRECTION,
@@ -124,7 +274,22 @@ export class TransactionService {
     if (!tx) {
       return;
     }
-    const errorStep = tx.executionSteps[tx.executionSteps.length - 1].stepId;
+    if (next) {
+      const currentStepError = tx.lastError?.stepId;
+      if (currentStepError) {
+        return this._advanceToNextStep(em, tx, currentStepError, true);
+      }
+    }
+
+    await em.nativeUpdate(
+      TransactionEntity,
+      {
+        _id: tx._id,
+      },
+      {
+        status: TransactionStatus.COMPLETED_WITH_ERROR,
+      },
+    );
   }
 
   private async _executeStep(em: EntityManager, transaction: TransactionEntity): Promise<void> {
@@ -148,20 +313,23 @@ export class TransactionService {
     const keepTrackItems = step.keepTrackItems;
     const instructions = step.instructions;
 
-    await this._publisher.publish(
-      Transport.MQTT,
-      EVENT_TYPE.PROCESS.STEP_START,
-      {
-        transactionId: transaction.id,
-        label: `${step.location.cabinetName}/${step.location.binName}`,
-        type: transaction.type,
-        items: items,
-        keepTrackItems: keepTrackItems,
-        instructions: instructions,
-      },
-      {},
-      { async: true },
-    );
+    sleep(1000).then(async () => {
+      return this._publisher.publish(
+        Transport.MQTT,
+        EVENT_TYPE.PROCESS.STEP_START,
+        {
+          isFinal: transaction.isLastStep(step.stepId),
+          transactionId: transaction.id,
+          label: `${step.location.cabinetName}/${step.location.binName}`,
+          type: transaction.type,
+          items: items,
+          keepTrackItems: keepTrackItems,
+          instructions: instructions,
+        },
+        {},
+        { async: true },
+      );
+    });
 
     const wasLockOpened = await this._attemptToOpenLockWithRetry(em, transaction, bin);
 
@@ -262,20 +430,25 @@ export class TransactionService {
     );
   }
 
-  private async _advanceToNextStep(em: EntityManager, transaction: TransactionEntity, completedStepId: string): Promise<void> {
+  private async _advanceToNextStep(
+    em: EntityManager,
+    transaction: TransactionEntity,
+    completedStepId: string,
+    fromErrorStep: boolean,
+  ): Promise<void> {
     const nextStepIndex = transaction.executionSteps.findIndex((s) => s.stepId === completedStepId) + 1;
     if (nextStepIndex < transaction.executionSteps.length) {
       transaction.currentStepId = transaction.executionSteps[nextStepIndex].stepId;
       await em.flush();
       await this._executeStep(em, transaction);
     } else {
-      await this._completeTransaction(em, transaction);
+      await this._completeTransaction(em, transaction, fromErrorStep);
     }
   }
 
-  private async _completeTransaction(em: EntityManager, transaction: TransactionEntity): Promise<void> {
+  private async _completeTransaction(em: EntityManager, transaction: TransactionEntity, isError: boolean): Promise<void> {
     this._logger.log(`[${transaction.id}] All steps completed. Finalizing transaction.`);
-    transaction.status = TransactionStatus.COMPLETED;
+    transaction.status = isError ? TransactionStatus.COMPLETED_WITH_ERROR : TransactionStatus.COMPLETED;
     transaction.completedAt = new Date();
     await em.flush();
     await this._publisher.publish(
@@ -357,13 +530,14 @@ export class TransactionService {
     transaction: TransactionEntity,
     completedStepId: string,
   ): Promise<void> {
-    this._logger.log(`[${transaction.id}] Processing damage items for completed RETURN step ${completedStepId}.`);
+    this._logger.log(`[tx ${transaction.id}] Processing damage items for completed RETURN step ${completedStepId}.`);
     const step = transaction.currentStep(completedStepId);
     if (!step) {
       return;
     }
-
     const itemsWithCondition = step.itemsToReturn.filter((item) => !!item.conditionId);
+    this._logger.log(`[tx ${transaction.id}] Processing damage items for completed RETURN step ${completedStepId}.`, itemsWithCondition);
+
     if (itemsWithCondition.length === 0) {
       return;
     }
@@ -388,8 +562,11 @@ export class TransactionService {
       }
 
       const actualReturnedQty = event.quantityChanged;
-      const loadcell = await em.findOne(LoadcellEntity, new ObjectId(plannedItem.loadcellId));
+      const loadcell = await em.findOne(LoadcellEntity, new ObjectId(plannedItem.loadcellId), { populate: ['bin'] });
       if (loadcell) {
+        if (loadcell.damageQuantity === undefined || loadcell.damageQuantity === null || isNaN(loadcell.damageQuantity)) {
+          loadcell.damageQuantity = 0;
+        }
         loadcell.damageQuantity += actualReturnedQty;
         this._logger.log(
           `[${transaction.id}] Item ${plannedItem.name} returned as DAMAGED. Updating damage quantity for loadcell ${loadcell.id} by ${actualReturnedQty}.`,
@@ -405,7 +582,7 @@ export class TransactionService {
       await em.nativeUpdate(
         BinEntity,
         { _id: { $in: Array.from(binsToMarkAsDamaged).map((id) => new ObjectId(id)) } },
-        { state: { isDamaged: true } },
+        { ['state.isDamaged' as any]: true },
       );
     }
     await em.flush();
@@ -442,7 +619,7 @@ export class TransactionService {
         }
         if (issueHistory.totalIssuedQuantity <= 0) {
           this._logger.log(`[${transaction.id}] All issued items ${itemRef.id} have been returned. Removing history record.`);
-          this._em.remove(issueHistory);
+          em.remove(issueHistory);
         } else {
           this._logger.log(`[${transaction.id}] Remaining outstanding for item ${itemRef.id} is ${issueHistory.totalIssuedQuantity}.`);
         }

@@ -1,4 +1,5 @@
 export enum TABLET_ROUTES {
   GROUP = 'tablets',
   REGISTER = 'create',
+  INFO = 'info',
 }

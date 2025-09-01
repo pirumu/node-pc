@@ -41,7 +41,9 @@ export class ReplenishItemService {
     const { plan, totalReplenishQty } = await this._planReplenish(user, replenishItems);
 
     const steps = this._groupReplenishPlanByBin(plan);
-
+    if (!steps || steps.length === 0) {
+      throw AppHttpException.internalServerError({ message: 'Can not replenish items.' });
+    }
     const transactionId = await this._itemProcessingService.createAndStartTransaction({
       userId: user.id,
       transactionType: TransactionType.REPLENISH,
@@ -60,7 +62,6 @@ export class ReplenishItemService {
 
     // Get all loadcells that can accept replenishment
     const replenishableLoadcells = await this._repository.findItemsForReplenish(itemIds);
-
     // Create loadcell map for efficient lookup - same pattern as return
     const loadcellsByItemMap = new Map<string, LoadcellEntity[]>();
     for (const loadcell of replenishableLoadcells) {
@@ -72,11 +73,13 @@ export class ReplenishItemService {
       loadcellsByItemMap.get(itemId)!.push(loadcell);
     }
 
-    const plan: PlannedItem[] = [];
+    let plan: PlannedItem[] = [];
     let totalReplenishQty = 0;
 
     // Process each item - same loop structure as return
     for (const replenishItem of replenishItems) {
+      const allocatedLoadcellIds = new Set<string>();
+
       let neededToReplenish = replenishItem.quantity;
       totalReplenishQty += neededToReplenish;
 
@@ -106,9 +109,8 @@ export class ReplenishItemService {
         if (spaceAvailable <= 0) {
           continue; // This loadcell is full
         }
-
+        allocatedLoadcellIds.add(loadcell.id);
         const qtyToReplenishHere = Math.min(neededToReplenish, spaceAvailable);
-
         // Create plan item
         const item = RefHelper.getRequired(loadcell.item, 'ItemEntity');
         const bin = RefHelper.getRequired(loadcell.bin, 'BinEntity');
@@ -122,6 +124,7 @@ export class ReplenishItemService {
           requestQty: qtyToReplenishHere,
           currentQty: loadcell.availableQuantity,
           loadcellId: loadcell.id,
+          loadcellLabel: loadcell.label,
           loadcellHardwareId: loadcell.hardwareId,
           location: {
             binId: bin.id,
@@ -133,20 +136,24 @@ export class ReplenishItemService {
             siteId: site.id,
             siteName: site.name,
           },
-          keepTrackItems: bin.loadcells
-            .filter((l) => !!l.bin?.id && !!l.item?.id && l.availableQuantity > 0 && !itemIds.includes(l.item.id))
-            .map((l) => ({
-              loadcellId: l.id,
-              loadcellHardwareId: l.hardwareId,
-              itemId: l.item?.id || '',
-              name: l.item?.unwrap()?.name || '',
-              binId: l.bin?.id || '',
-              currentQty: l.availableQuantity,
-            })),
+          keepTrackItems: bin.loadcells.map((l) => ({
+            loadcellId: l.id,
+            loadcellHardwareId: l.hardwareId,
+            itemId: l.item?.id || '',
+            name: l.item?.unwrap()?.name || '',
+            binId: l.bin?.id || '',
+            currentQty: l.availableQuantity,
+            loadcellLabel: l.label,
+          })),
         });
 
         neededToReplenish -= qtyToReplenishHere;
       }
+
+      plan = plan.map((plan) => {
+        plan.keepTrackItems = plan.keepTrackItems.filter((item) => !allocatedLoadcellIds.has(item.loadcellId));
+        return plan;
+      });
 
       // Validation - same pattern as return
       if (neededToReplenish > 0) {
@@ -191,6 +198,7 @@ export class ReplenishItemService {
         name: item.name,
         requestQty: item.requestQty,
         loadcellId: item.loadcellId,
+        loadcellLabel: item.loadcellLabel,
         loadcellHardwareId: item.loadcellHardwareId,
         conditionId: item.conditionId,
         currentQty: item.currentQty,
@@ -206,7 +214,7 @@ export class ReplenishItemService {
       // Instructions for replenishment
       const instructions = [
         `Step ${stepIndex}: Go to cabinet ${location.cabinetName} and find bin ${location.binName}`,
-        ...itemsToReplenish.map((item) => `Add ${item.requestQty} units of ${item.name}`),
+        ...itemsToReplenish.map((item) => `Add ${item.requestQty} units of item ${item.name} from loadcell ${item.loadcellLabel}`),
         `Close ${location.binName}`,
       ];
 

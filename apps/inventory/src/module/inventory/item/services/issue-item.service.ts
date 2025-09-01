@@ -53,7 +53,7 @@ export class IssueItemService {
     // Each step represents one bin visit with clear instructions
     const steps = this._groupPlanByBin(plan);
     if (!steps || steps.length === 0) {
-      throw AppHttpException.internalServerError({ message: 'Can not issue.' });
+      throw AppHttpException.internalServerError({ message: 'Can not issue items.' });
     }
     const transactionId = await this._itemProcessingService.createAndStartTransaction({
       userId: user.id,
@@ -85,7 +85,7 @@ export class IssueItemService {
     // 2. User's historical bin usage for these items (for prioritization)
     const [availableLoadcells, userIssueHistories] = await Promise.all([
       this._repository.findItemsForIssue({ itemIds: itemIds, binIds: binIds, expiryDate }),
-      this._repository.findUserIssueHistories(user.id, itemIds),
+      this._repository.findUserIssueHistories(user.id, itemIds, binIds),
     ]);
 
     // Build a map of user's previous bin usage per item
@@ -97,11 +97,13 @@ export class IssueItemService {
     }
 
     // Initialize plan array and total quantity counter
-    const plan: PlannedItem[] = [];
+    let plan: PlannedItem[] = [];
     let totalRequestQty = 0;
 
     // Process each requested item individually
     for (const requestedItem of requestedItems) {
+      const allocatedLoadcellIds = new Set<string>();
+
       let neededQty = requestedItem.quantity;
       totalRequestQty += neededQty;
 
@@ -147,6 +149,8 @@ export class IssueItemService {
         // Take the minimum of what's needed vs. what's available
         const qtyToTake = Math.min(neededQty, availableQty);
 
+        allocatedLoadcellIds.add(loadcell.id);
+
         // Add this allocation to the plan
         const item = RefHelper.getRequired(loadcell.item, 'ItemEntity');
         const bin = RefHelper.getRequired(loadcell.bin, 'BinEntity');
@@ -161,6 +165,7 @@ export class IssueItemService {
           currentQty: loadcell.availableQuantity,
           loadcellId: loadcell.id,
           loadcellHardwareId: loadcell.hardwareId,
+          loadcellLabel: loadcell.label,
           location: {
             binId: bin.id,
             binName: `${bin.x}-${bin.y}`,
@@ -171,34 +176,28 @@ export class IssueItemService {
             siteId: site.id,
             siteName: site.name,
           },
-          // IMPORTANT: Track all OTHER items in this bin for validation
-          // This prevents users from taking unauthorized items from the same bin
-          keepTrackItems: bin.loadcells
-            .filter((l) => {
-              return (
-                // Include only valid loadcells
-                !!l.bin?.id &&
-                !!l.metadata?.itemId &&
-                // EXCLUDE all requested items (they're authorized to be taken)
-                !itemIds.includes(l.item?.id || '')
-              );
-            })
-            .map((l) => {
-              return {
-                binId: l.bin!.id,
-                itemId: l.item!.id,
-                name: l.item?.unwrap()?.name || '',
-                loadcellId: l.id,
-                requestQty: 0,
-                currentQty: l.availableQuantity,
-                loadcellHardwareId: l.hardwareId,
-              };
-            }),
+          keepTrackItems: bin.loadcells.map((l) => {
+            return {
+              binId: l.bin!.id,
+              itemId: l.item!.id,
+              name: l.item?.unwrap()?.name || '',
+              loadcellId: l.id,
+              requestQty: 0,
+              currentQty: l.availableQuantity,
+              loadcellHardwareId: l.hardwareId,
+              loadcellLabel: l.label,
+            };
+          }),
         });
 
         // Reduce the remaining necessary quantity
         neededQty -= qtyToTake;
       }
+
+      plan = plan.map((plan) => {
+        plan.keepTrackItems = plan.keepTrackItems.filter((item) => !allocatedLoadcellIds.has(item.loadcellId));
+        return plan;
+      });
 
       // Validate that we can fulfill the complete request
       if (neededQty > 0) {
@@ -249,6 +248,7 @@ export class IssueItemService {
         requestQty: item.requestQty,
         currentQty: item.currentQty,
         loadcellId: item.loadcellId,
+        loadcellLabel: item.loadcellLabel,
         loadcellHardwareId: item.loadcellHardwareId,
       }));
 
@@ -262,9 +262,9 @@ export class IssueItemService {
 
       // Generate simple instructions
       const instructions = [
-        `Step ${stepIndex}: Go to cabinet ${location.cabinetName} and bin ${location.binName}`,
-        ...itemsToIssue.map((item) => `Take ${item.requestQty} units of ${item.name}`),
-        `Close bin ${location.binName}`,
+        `Start: go to cabinet ${location.cabinetName} and find bin ${location.binName}`,
+        ...itemsToIssue.map((item) => `Take ${item.requestQty} units of item ${item.name} from loadcell ${item.loadcellLabel}`),
+        `End: close bin ${location.binName}`,
       ];
 
       // Create the step

@@ -16,16 +16,27 @@ export class ReturnItemRepository {
 
     const pipeline: any[] = [];
 
-    const initialMatch: any = {
-      userId: new ObjectId(userId),
-      itemId: { $ne: null },
-    };
-    pipeline.push({ $match: initialMatch });
-
+    // --- Giai đoạn 1 & 2: Match, Join, Filter (Tương tự như trước) ---
+    pipeline.push({
+      $match: {
+        userId: new ObjectId(userId),
+        ['locations.0']: { $exists: true },
+      },
+    });
+    pipeline.push({ $unwind: '$locations' });
     pipeline.push({ $lookup: { from: 'items', localField: 'itemId', foreignField: '_id', as: 'item' } }, { $unwind: '$item' });
     pipeline.push(
       { $lookup: { from: 'item_types', localField: 'item.itemTypeId', foreignField: '_id', as: 'item.itemType' } },
       { $unwind: '$item.itemType' },
+    );
+    pipeline.push(
+      { $lookup: { from: 'loadcells', localField: 'locations.loadcellId', foreignField: '_id', as: 'loadcell' } },
+      { $unwind: '$loadcell' },
+    );
+    pipeline.push({ $lookup: { from: 'bins', localField: 'loadcell.binId', foreignField: '_id', as: 'bin' } }, { $unwind: '$bin' });
+    pipeline.push(
+      { $lookup: { from: 'cabinets', localField: 'bin.cabinetId', foreignField: '_id', as: 'cabinet' } },
+      { $unwind: '$cabinet' },
     );
 
     const secondaryMatch: any = {};
@@ -39,71 +50,67 @@ export class ReturnItemRepository {
       pipeline.push({ $match: secondaryMatch });
     }
 
-    pipeline.push({ $unwind: '$locations' });
-    pipeline.push(
-      { $lookup: { from: 'loadcells', localField: 'locations.loadcellId', foreignField: '_id', as: 'loadcell' } },
-      { $unwind: '$loadcell' },
-    );
-    pipeline.push({ $lookup: { from: 'bins', localField: 'loadcell.binId', foreignField: '_id', as: 'bin' } }, { $unwind: '$bin' });
-    pipeline.push(
-      { $lookup: { from: 'cabinets', localField: 'bin.cabinetId', foreignField: '_id', as: 'cabinet' } },
-      { $unwind: '$cabinet' },
-    );
-
     pipeline.push({
-      $project: {
-        _id: 0,
-        id: '$item._id',
-        name: '$item.name',
-        partNo: '$item.partNo',
-        materialNo: '$item.materialNo',
-        itemTypeId: '$item.itemType._id',
-        type: '$item.itemType.name',
-        image: '$item.itemImage',
-        description: '$item.description',
-        binId: '$bin._id',
-        issuedQuantity: '$totalIssuedQuantity',
-        itemInfo: [
-          {
-            binId: '$bin._id',
-            issuedQuantity: '$locations.quantity', // Số lượng của riêng location này
-            location: {
-              $concat: [
-                '$cabinet.name',
-                '-',
-                { $toString: '$cabinet.rowNumber' },
-                '-',
-                { $toString: '$bin.x' },
-                '-',
-                { $toString: '$bin.y' },
-              ],
-            },
+      $group: {
+        _id: {
+          itemId: '$item._id',
+          binId: '$bin._id',
+        },
+
+        name: { $first: '$item.name' },
+        partNo: { $first: '$item.partNo' },
+        materialNo: { $first: '$item.materialNo' },
+        itemTypeId: { $first: '$item.itemType._id' },
+        type: { $first: '$item.itemType.name' },
+        image: { $first: '$item.itemImage' },
+        description: { $first: '$item.description' },
+        location: {
+          $first: {
+            $concat: ['$cabinet.name', '-', { $toString: '$bin.x' }, '-', { $toString: '$bin.y' }],
+          },
+        },
+
+        loadcellDetails: {
+          $push: {
             batchNumber: '$loadcell.metadata.batchNumber',
             serialNumber: '$loadcell.metadata.serialNumber',
             dueDate: '$loadcell.metadata.expiryDate',
           },
-        ],
-        locations: [
-          {
-            $concat: [
-              '$cabinet.name',
-              '-',
-              { $toString: '$cabinet.rowNumber' },
-              '-',
-              { $toString: '$bin.x' },
-              '-',
-              { $toString: '$bin.y' },
-            ],
-          },
-        ],
+        },
+
+        issuedQuantityInBin: { $sum: '$locations.quantity' },
+      },
+    });
+
+    pipeline.push({
+      $project: {
+        _id: 0,
+        id: '$_id.itemId',
+        binId: '$_id.binId', // Lấy binId từ _id của group
+        name: 1,
+        partNo: 1,
+        materialNo: 1,
+        itemTypeId: 1,
+        type: 1,
+        image: 1,
+        description: 1,
+        location: 1, // Thêm trường location đã tạo ở trên
+        issuedQuantity: '$issuedQuantityInBin', // Đổi tên cho nhất quán
+        itemInfo: '$loadcellDetails', // Đổi tên cho nhất quán
         workingOrders: [],
       },
     });
 
+    // --- Giai đoạn 5: Phân trang và thực thi ---
     const countPipeline = [...pipeline, { $count: 'total' }];
 
     try {
-      const dataPipeline = [...pipeline, { $sort: { name: 1, locations: 1 } }, { $skip: (page - 1) * limit }, { $limit: limit }];
+      const dataPipeline = [
+        ...pipeline,
+        { $sort: { name: 1, location: 1 } }, // Sắp xếp theo tên item, rồi đến location
+        { $skip: (page - 1) * limit },
+        { $limit: limit },
+      ];
 
       const [totalResult, rows] = await Promise.all([
         this._em.aggregate(IssueHistoryEntity, countPipeline),
