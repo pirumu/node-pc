@@ -87,11 +87,10 @@ import { TransactionModule } from './modules/transaction';
       useFactory: (configService: ConfigService) => {
         const mqttConfig = configService.getOrThrow<MqttConfig>(CONFIG_KEY.MQTT);
         const tcpConfig = configService.getOrThrow<TcpConfig>(CONFIG_KEY.TCP);
-        console.log(tcpConfig.publisher);
         return {
           tcp: {
             enabled: true,
-            options: tcpConfig.publisher as any,
+            options: tcpConfig.publisher,
           },
           mqtt: {
             options: mqttConfig.publisher,

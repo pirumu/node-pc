@@ -1,10 +1,12 @@
+import { EVENT_TYPE, CardEventType } from '@common/constants';
+import { IAppEvent } from '@common/interfaces';
 import { Properties } from '@framework/types';
-
-import { EVENT_TYPE, CardEventType } from '../../../constants';
-import { IAppEvent } from '../../../interfaces';
+import { Expose, Type } from 'class-transformer';
 
 export class CardScannedEvent implements IAppEvent {
-  public readonly value: string;
+  @Type(() => String)
+  @Expose()
+  public value: string;
 
   constructor(props: Properties<CardScannedEvent>) {
     Object.assign(this, props);

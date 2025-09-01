@@ -32,7 +32,7 @@ export class CardScanService implements OnModuleInit {
       next: async (status) => {
         const isConnected = status === 'connected';
         const event = new CardDeviceConnectedEvent({ isConnected });
-        await this._publisherService.publish(Transport.MQTT, event.getChannel(), event.getPayload());
+        await this._publisherService.publish(Transport.MQTT, event.getChannel(), event.getPayload(), {}, { async: true });
         if (isConnected) {
           this._subscribeToHidData(); // Subscribe only when connected
         }
@@ -51,7 +51,7 @@ export class CardScanService implements OnModuleInit {
       next: async (value) => {
         this._logger.log(`Card scanned: ${value}`);
         const event = new CardScannedEvent({ value });
-        await this._publisherService.publish(Transport.MQTT, event.getChannel(), event.getPayload());
+        await this._publisherService.publish(Transport.MQTT, event.getChannel(), event.getPayload(), {}, { async: true });
       },
       error: (error) => {
         this._logger.error('HID data stream error:', error);

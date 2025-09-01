@@ -6,13 +6,13 @@ export type TcpConfig = { publisher: Required<TcpOptions>['options']; consumer: 
 export const getTcpConfig = (): TcpConfig => {
   return {
     publisher: {
-      host: resolve('PUBLISHER_TCP_HOST', String, { default: '127.0.0.1' }),
+      host: resolve('PUBLISHER_TCP_HOST', String, { default: '0.0.0.0' }),
       port: resolve(
         'PUBLISHER_TCP_PORT',
         (value) => {
           return parseInt(<string>value, 10);
         },
-        { default: 3001 },
+        { default: 3002 },
       ),
     },
     consumer: {

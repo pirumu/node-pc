@@ -1,4 +1,3 @@
-/** biome-ignore-all lint/suspicious/noExplicitAny: true */
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Inject, Logger } from '@nestjs/common';
 
@@ -20,11 +19,11 @@ function CachedWithKey(cacheKey: string, options?: CacheOptions): MethodDecorato
 
     descriptor.value = async function (...args: any[]) {
       if (!this[CACHE_MANAGER_PROPERTY]?.cacheEnabled()) {
-        return await originalMethod.apply(this, args);
+        return originalMethod.apply(this, args);
       }
 
       if (!cacheKey) {
-        return await originalMethod.apply(this, args);
+        return originalMethod.apply(this, args);
       }
 
       try {
@@ -63,12 +62,12 @@ function CachedWithBuilder(keyBuilder: BuilderFn, options?: CacheOptions): Metho
     descriptor.value = async function (...args: any[]) {
       const cacheService = this[CACHE_MANAGER_PROPERTY];
       if (!cacheService?.cacheEnabled()) {
-        return await originalMethod.apply(this, args);
+        return originalMethod.apply(this, args);
       }
 
       const cacheKey = keyBuilder(...args);
       if (!cacheKey) {
-        return await originalMethod.apply(this, args);
+        return originalMethod.apply(this, args);
       }
 
       try {

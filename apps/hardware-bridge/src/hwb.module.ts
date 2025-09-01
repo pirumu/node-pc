@@ -1,6 +1,5 @@
 import { AppConfig } from '@config/contracts';
 import { CONFIG_KEY } from '@config/core';
-// import { DEFAULT_CONFIG, FingerprintScanModule } from '@fingerprint-scanner';
 import { TRACING_ID } from '@framework/constants';
 import { AppLoggerModule } from '@framework/logger';
 import { PublisherModule } from '@framework/publisher';
@@ -14,9 +13,12 @@ import { Request } from 'express';
 import { ClsModule } from 'nestjs-cls';
 
 import { configs } from './config';
-// import { FingerprintConfig } from './config/fingerprint.config';
+import { LoadcellConfig } from './config/loadcell.config';
 import { MqttConfig } from './config/mqtt.config';
 import { HARDWARE_MODULES } from './modules';
+
+// import { DEFAULT_CONFIG, FingerprintScanModule } from '@fingerprint-scanner';
+// import { FingerprintConfig } from './config/fingerprint.config';
 // import { FingerprintModule } from './modules/fingerprint';
 
 @Module({
@@ -83,25 +85,13 @@ import { HARDWARE_MODULES } from './modules';
       inject: [ConfigService],
     }),
     LoadcellsModule.forRootAsync({
-      useFactory: () => {
-        return {
-          loadCellConfig: {
-            enabled: true,
-            logLevel: 1,
-            pollingInterval: 500,
-          },
-          healthMonitoringConfig: {
-            enabled: true,
-            heartbeatTimeout: 10000,
-            logConnectionChanges: true,
-            checkInterval: 5000,
-          },
-        };
+      useFactory: (configService: ConfigService) => {
+        return configService.getOrThrow<LoadcellConfig>(CONFIG_KEY.LOADCELL);
       },
       inject: [ConfigService],
     }),
-    ...HARDWARE_MODULES,
     HidDeviceModule,
+    ...HARDWARE_MODULES,
   ],
   controllers: [],
   providers: [],

@@ -1,6 +1,3 @@
-import * as path from 'node:path';
-import * as process from 'node:process';
-
 import { resolve } from '@config/core';
 
 export type FingerprintConfig = {
