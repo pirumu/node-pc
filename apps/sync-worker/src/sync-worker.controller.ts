@@ -10,4 +10,34 @@ export class SyncWorkerController {
   public async syncUsers(): Promise<boolean> {
     return this._syncWorkerService.syncUsers();
   }
+
+  @Get('sync/clusters')
+  public async syncClusters(): Promise<boolean> {
+    return this._syncWorkerService.syncClusters();
+  }
+
+  @Get('sync/cabinets')
+  public async syncCabinets(): Promise<boolean> {
+    return this._syncWorkerService.syncCabinets();
+  }
+
+  @Get('sync/item-types')
+  public async syncItemTypes(): Promise<boolean> {
+    return this._syncWorkerService.syncItemTypes();
+  }
+
+  @Get('sync/areas')
+  public async syncAreas(): Promise<boolean> {
+    return this._syncWorkerService.syncAreas();
+  }
+
+  @Get('sync/conditions')
+  public async syncConditions(): Promise<boolean> {
+    return this._syncWorkerService.syncConditions();
+  }
+
+  @Get('sync/working-orders')
+  public async syncWorkingOrders(): Promise<boolean> {
+    return this._syncWorkerService.syncWorkingOrders();
+  }
 }

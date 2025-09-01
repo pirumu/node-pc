@@ -1,6 +1,8 @@
 export const CLOUD_PATHS = {
   LOGIN: '/api/v1/login',
   GET_LIST_USER: '/api/v1/users',
+  GET_LIST_WORKING_ORDER: '/api/v1/working-orders',
+  GET_LIST_CLUSTER: '/api/v1/clusters',
   UPDATE_CARD_USER: '/api/v1/users/update-cards',
   GET_LIST_JOB_CARD: '/api/v1/job-cards',
   UPDATE_JOB_CARD: '/api/v1/job-cards/update-many',

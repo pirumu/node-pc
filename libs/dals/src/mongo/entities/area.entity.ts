@@ -1,7 +1,8 @@
 import { PartialProperties } from '@framework/types';
-import { Entity, Property } from '@mikro-orm/core';
+import { Entity, ManyToOne, Property, Ref } from '@mikro-orm/core';
 
 import { AbstractEntity } from './abstract.entity';
+import { SiteEntity } from './site.entity';
 
 @Entity({ collection: 'areas' })
 export class AreaEntity extends AbstractEntity {
@@ -10,6 +11,9 @@ export class AreaEntity extends AbstractEntity {
 
   @Property()
   torque!: number;
+
+  @ManyToOne(() => SiteEntity, { ref: true, fieldName: 'siteId' })
+  site!: Ref<SiteEntity>;
 
   constructor(data?: PartialProperties<AreaEntity>) {
     super();
