@@ -26,6 +26,11 @@ export class SyncWorkerController {
     return this._syncWorkerService.syncItemTypes();
   }
 
+  @Get('sync/items')
+  public async syncItems(): Promise<boolean> {
+    return this._syncWorkerService.syncItems();
+  }
+
   @Get('sync/areas')
   public async syncAreas(): Promise<boolean> {
     return this._syncWorkerService.syncAreas();
@@ -34,6 +39,16 @@ export class SyncWorkerController {
   @Get('sync/conditions')
   public async syncConditions(): Promise<boolean> {
     return this._syncWorkerService.syncConditions();
+  }
+
+  @Get('sync/bins')
+  public async syncBins(): Promise<boolean> {
+    return this._syncWorkerService.syncBins();
+  }
+
+  @Get('sync/loadcells')
+  public async syncLoadcells(): Promise<boolean> {
+    return this._syncWorkerService.syncLoadcells();
   }
 
   @Get('sync/working-orders')

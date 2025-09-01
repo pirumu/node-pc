@@ -59,6 +59,9 @@ export class BinItem {
 
   @Property({ nullable: true })
   expiryDate?: Date;
+
+  @Property({ nullable: true })
+  position?: string;
 }
 
 @Embeddable()
@@ -107,6 +110,9 @@ export class BinEntity extends AbstractEntity {
   @Property()
   lockId: number;
 
+  @Property()
+  index: number;
+
   // Position properties
   @Property()
   x: number;
@@ -136,8 +142,14 @@ export class BinEntity extends AbstractEntity {
   @Embedded(() => BinItem, { array: true, default: [] })
   items: BinItem[] = [];
 
+  @Property({ nullable: true })
+  antennaNo?: string;
+
+  @Property({ nullable: true })
+  gatewayIp?: string;
+
   @Embedded(() => BinState, { object: true })
-  state: BinState;
+  state: BinState; // local fields
 
   constructor(data?: Properties<BinEntity>) {
     super();

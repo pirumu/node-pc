@@ -10,6 +10,10 @@ import {
   ConditionEntity,
   CabinetType,
   ItemTypeCategoryType,
+  BinType,
+  BinEntity,
+  LoadcellEntity,
+  ItemEntity,
 } from '@dals/mongo/entities';
 import { EntityRepository, ObjectId } from '@mikro-orm/mongodb';
 import { InjectRepository } from '@mikro-orm/nestjs';
@@ -33,10 +37,16 @@ export class SyncWorkerService {
     private readonly _cabinetRepository: EntityRepository<CabinetEntity>,
     @InjectRepository(ItemTypeEntity)
     private readonly _itemTypeRepository: EntityRepository<ItemTypeEntity>,
+    @InjectRepository(ItemEntity)
+    private readonly _itemRepository: EntityRepository<ItemEntity>,
     @InjectRepository(AreaEntity)
     private readonly _areaRepository: EntityRepository<AreaEntity>,
     @InjectRepository(ConditionEntity)
     private readonly _conditionRepository: EntityRepository<ConditionEntity>,
+    @InjectRepository(BinEntity)
+    private readonly _binRepository: EntityRepository<BinEntity>,
+    @InjectRepository(LoadcellEntity)
+    private readonly _loadcellRepository: EntityRepository<LoadcellEntity>,
   ) {}
 
   public async syncUsers(): Promise<boolean> {
@@ -235,12 +245,69 @@ export class SyncWorkerService {
             _id: new ObjectId(itemType.id),
             site: new ObjectId(itemType.siteId),
             name: itemType.name,
-            description: itemType.description || '',
+            description: itemType.description,
             category: itemType.category as ItemTypeCategoryType,
             createdAt: new Date(itemType.createdAt),
             updatedAt: new Date(itemType.updatedAt),
             createdBy: new ObjectId(itemType.createdBy),
             updatedBy: new ObjectId(itemType.updatedBy),
+          })),
+        );
+
+        if (!result.next) {
+          break;
+        }
+
+        nextPage = result.next;
+      } catch (e) {
+        this._logger.error(e);
+        break;
+      }
+    }
+
+    return true;
+  }
+
+  public async syncItems(): Promise<boolean> {
+    let nextPage: string | undefined = undefined;
+
+    while (true) {
+      try {
+        const result = await this._cloudService.getPaginationItems(nextPage);
+
+        if (!result || result.list?.length === 0) {
+          break;
+        }
+
+        await this._itemRepository.upsertMany(
+          result.list.map((item) => ({
+            _id: new ObjectId(item.id),
+            partNo: item.partNo,
+            materialNo: item.materialNo,
+            name: item.name,
+            supplierEmail: item.supplierEmail,
+            itemAccount: item.itemAccount,
+            criCode: item.criCode,
+            uom: item.uom,
+            materialGroup: item.materialGroup,
+            hasBatchNumber: item.hasBatchNumber,
+            hasSerialNumber: item.hasSerialNumber,
+            hasMinChargeTime: item.hasMinChargeTime,
+            hasInspection: item.hasInspection,
+            hasExpiryDate: item.hasExpiryDate,
+            hasHydrostaticTest: item.hasHydrostaticTest,
+            hasRFID: item.hasRFID,
+            hasBarcode: item.hasBarcode,
+            description: item.description,
+            itemImage: item.itemImage,
+            unitCost: item.unitCost,
+            retailCost: item.retailCost,
+            site: new ObjectId(item.siteId),
+            itemType: new ObjectId(item.itemTypeId),
+            createdAt: new Date(item.createdAt),
+            updatedAt: new Date(item.updatedAt),
+            createdBy: new ObjectId(item.createdBy),
+            updatedBy: new ObjectId(item.updatedBy),
           })),
         );
 
@@ -317,6 +384,126 @@ export class SyncWorkerService {
             updatedAt: new Date(),
             createdBy: new ObjectId(condition.createdBy),
             updatedBy: new ObjectId(condition.updatedBy),
+          })),
+        );
+
+        if (!result.next) {
+          break;
+        }
+
+        nextPage = result.next;
+      } catch (e) {
+        this._logger.error(e);
+        break;
+      }
+    }
+
+    return true;
+  }
+
+  public async syncBins(): Promise<boolean> {
+    let nextPage: string | undefined = undefined;
+
+    while (true) {
+      try {
+        const result = await this._cloudService.getPaginationBins(nextPage);
+
+        if (!result || result.list?.length === 0) {
+          break;
+        }
+
+        await this._binRepository.upsertMany(
+          result.list.map((bin) => ({
+            _id: new ObjectId(bin.id),
+            site: new ObjectId(bin.siteId),
+            cluster: new ObjectId(bin.clusterId),
+            cabinet: new ObjectId(bin.cabinetId),
+            loadcells: bin.loadcellIds.map((loadcellId) => new ObjectId(loadcellId)),
+            cuLockId: bin.cuLockId,
+            lockId: bin.lockId,
+            x: bin.x,
+            y: bin.y,
+            width: bin.width,
+            height: bin.height,
+            index: bin.index,
+            minQty: bin.min,
+            maxQty: bin.max,
+            criticalQty: bin.critical,
+            type: bin.type as BinType,
+            items: bin.items.map((item) => ({
+              itemId: new ObjectId(item.itemId),
+              qty: item.qty,
+              critical: item.critical,
+              min: item.min,
+              max: item.max,
+              description: item.description || '',
+              barcode: item.barcode,
+              rfid: item.rfid,
+              serialNumber: item.serialNumber,
+              batchNumber: item.batchNumber,
+              chargeTime: item.chargeTime ? new Date(item.chargeTime) : null,
+              inspection: item.inspection ? new Date(item.inspection) : null,
+              hydrostaticTest: item.hydrostaticTest ? new Date(item.hydrostaticTest) : null,
+              expiryDate: item.expiryDate ? new Date(item.expiryDate) : null,
+              position: item.position,
+            })),
+            antennaNo: bin.antennaNo,
+            gatewayIp: bin.gatewayIp,
+            createdAt: new Date(bin.createdAt),
+            updatedAt: new Date(bin.updatedAt),
+            createdBy: new ObjectId(bin.createdBy),
+            updatedBy: new ObjectId(bin.updatedBy),
+          })),
+        );
+
+        if (!result.next) {
+          break;
+        }
+
+        nextPage = result.next;
+      } catch (e) {
+        this._logger.error(e);
+        break;
+      }
+    }
+
+    return true;
+  }
+
+  public async syncLoadcells(): Promise<boolean> {
+    let nextPage: string | undefined = undefined;
+
+    while (true) {
+      try {
+        const result = await this._cloudService.getPaginationLoadcells(nextPage);
+
+        if (!result || result.list?.length === 0) {
+          break;
+        }
+
+        await this._loadcellRepository.upsertMany(
+          result.list.map((loadcell) => ({
+            _id: new ObjectId(loadcell.id),
+            site: new ObjectId(loadcell.siteId),
+            cluster: new ObjectId(loadcell.clusterId),
+            cabinet: new ObjectId(loadcell.cabinetId),
+            bin: new ObjectId(loadcell.binId),
+            code: loadcell.code,
+            label: loadcell.label,
+            item: new ObjectId(loadcell.item.itemId),
+            metadata: {
+              itemId: new ObjectId(loadcell.item.itemId),
+              qty: loadcell.item.qty,
+              critical: loadcell.item.critical,
+              min: loadcell.item.min,
+              max: loadcell.item.max,
+              qtyOriginal: loadcell.item.qtyOriginal,
+              inspection: loadcell.item.inspection ? new Date(loadcell.item.inspection) : null,
+            },
+            createdAt: new Date(loadcell.createdAt),
+            updatedAt: new Date(loadcell.updatedAt),
+            createdBy: new ObjectId(loadcell.createdBy),
+            updatedBy: new ObjectId(loadcell.updatedBy),
           })),
         );
 

@@ -1,0 +1,44 @@
+export type BinItemDto = {
+  itemId: string;
+  qty: number;
+  qtyOriginal: number;
+  critical: number;
+  min: number;
+  max: number;
+  description: string | null;
+  barcode: string;
+  rfid: string | null;
+  serialNumber: string;
+  batchNumber: string;
+  position: string | null;
+  chargeTime: string | null;
+  inspection: string | null;
+  hydrostaticTest: string | null;
+  expiryDate: string;
+};
+
+export type BinDto = {
+  id: string;
+  cuLockId: number;
+  lockId: number;
+  index: number;
+  siteId: string;
+  clusterId: string;
+  cabinetId: string;
+  critical: number;
+  min: number;
+  max: number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  type: string;
+  loadcellIds: string[];
+  items: BinItemDto[];
+  createdBy: string;
+  updatedBy: string;
+  createdAt: string;
+  updatedAt: string;
+  antennaNo: string | null;
+  gatewayIp: string | null;
+};
