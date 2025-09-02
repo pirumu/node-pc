@@ -59,6 +59,7 @@ export class SyncWorkerService {
   ) {}
 
   public async syncUsers(): Promise<boolean> {
+    let isSuccess = true;
     let nextPage: string | undefined = undefined;
 
     while (true) {
@@ -92,14 +93,16 @@ export class SyncWorkerService {
         nextPage = result.next;
       } catch (e) {
         this._logger.error(e);
+        isSuccess = false;
         break;
       }
     }
 
-    return true;
+    return isSuccess;
   }
 
   public async syncClusters(): Promise<boolean> {
+    let isSuccess = true;
     let nextPage: string | undefined = undefined;
 
     while (true) {
@@ -119,14 +122,16 @@ export class SyncWorkerService {
         nextPage = result.next;
       } catch (e) {
         this._logger.error(e);
+        isSuccess = false;
         break;
       }
     }
 
-    return true;
+    return isSuccess;
   }
 
   public async syncCabinets(): Promise<boolean> {
+    let isSuccess = true;
     let nextPage: string | undefined = undefined;
 
     while (true) {
@@ -146,14 +151,16 @@ export class SyncWorkerService {
         nextPage = result.next;
       } catch (e) {
         this._logger.error(e);
+        isSuccess = false;
         break;
       }
     }
 
-    return true;
+    return isSuccess;
   }
 
   public async syncItemTypes(): Promise<boolean> {
+    let isSuccess = true;
     let nextPage: string | undefined = undefined;
 
     while (true) {
@@ -173,14 +180,16 @@ export class SyncWorkerService {
         nextPage = result.next;
       } catch (e) {
         this._logger.error(e);
+        isSuccess = false;
         break;
       }
     }
 
-    return true;
+    return isSuccess;
   }
 
   public async syncItems(): Promise<boolean> {
+    let isSuccess = true;
     let nextPage: string | undefined = undefined;
 
     while (true) {
@@ -200,14 +209,16 @@ export class SyncWorkerService {
         nextPage = result.next;
       } catch (e) {
         this._logger.error(e);
+        isSuccess = false;
         break;
       }
     }
 
-    return true;
+    return isSuccess;
   }
 
   public async syncAreas(): Promise<boolean> {
+    let isSuccess = true;
     let nextPage: string | undefined = undefined;
 
     while (true) {
@@ -227,14 +238,16 @@ export class SyncWorkerService {
         nextPage = result.next;
       } catch (e) {
         this._logger.error(e);
+        isSuccess = false;
         break;
       }
     }
 
-    return true;
+    return isSuccess;
   }
 
   public async syncConditions(): Promise<boolean> {
+    let isSuccess = true;
     let nextPage: string | undefined = undefined;
 
     while (true) {
@@ -254,14 +267,16 @@ export class SyncWorkerService {
         nextPage = result.next;
       } catch (e) {
         this._logger.error(e);
+        isSuccess = false;
         break;
       }
     }
 
-    return true;
+    return isSuccess;
   }
 
   public async syncBins(): Promise<boolean> {
+    let isSuccess = true;
     let nextPage: string | undefined = undefined;
 
     while (true) {
@@ -281,14 +296,16 @@ export class SyncWorkerService {
         nextPage = result.next;
       } catch (e) {
         this._logger.error(e);
+        isSuccess = false;
         break;
       }
     }
 
-    return true;
+    return isSuccess;
   }
 
   public async syncLoadcells(): Promise<boolean> {
+    let isSuccess = true;
     let nextPage: string | undefined = undefined;
 
     while (true) {
@@ -308,14 +325,16 @@ export class SyncWorkerService {
         nextPage = result.next;
       } catch (e) {
         this._logger.error(e);
+        isSuccess = false;
         break;
       }
     }
 
-    return true;
+    return isSuccess;
   }
 
   public async syncWorkingOrders(): Promise<boolean> {
+    let isSuccess = true;
     let nextPage: string | undefined = undefined;
 
     while (true) {
@@ -334,10 +353,11 @@ export class SyncWorkerService {
         nextPage = result.next;
       } catch (e) {
         this._logger.error(e);
+        isSuccess = false;
         break;
       }
     }
 
-    return true;
+    return isSuccess;
   }
 }
