@@ -34,12 +34,10 @@ export class SyncWorkerService {
   private readonly _logger = new Logger(SyncWorkerService.name);
   constructor(
     private readonly _cloudService: CloudService,
-    @InjectRepository(UserEntity)
-    private readonly _userRepository: EntityRepository<UserEntity>,
     @InjectRepository(SiteEntity)
     private readonly _siteRepository: EntityRepository<SiteEntity>,
-    @InjectRepository(WorkingOrderEntity)
-    private readonly _workingOrderRepository: EntityRepository<WorkingOrderEntity>,
+    @InjectRepository(UserEntity)
+    private readonly _userRepository: EntityRepository<UserEntity>,
     @InjectRepository(ClusterEntity)
     private readonly _clusterRepository: EntityRepository<ClusterEntity>,
     @InjectRepository(CabinetEntity)
@@ -52,10 +50,12 @@ export class SyncWorkerService {
     private readonly _areaRepository: EntityRepository<AreaEntity>,
     @InjectRepository(ConditionEntity)
     private readonly _conditionRepository: EntityRepository<ConditionEntity>,
-    @InjectRepository(BinEntity)
-    private readonly _binRepository: EntityRepository<BinEntity>,
     @InjectRepository(LoadcellEntity)
     private readonly _loadcellRepository: EntityRepository<LoadcellEntity>,
+    @InjectRepository(BinEntity)
+    private readonly _binRepository: EntityRepository<BinEntity>,
+    @InjectRepository(WorkingOrderEntity)
+    private readonly _workingOrderRepository: EntityRepository<WorkingOrderEntity>,
   ) {}
 
   public async syncUsers(): Promise<boolean> {
