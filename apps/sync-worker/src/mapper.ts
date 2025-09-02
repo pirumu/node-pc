@@ -59,6 +59,7 @@ export class UserMapper {
 export class ClusterMapper {
   public static fromDto(cluster: ClusterDto): EntityData<ClusterEntity> {
     return {
+      _id: new ObjectId(cluster.id),
       site: new ObjectId(cluster.siteId),
       name: cluster.name,
       code: cluster.code,

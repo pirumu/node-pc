@@ -84,10 +84,17 @@ export class SyncWorkerService {
             },
           );
         }
+        const { list, next } = result;
 
-        await this._userRepository.upsertMany(result.list.map((user) => UserMapper.fromDto(user)));
+        await this._userRepository.upsertMany(
+          list.map((user) => UserMapper.fromDto(user)),
+          {
+            onConflictFields: ['_id'],
+            onConflictAction: 'merge',
+          },
+        );
 
-        if (!result.next) {
+        if (!next) {
           break;
         }
         nextPage = result.next;
@@ -113,13 +120,21 @@ export class SyncWorkerService {
           break;
         }
 
-        await this._clusterRepository.upsertMany(result.list.map((cluster) => ClusterMapper.fromDto(cluster)));
+        const { list, next } = result;
 
-        if (!result.next) {
+        await this._clusterRepository.upsertMany(
+          list.map((cluster) => ClusterMapper.fromDto(cluster)),
+          {
+            onConflictFields: ['_id'],
+            onConflictAction: 'merge',
+          },
+        );
+
+        if (!next) {
           break;
         }
 
-        nextPage = result.next;
+        nextPage = next;
       } catch (e) {
         this._logger.error(e);
         isSuccess = false;
@@ -142,13 +157,21 @@ export class SyncWorkerService {
           break;
         }
 
-        await this._cabinetRepository.upsertMany(result.list.map((cabinet) => CabinetMapper.fromDto(cabinet)));
+        const { list, next } = result;
 
-        if (!result.next) {
+        await this._cabinetRepository.upsertMany(
+          list.map((cabinet) => CabinetMapper.fromDto(cabinet)),
+          {
+            onConflictFields: ['_id'],
+            onConflictAction: 'merge',
+          },
+        );
+
+        if (!next) {
           break;
         }
 
-        nextPage = result.next;
+        nextPage = next;
       } catch (e) {
         this._logger.error(e);
         isSuccess = false;
@@ -171,13 +194,21 @@ export class SyncWorkerService {
           break;
         }
 
-        await this._itemTypeRepository.upsertMany(result.list.map((itemType) => ItemTypeMapper.fromDto(itemType)));
+        const { list, next } = result;
 
-        if (!result.next) {
+        await this._itemTypeRepository.upsertMany(
+          list.map((itemType) => ItemTypeMapper.fromDto(itemType)),
+          {
+            onConflictFields: ['_id'],
+            onConflictAction: 'merge',
+          },
+        );
+
+        if (!next) {
           break;
         }
 
-        nextPage = result.next;
+        nextPage = next;
       } catch (e) {
         this._logger.error(e);
         isSuccess = false;
@@ -200,13 +231,21 @@ export class SyncWorkerService {
           break;
         }
 
-        await this._itemRepository.upsertMany(result.list.map((item) => ItemMapper.fromDto(item)));
+        const { list, next } = result;
 
-        if (!result.next) {
+        await this._itemRepository.upsertMany(
+          list.map((item) => ItemMapper.fromDto(item)),
+          {
+            onConflictFields: ['_id'],
+            onConflictAction: 'merge',
+          },
+        );
+
+        if (!next) {
           break;
         }
 
-        nextPage = result.next;
+        nextPage = next;
       } catch (e) {
         this._logger.error(e);
         isSuccess = false;
@@ -229,13 +268,21 @@ export class SyncWorkerService {
           break;
         }
 
-        await this._areaRepository.upsertMany(result.list.map((area) => AreaMapper.fromDto(area)));
+        const { list, next } = result;
 
-        if (!result.next) {
+        await this._areaRepository.upsertMany(
+          list.map((area) => AreaMapper.fromDto(area)),
+          {
+            onConflictFields: ['_id'],
+            onConflictAction: 'merge',
+          },
+        );
+
+        if (!next) {
           break;
         }
 
-        nextPage = result.next;
+        nextPage = next;
       } catch (e) {
         this._logger.error(e);
         isSuccess = false;
@@ -258,13 +305,21 @@ export class SyncWorkerService {
           break;
         }
 
-        await this._conditionRepository.upsertMany(result.list.map((condition) => ConditionMapper.fromDto(condition)));
+        const { list, next } = result;
 
-        if (!result.next) {
+        await this._conditionRepository.upsertMany(
+          list.map((condition) => ConditionMapper.fromDto(condition)),
+          {
+            onConflictFields: ['_id'],
+            onConflictAction: 'merge',
+          },
+        );
+
+        if (!next) {
           break;
         }
 
-        nextPage = result.next;
+        nextPage = next;
       } catch (e) {
         this._logger.error(e);
         isSuccess = false;
@@ -287,13 +342,21 @@ export class SyncWorkerService {
           break;
         }
 
-        await this._binRepository.upsertMany(result.list.map((bin) => BinMapper.fromDto(bin)));
+        const { list, next } = result;
 
-        if (!result.next) {
+        await this._binRepository.upsertMany(
+          list.map((bin) => BinMapper.fromDto(bin)),
+          {
+            onConflictFields: ['_id'],
+            onConflictAction: 'merge',
+          },
+        );
+
+        if (!next) {
           break;
         }
 
-        nextPage = result.next;
+        nextPage = next;
       } catch (e) {
         this._logger.error(e);
         isSuccess = false;
@@ -316,13 +379,21 @@ export class SyncWorkerService {
           break;
         }
 
-        await this._loadcellRepository.upsertMany(result.list.map((loadcell) => LoadcellMapper.fromDto(loadcell)));
+        const { list, next } = result;
 
-        if (!result.next) {
+        await this._loadcellRepository.upsertMany(
+          list.map((loadcell) => LoadcellMapper.fromDto(loadcell)),
+          {
+            onConflictFields: ['_id'],
+            onConflictAction: 'merge',
+          },
+        );
+
+        if (!next) {
           break;
         }
 
-        nextPage = result.next;
+        nextPage = next;
       } catch (e) {
         this._logger.error(e);
         isSuccess = false;
@@ -344,13 +415,20 @@ export class SyncWorkerService {
         if (!result || result.list?.length === 0) {
           break;
         }
+        const { list, next } = result;
 
-        await this._workingOrderRepository.upsertMany(result.list.map((workingOrder) => WorkingOrderMapper.fromDto(workingOrder)));
+        await this._workingOrderRepository.upsertMany(
+          list.map((workingOrder) => WorkingOrderMapper.fromDto(workingOrder)),
+          {
+            onConflictFields: ['_id'],
+            onConflictAction: 'merge',
+          },
+        );
 
-        if (!result.next) {
+        if (!next) {
           break;
         }
-        nextPage = result.next;
+        nextPage = next;
       } catch (e) {
         this._logger.error(e);
         isSuccess = false;
