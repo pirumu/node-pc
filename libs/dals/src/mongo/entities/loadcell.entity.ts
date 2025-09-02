@@ -79,6 +79,9 @@ export class LoadcellMetadata {
   @Property({ default: 0 })
   max: number = 0;
 
+  @Property({ default: 0 })
+  qtyOriginal: number = 0;
+
   @Property({ default: '' })
   description: string = '';
 
