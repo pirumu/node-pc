@@ -41,14 +41,14 @@ export class SyncWorkerController {
     return this._syncWorkerService.syncConditions();
   }
 
-  @Get('sync/bins')
-  public async syncBins(): Promise<boolean> {
-    return this._syncWorkerService.syncBins();
-  }
-
   @Get('sync/loadcells')
   public async syncLoadcells(): Promise<boolean> {
     return this._syncWorkerService.syncLoadcells();
+  }
+
+  @Get('sync/bins')
+  public async syncBins(): Promise<boolean> {
+    return this._syncWorkerService.syncBins();
   }
 
   @Get('sync/working-orders')

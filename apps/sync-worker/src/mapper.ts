@@ -172,6 +172,34 @@ export class ConditionMapper {
   }
 }
 
+export class LoadcellMapper {
+  public static fromDto(loadcell: LoadcellDto): EntityData<LoadcellEntity> {
+    return {
+      _id: new ObjectId(loadcell.id),
+      site: new ObjectId(loadcell.siteId),
+      cluster: new ObjectId(loadcell.clusterId),
+      cabinet: new ObjectId(loadcell.cabinetId),
+      bin: new ObjectId(loadcell.binId),
+      code: loadcell.code,
+      label: loadcell.label,
+      item: new ObjectId(loadcell.item.itemId),
+      metadata: {
+        itemId: new ObjectId(loadcell.item.itemId),
+        qty: loadcell.item.qty,
+        critical: loadcell.item.critical,
+        min: loadcell.item.min,
+        max: loadcell.item.max,
+        qtyOriginal: loadcell.item.qtyOriginal,
+        inspection: loadcell.item.inspection ? new Date(loadcell.item.inspection) : null,
+      },
+      createdAt: loadcell.createdAt ? new Date(loadcell.createdAt) : new Date(),
+      updatedAt: loadcell.updatedAt ? new Date(loadcell.updatedAt) : new Date(),
+      createdBy: new ObjectId(loadcell.createdBy),
+      updatedBy: new ObjectId(loadcell.updatedBy),
+    };
+  }
+}
+
 export class BinMapper {
   public static fromDto(bin: BinDto): EntityData<BinEntity> {
     return {
@@ -210,38 +238,10 @@ export class BinMapper {
       })),
       antennaNo: bin.antennaNo,
       gatewayIp: bin.gatewayIp,
-      createdAt: new Date(bin.createdAt),
-      updatedAt: new Date(bin.updatedAt),
+      createdAt: bin.createdAt ? new Date(bin.createdAt) : new Date(),
+      updatedAt: bin.updatedAt ? new Date(bin.updatedAt) : new Date(),
       createdBy: new ObjectId(bin.createdBy),
       updatedBy: new ObjectId(bin.updatedBy),
-    };
-  }
-}
-
-export class LoadcellMapper {
-  public static fromDto(loadcell: LoadcellDto): EntityData<LoadcellEntity> {
-    return {
-      _id: new ObjectId(loadcell.id),
-      site: new ObjectId(loadcell.siteId),
-      cluster: new ObjectId(loadcell.clusterId),
-      cabinet: new ObjectId(loadcell.cabinetId),
-      bin: new ObjectId(loadcell.binId),
-      code: loadcell.code,
-      label: loadcell.label,
-      item: new ObjectId(loadcell.item.itemId),
-      metadata: {
-        itemId: new ObjectId(loadcell.item.itemId),
-        qty: loadcell.item.qty,
-        critical: loadcell.item.critical,
-        min: loadcell.item.min,
-        max: loadcell.item.max,
-        qtyOriginal: loadcell.item.qtyOriginal,
-        inspection: loadcell.item.inspection ? new Date(loadcell.item.inspection) : null,
-      },
-      createdAt: new Date(loadcell.createdAt),
-      updatedAt: new Date(loadcell.updatedAt),
-      createdBy: new ObjectId(loadcell.createdBy),
-      updatedBy: new ObjectId(loadcell.updatedBy),
     };
   }
 }
