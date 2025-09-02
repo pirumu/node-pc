@@ -17,7 +17,6 @@ export class AuthCardController {
   public async onCardScanned(@Payload() payload: { value: string }): Promise<void> {
     try {
       const responses = await this._authService.loginByCard(payload.value);
-
       responses.forEach((res) => {
         if (res[0] === 'none') {
           this._wsGateway.sendMessage('scan-employee' as any, { success: true, data: res[1] });
@@ -25,8 +24,10 @@ export class AuthCardController {
           this._wsGateway.sendTo('scan-employee' as any, { success: true, data: res[1] }, [res[0]]);
         }
       });
-    } catch (_err) {
+    } catch (err) {
       this._wsGateway.sendMessage('scan-employee' as any, { success: false, data: null });
+
+      throw err;
     }
   }
 }

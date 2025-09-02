@@ -11,6 +11,7 @@ import { ReturnItemRepository, IssueItemRepository } from '../repositories';
 import { ReturnableItemRecord } from '../repositories/item.types';
 
 import { ItemProcessingService } from './item-processing.service';
+import { isMongoId } from 'class-validator';
 
 @Injectable()
 export class ReturnItemService {
@@ -46,9 +47,13 @@ export class ReturnItemService {
 
     const steps = this._groupReturnPlanByBin(plan);
 
+    if (!steps || steps.length === 0) {
+      throw AppHttpException.internalServerError({ message: 'Can not return items.' });
+    }
+
     const transactionId = await this._itemProcessingService.createAndStartTransaction({
       userId: user.id,
-      transactionType: TransactionType.ISSUE,
+      transactionType: TransactionType.RETURN,
       totalRequestQty: totalReturnQty,
       executionSteps: steps,
     });
@@ -58,15 +63,16 @@ export class ReturnItemService {
 
   private async _planReturn(user: AuthUserDto, returnItems: ItemRequest['items']) {
     const itemIds = returnItems.map((item) => item.itemId);
+    const binIds = returnItems.map((item) => item.binId);
 
-    const userIssueHistories = await this._issueItemRepository.findUserIssueHistories(user.id, itemIds);
+    const userIssueHistories = await this._issueItemRepository.findUserIssueHistories(user.id, itemIds, binIds);
 
     const historyMap = new Map<string, IssueHistoryEntity>();
     for (const history of userIssueHistories) {
       historyMap.set(history.item.id, history);
     }
 
-    const plan: PlannedItem[] = [];
+    let plan: PlannedItem[] = [];
     let totalReturnQty = 0;
 
     for (const returnItem of returnItems) {
@@ -89,11 +95,17 @@ export class ReturnItemService {
         });
       }
 
-      const loadcells = await this._em.find(LoadcellEntity, {
-        _id: { $in: history.locations.map((l) => l.loadcellId) },
-      });
+      const loadcells = await this._em.find(
+        LoadcellEntity,
+        {
+          _id: { $in: history.locations.map((l) => l.loadcellId) },
+        },
+        { populate: ['item', 'item.itemType', 'bin', 'bin.loadcells', 'cabinet', 'cluster', 'site'] },
+      );
 
       const loadcellsMap = new Map<string, LoadcellEntity>(loadcells.map((l) => [l.id, l]));
+
+      const allocatedLoadcellIds = new Set<string>();
 
       for (const issuedLocation of history.locations) {
         if (neededToReturn <= 0) {
@@ -114,13 +126,15 @@ export class ReturnItemService {
         const cabinet = RefHelper.getRequired(loadcell.cabinet, 'CabinetEntity');
         const cluster = RefHelper.getRequired(loadcell.cluster, 'ClusterEntity');
         const site = RefHelper.getRequired(loadcell.site, 'SiteEntity');
-
+        allocatedLoadcellIds.add(loadcell.id);
         plan.push({
           name: item.name,
           itemId: returnItem.itemId,
           requestQty: qtyToReturnHere,
           currentQty: loadcell.availableQuantity,
+          conditionId: returnItem.conditionId,
           loadcellId: loadcell.id,
+          loadcellLabel: loadcell.label,
           loadcellHardwareId: loadcell.hardwareId,
           location: {
             binId: bin.id,
@@ -133,7 +147,7 @@ export class ReturnItemService {
             siteName: site.name,
           },
           keepTrackItems: bin.loadcells
-            .filter((l) => !!l.bin?.id && !!l.item?.id && !itemIds.includes(l.item?.id))
+            .filter((l) => !!l.bin?.id && !!l.item?.id)
             .map((l) => ({
               loadcellId: l.id,
               loadcellHardwareId: l.hardwareId,
@@ -141,11 +155,17 @@ export class ReturnItemService {
               name: l.item?.unwrap()?.name || '',
               currentQty: l.availableQuantity,
               binId: l.bin!.id,
+              loadcellLabel: l.label,
             })),
         });
 
         neededToReturn -= qtyToReturnHere;
       }
+
+      plan = plan.map((plan) => {
+        plan.keepTrackItems = plan.keepTrackItems.filter((item) => !allocatedLoadcellIds.has(item.loadcellId));
+        return plan;
+      });
 
       if (neededToReturn > 0) {
         throw AppHttpException.badRequest({
@@ -184,7 +204,8 @@ export class ReturnItemService {
         currentQty: item.currentQty,
         loadcellId: item.loadcellId,
         loadcellHardwareId: item.loadcellHardwareId,
-        conditionId: item.conditionId,
+        loadcellLabel: item.loadcellLabel,
+        conditionId: isMongoId(item.conditionId) ? item.conditionId : undefined,
       }));
 
       const trackingItemsMap = new Map<string, AnotherItem>();
@@ -196,8 +217,8 @@ export class ReturnItemService {
 
       const instructions = [
         `Step ${stepIndex}: Go to cabinet ${location.cabinetName} and find bin ${location.binName}`,
-        ...itemsToReturn.map((item) => `Return ${item.requestQty} units of ${item.name}`),
-        `Close ${binId}`,
+        ...itemsToReturn.map((item) => `Return ${item.requestQty} units of item ${item.name} from loadcell ${item.loadcellLabel}`),
+        `End: close bin ${location.binName}`,
       ];
 
       steps.push({

@@ -128,6 +128,9 @@ export class TxItemToTake {
   @Property({ type: 'string' })
   loadcellId: string;
 
+  @Property({ type: 'string' })
+  loadcellLabel: string;
+
   @Property({ type: 'integer' })
   loadcellHardwareId: number;
 
@@ -151,6 +154,9 @@ export class TxAnotherItem {
   @Property({ type: 'integer' })
   loadcellHardwareId: number;
 
+  @Property({ type: 'string' })
+  loadcellLabel: string;
+
   constructor(props: Properties<TxAnotherItem>) {
     Object.assign(this, props);
   }
@@ -168,6 +174,9 @@ export class TXItemToReturn {
   requestQty: number;
   @Property({ type: 'string' })
   loadcellId: string;
+
+  @Property({ type: 'string' })
+  loadcellLabel: string;
 
   @Property({ type: 'integer' })
   loadcellHardwareId: number;
@@ -192,7 +201,13 @@ export class TxItemToReplenish {
   @Property({ type: 'integer' })
   currentQty: number;
   @Property({ type: 'integer' })
+  requestQty: number;
+  @Property({ type: 'integer' })
   loadcellHardwareId: number;
+
+  @Property({ type: 'string' })
+  loadcellLabel: string;
+
   constructor(props: Properties<TxItemToReplenish>) {
     Object.assign(this, props);
   }

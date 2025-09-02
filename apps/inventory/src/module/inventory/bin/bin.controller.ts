@@ -1,9 +1,8 @@
+import { CLIENT_ID_KEY } from '@common/constants';
 import { PaginationResponse, StatusResponse } from '@common/dto';
 import { BaseController } from '@framework/controller';
 import { ApiDocs, ControllerDocs } from '@framework/swagger';
 import { Body, Controller, Get, Param, Post, Put, Query } from '@nestjs/common';
-
-import { HEADER_KEYS } from '../../../common';
 
 import { BIN_ROUTES } from './bin.constants';
 import { BinService } from './bin.service';
@@ -13,7 +12,7 @@ import { GetBinCompartmentDetail, GetBinCompartmentsResponse, GetBinResponse } f
 @ControllerDocs({
   tag: 'Bin',
   securitySchema: 'header',
-  securityKey: HEADER_KEYS.DEVICE_KEY,
+  securityKey: CLIENT_ID_KEY,
 })
 @Controller(BIN_ROUTES.GROUP)
 export class BinController extends BaseController {

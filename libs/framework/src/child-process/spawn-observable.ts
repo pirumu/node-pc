@@ -4,16 +4,16 @@ import { Logger } from '@nestjs/common';
 import { map, Observable } from 'rxjs';
 import { filter } from 'rxjs/operators';
 
-export interface SpawnObservableOptions extends SpawnOptions {
+export type SpawnObservableOptions = SpawnOptions & {
   logOutput?: boolean;
   logErrors?: boolean;
-}
+};
 
-export interface SpawnObservableResult {
+export type SpawnObservableResult = {
   type: 'stdout' | 'stderr' | 'close' | 'error';
   data: string | number | Error;
   timestamp: Date;
-}
+};
 
 export function spawnObservable(
   command: string,
@@ -23,6 +23,7 @@ export function spawnObservable(
 ): Observable<SpawnObservableResult> {
   const cmdStr = `${command} ${args.join(' ')}`;
   const ctx = context || 'SpawnObservable';
+  // eslint-disable-next-line @typescript-eslint/naming-convention
   const { logOutput = true, logErrors = true, ...spawnOptions } = options;
 
   return new Observable<SpawnObservableResult>((observer) => {

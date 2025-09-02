@@ -46,11 +46,17 @@ export class ProcessingItemController extends BaseController {
   })
   @Post(PROCESSING_ITEM_ROUTES.FORCE_NEXT_STEP)
   public async forceNextItem(@Body() body: ProcessNextItemRequest): Promise<StatusResponse> {
-    await this._publisherService.publish(Transport.MQTT, EVENT_TYPE.PROCESS.FORCE_NEXT_STEP, {
-      transactionId: body.transactionId,
-      isCloseWarningPopup: true,
-      isNextRequestItem: body.isNextRequestItem,
-    });
+    await this._publisherService.publish(
+      Transport.MQTT,
+      EVENT_TYPE.PROCESS.FORCE_NEXT_STEP,
+      {
+        transactionId: body.transactionId,
+        isCloseWarningPopup: true,
+        isNextRequestItem: body.isNextRequestItem,
+      },
+      {},
+      { async: true },
+    );
     return this.toDto<StatusResponse>(StatusResponse, { status: true });
   }
 }

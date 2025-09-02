@@ -4,11 +4,6 @@ import { Expose, Transform, Type } from 'class-transformer';
 import { IsArray, IsMongoId } from 'class-validator';
 
 export class GetConditionsRequest {
-  @ApiProperty()
-  @IsMongoId()
-  @Expose({ toClassOnly: true })
-  siteId: string;
-
   @ApiProperty({
     required: false,
     type: [String],

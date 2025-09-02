@@ -21,8 +21,8 @@ export class TransactionController {
   }
 
   @EventPattern(EVENT_TYPE.PROCESS.FORCE_NEXT_STEP)
-  public async nextStep(payload: { transactionId: string }): Promise<void> {
-    return this._transactionService.forceNextStep(this._em.fork(), payload.transactionId);
+  public async nextStep(payload: { transactionId: string; isNextRequestItem: boolean }): Promise<void> {
+    return this._transactionService.forceNextStep(this._em.fork(), payload.transactionId, payload.isNextRequestItem);
   }
 
   @EventPattern(EVENT_TYPE.PROCESS.STEP_SUCCESS)
@@ -37,7 +37,12 @@ export class TransactionController {
 
   @EventPattern(EVENT_TYPE.PROCESS.TRANSACTION_COMPLETED)
   public async onTxComplete(payload: { transactionId: string }): Promise<void> {
-    await sleep(2000);
+    await sleep(1000);
     return this._transactionService.handleTxComplete(this._em.fork(), payload);
+  }
+
+  @EventPattern(EVENT_TYPE.PROCESS.TRANSACTION_FAILED)
+  public async onTxFailed(payload: { transactionId: string }): Promise<void> {
+    return this._transactionService.handleTxError(this._em.fork(), payload);
   }
 }

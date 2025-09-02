@@ -1,5 +1,13 @@
 import { AppHttpException } from '@framework/exception';
-import { ArgumentsHost, Catch, ExceptionFilter, HttpStatus } from '@nestjs/common';
+import {
+  ArgumentsHost,
+  BadRequestException,
+  Catch,
+  ExceptionFilter,
+  ForbiddenException,
+  HttpStatus,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { Request, Response } from 'express';
 
 @Catch()
@@ -13,7 +21,6 @@ export class GlobalExceptionFilter implements ExceptionFilter {
 
     let status: number;
     let errorResponse: any;
-
     if (exception instanceof AppHttpException) {
       status = exception.getStatus();
       errorResponse = {
@@ -27,18 +34,36 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         stack: this.isDebug ? exception.stack : null,
       };
     } else {
-      // Handle unexpected errors
-      status = HttpStatus.INTERNAL_SERVER_ERROR;
-      errorResponse = {
-        success: false,
-        code: 500,
-        internal: '500000',
-        message: 'Internal Server Error',
-        data: JSON.parse(JSON.stringify(exception)),
-        timestamp: new Date().toISOString(),
-        path: request.url,
-        stack: this.isDebug ? (exception instanceof Error ? exception.stack : exception) : null,
-      };
+      if (
+        exception instanceof BadRequestException ||
+        exception instanceof UnauthorizedException ||
+        exception instanceof ForbiddenException
+      ) {
+        status = exception.getStatus();
+        errorResponse = {
+          success: false,
+          code: status,
+          internal: null,
+          message: exception.message,
+          data: null,
+          timestamp: new Date().toISOString(),
+          path: request.url,
+          stack: this.isDebug ? exception.stack : null,
+        };
+      } else {
+        // Handle unexpected errors
+        status = HttpStatus.INTERNAL_SERVER_ERROR;
+        errorResponse = {
+          success: false,
+          code: 500,
+          internal: '500000',
+          message: 'Internal Server Error',
+          data: JSON.parse(JSON.stringify(exception)),
+          timestamp: new Date().toISOString(),
+          path: request.url,
+          stack: this.isDebug ? (exception instanceof Error ? exception.stack : exception) : null,
+        };
+      }
     }
 
     response.status(status).json(errorResponse);

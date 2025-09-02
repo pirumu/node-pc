@@ -1,3 +1,4 @@
+import { CLIENT_ID_KEY } from '@common/constants';
 import { AuthUser } from '@common/decorator';
 import { AuthUserDto, PaginationResponse } from '@common/dto';
 import { BaseController } from '@framework/controller';
@@ -17,8 +18,8 @@ import { IssueItemService, ItemService, ReplenishItemService, ReturnItemService 
 
 @ControllerDocs({
   tag: 'Item',
-  securitySchema: 'bearer', // bearer and header
-  // securityKey: HEADER_KEYS.DEVICE_KEY,
+  securitySchema: 'b-h', // bearer and header
+  securityKey: CLIENT_ID_KEY,
 })
 @Controller(ITEM_ROUTES.GROUP)
 export class ItemController extends BaseController {
@@ -59,7 +60,14 @@ export class ItemController extends BaseController {
     @Query() query: GetItemRequest,
   ): Promise<PaginationResponse<ReturnableItemResponse>> {
     const { rows, meta } = await this._returnItemService.getReturnableItems(authUser.id, query);
-    const data = rows.map((row) => this.toDto<ReturnableItemResponse>(ReturnableItemResponse, row));
+    const data = rows.map((row) =>
+      this.toDto<ReturnableItemResponse>(ReturnableItemResponse, {
+        ...row,
+        id: row.id.toString(),
+        itemTypeId: row.itemTypeId.toString(),
+        binId: row.binId.toString(),
+      }),
+    );
     return new PaginationResponse(data, meta);
   }
 
@@ -70,7 +78,14 @@ export class ItemController extends BaseController {
   @Get(ITEM_ROUTES.REPLENISH)
   public async getReplenishableItems(@Query() query: GetItemRequest): Promise<PaginationResponse<ReplenishableItemResponse>> {
     const { rows, meta } = await this._replenishItemService.getReplenishableItems(query);
-    const data = rows.map((row) => this.toDto<ReplenishableItemResponse>(ReplenishableItemResponse, row));
+    const data = rows.map((row) =>
+      this.toDto<ReplenishableItemResponse>(ReplenishableItemResponse, {
+        ...row,
+        id: row.id.toString(),
+        itemTypeId: row.itemTypeId.toString(),
+        binId: row.binId.toString(),
+      }),
+    );
     return new PaginationResponse(data, meta);
   }
 

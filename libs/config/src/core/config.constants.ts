@@ -7,7 +7,7 @@ export enum CONFIG_KEY {
   MQTT = 'mqtt',
   FINGERPRINT = 'fingerprint',
   HID = 'hid',
-  LOADCELL_MONITORING = 'loadCellMonitoring',
+  LOADCELL = 'loadcell',
   SERIALPORT = 'serialport',
   TCP = 'tcp',
   CLOUD = 'cloud',

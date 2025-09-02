@@ -1,9 +1,8 @@
+import { CLIENT_ID_KEY } from '@common/constants';
 import { PaginationResponse, StatusResponse } from '@common/dto';
 import { BaseController } from '@framework/controller';
 import { ApiDocs, ControllerDocs } from '@framework/swagger';
 import { Body, Controller, Get, Param, Post, Put, Query } from '@nestjs/common';
-
-import { HEADER_KEYS } from '../../../common';
 
 import { GetPortsLoadcellsRequest, GetPortsRequest, UpdatePortNameRequest } from './dtos/request';
 import { GetPortsLoadcellsResponse, GetPortsResponse } from './dtos/response';
@@ -11,9 +10,9 @@ import { PORT_ROUTES } from './port.constants';
 import { PortService } from './port.service';
 
 @ControllerDocs({
-  tag: ' Port',
+  tag: 'Port',
   securitySchema: 'header',
-  securityKey: HEADER_KEYS.DEVICE_KEY,
+  securityKey: CLIENT_ID_KEY,
 })
 @Controller(PORT_ROUTES.GROUP)
 export class PortController extends BaseController {

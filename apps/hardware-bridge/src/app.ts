@@ -21,14 +21,11 @@ export class Application {
 
   private static async _connectMqtt(app: INestApplication, configService: ConfigService): Promise<void> {
     const mqttConfig = configService.getOrThrow<MqttConfig>(CONFIG_KEY.MQTT);
-    const appConfig = configService.getOrThrow<AppConfig>(CONFIG_KEY.APP);
+    const tcpConfig = configService.getOrThrow<TcpConfig>(CONFIG_KEY.TCP);
     app.connectMicroservice<TcpOptions>(
       {
         transport: Transport.TCP,
-        options: {
-          host: '0.0.0.0',
-          port: appConfig.port,
-        },
+        options: tcpConfig.consumer,
       },
       { inheritAppConfig: true },
     );

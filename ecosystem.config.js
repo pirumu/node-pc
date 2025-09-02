@@ -1,15 +1,15 @@
 module.exports = {
   apps: [
-    // {
-    //   name: 'inventory-api',
-    //   script: 'dist/apps/inventory/main.js',
-    //   watch: false,
-    //   autorestart: true,
-    //   max_memory_restart: '1G',
-    //   env: {
-    //     DOTENV_CONFIG_PATH: 'env/inventory/.env',
-    //   },
-    // },
+    {
+      name: 'inventory-api',
+      script: 'dist/apps/inventory/main.js',
+      watch: false,
+      autorestart: true,
+      max_memory_restart: '1G',
+      env: {
+        DOTENV_CONFIG_PATH: 'env/inventory/.env',
+      },
+    },
     {
       name: 'hardware-bridge-process',
       script: 'dist/apps/hardware-bridge/main.js',
@@ -20,25 +20,25 @@ module.exports = {
         DOTENV_CONFIG_PATH: 'env/hardware-bridge/.env',
       },
     },
-    // {
-    //   name: 'process-worker',
-    //   script: 'dist/apps/process-worker/main.js',
-    //   watch: false,
-    //   autorestart: true,
-    //   max_memory_restart: '1G',
-    //   env: {
-    //     DOTENV_CONFIG_PATH: 'env/process-worker/.env',
-    //   },
-    // },
-    // {
-    //   name: 'sync-worker',
-    //   script: 'dist/apps/sync-worker/main.js',
-    //   watch: false,
-    //   autorestart: true,
-    //   max_memory_restart: '1G',
-    //   env: {
-    //     DOTENV_CONFIG_PATH: 'env/sync-worker/.env',
-    //   },
-    // },
+    {
+      name: 'process-worker',
+      script: 'dist/apps/process-worker/main.js',
+      watch: false,
+      autorestart: true,
+      max_memory_restart: '1G',
+      env: {
+        DOTENV_CONFIG_PATH: 'env/process-worker/.env',
+      },
+    },
+    {
+      name: 'sync-worker',
+      script: 'dist/apps/sync-worker/main.js',
+      watch: false,
+      autorestart: true,
+      max_memory_restart: '1G',
+      env: {
+        DOTENV_CONFIG_PATH: 'env/sync-worker/.env',
+      },
+    },
   ],
 };

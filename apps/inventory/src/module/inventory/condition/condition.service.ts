@@ -8,23 +8,23 @@ import { Injectable } from '@nestjs/common';
 export class ConditionService {
   constructor(@InjectRepository(ConditionEntity) private readonly _conditionRepository: EntityRepository<ConditionEntity>) {}
 
-  public async getConditions(siteId: string, excludeName: CONDITION_TYPE[]): Promise<ConditionEntity[]> {
+  public async getConditions(excludeName: CONDITION_TYPE[]): Promise<ConditionEntity[]> {
     const conditions =
       excludeName.length > 0
         ? {
             where: {
-              site: {
-                _id: new ObjectId(siteId),
-              },
+              // site: {
+              //   _id: new ObjectId(siteId),
+              // },
               name: { $nin: excludeName },
             },
           }
         : {
-            where: {
-              site: {
-                _id: new ObjectId(siteId),
-              },
-            },
+            // where: {
+            //   site: {
+            //     _id: new ObjectId(siteId),
+            //   },
+            // },
           };
     return this._conditionRepository.findAll(conditions);
   }

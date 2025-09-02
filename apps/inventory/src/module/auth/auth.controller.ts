@@ -110,9 +110,6 @@ export class AuthController extends BaseController {
   })
   @Post(AUTH_ROUTES.SCAN_CARD)
   public async loginByCard(@Param('cardId') cardId: string): Promise<any> {
-    if (process.env.NODE_ENV === 'production') {
-      throw AppHttpException.forbidden();
-    }
     try {
       const responses = await this._authService.loginByCard(cardId);
       responses.forEach((res) => {
