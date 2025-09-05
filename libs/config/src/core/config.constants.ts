@@ -10,4 +10,5 @@ export enum CONFIG_KEY {
   LOADCELL = 'loadcell',
   SERIALPORT = 'serialport',
   TCP = 'tcp',
+  CLOUD = 'cloud',
 }

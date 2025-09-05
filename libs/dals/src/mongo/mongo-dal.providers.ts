@@ -44,4 +44,25 @@ export const ALL_ENTITIES = [
 
 export const PROCESS_WORKER_ENTITIES = [];
 
-export const SYNC_WORKER_ENTITIES = [];
+export const SYNC_WORKER_ENTITIES = [
+  AreaEntity,
+  BinEntity,
+  CabinetEntity,
+  ClusterEntity,
+  ConditionEntity,
+  DepartmentEntity,
+  FacialRecognitionEntity,
+  IssueHistoryEntity,
+  ItemEntity,
+  ItemTypeEntity,
+  LoadcellEntity,
+  PortEntity,
+  RoleEntity,
+  SiteEntity,
+  SystemEntity,
+  TabletEntity,
+  TransactionEntity,
+  TransactionEventEntity,
+  UserEntity,
+  WorkingOrderEntity,
+];

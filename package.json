@@ -9,17 +9,14 @@
     "build": "nest build",
     "format": "prettier --write \"apps/**/*.ts\" \"libs/**/*.ts\"",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
-
     "start:inventory": "DOTENV_CONFIG_PATH=env/inventory/.env nest start inventory",
     "start:inventory:dev": "DOTENV_CONFIG_PATH=env/inventory/.env nest start inventory --debug --watch",
-
     "start:hardware-bridge": "DOTENV_CONFIG_PATH=env/hardware-bridge/.env nest start hardware-bridge",
     "start:hardware-bridge:dev": "DOTENV_CONFIG_PATH=env/hardware-bridge/.env nest start hardware-bridge --debug --watch",
-
     "start:process-worker": "DOTENV_CONFIG_PATH=env/process-worker/.env nest start process-worker",
     "start:process-worker:dev": "DOTENV_CONFIG_PATH=env/process-worker/.env nest start process-worker --debug --watch",
-
-
+    "start:sync-worker": "DOTENV_CONFIG_PATH=env/sync-worker/.env nest start sync-worker",
+    "start:sync-worker:dev": "DOTENV_CONFIG_PATH=env/sync-worker/.env nest start sync-worker --debug --watch",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",

@@ -79,6 +79,9 @@ export class LoadcellMetadata {
   @Property({ default: 0 })
   max: number = 0;
 
+  @Property({ default: 0 })
+  qtyOriginal: number = 0;
+
   @Property({ default: '' })
   description: string = '';
 
@@ -134,32 +137,32 @@ export class LoadcellEntity extends AbstractEntity {
   metadata = new LoadcellMetadata(); // item.
 
   @Embedded(() => CalibrationData, { object: true })
-  calibration = new CalibrationData();
+  calibration = new CalibrationData(); // local fields
 
   @Embedded(() => LiveReading, { object: true })
-  liveReading = new LiveReading();
+  liveReading = new LiveReading(); // local fields
 
   @Embedded(() => LoadcellState, { object: true })
-  state = new LoadcellState();
+  state = new LoadcellState(); // local fields
 
   @ManyToOne(() => PortEntity, {
     fieldName: 'portId',
     nullable: true,
     ref: true,
   })
-  port: Ref<PortEntity> | null;
+  port: Ref<PortEntity> | null; // local fields
 
   @Property({ default: 0 })
-  hardwareId: number = 0;
+  hardwareId: number = 0; // local fields
 
   @Property({ default: 0 })
-  availableQuantity = 0;
+  availableQuantity = 0; // local fields
 
   @Property({ default: 0 })
-  damageQuantity = 0;
+  damageQuantity = 0; // local fields
 
   @Property({ default: 0 })
-  heartbeat: number = 0;
+  heartbeat: number = 0; // local fields
 
   constructor(data?: PartialProperties<LoadcellEntity>) {
     super(data);
