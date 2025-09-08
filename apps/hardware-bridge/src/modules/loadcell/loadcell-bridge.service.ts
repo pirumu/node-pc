@@ -181,6 +181,9 @@ export class LoadcellBridgeService implements OnModuleInit, OnModuleDestroy {
     this._logger.debug(`Testing port ${portPath} for loadcell...`);
 
     try {
+      if (await this._serialAdapter.isOpen(portPath)) {
+        return false;
+      }
       await this._serialAdapter.open(portPath, {
         baudRate: 9600,
         autoOpen: false,

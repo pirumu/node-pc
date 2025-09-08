@@ -316,7 +316,7 @@ export class BinService {
     });
     this._logger.log('Sending lock open request', payload);
     try {
-      const cuLockOpenResponse = await this._publisherService.publish<CuResponse>(Transport.TCP, COMMAND_TYPE.CU_LOCK_OPEN, payload);
+      const cuLockOpenResponse = await this._publisherService.publish<CuResponse>(Transport.TCP, EVENT_TYPE.LOCK.OPEN, payload);
 
       if (this._isFailOpenCU(cuLockOpenResponse)) {
         await this._handleFailOpenAndThrowException({
@@ -372,8 +372,7 @@ export class BinService {
 
     const cuLockOpenResponses = await Promise.allSettled(
       payloads.map(
-        async (payload): Promise<CuResponse> =>
-          this._publisherService.publish<CuResponse>(Transport.TCP, COMMAND_TYPE.CU_LOCK_OPEN, payload),
+        async (payload): Promise<CuResponse> => this._publisherService.publish<CuResponse>(Transport.TCP, EVENT_TYPE.LOCK.OPEN, payload),
       ),
     );
 
