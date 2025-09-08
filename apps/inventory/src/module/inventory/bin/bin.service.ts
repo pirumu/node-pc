@@ -307,9 +307,8 @@ export class BinService {
   }
 
   public async open(id: string): Promise<boolean> {
-    const binEntity = await this.getBinById(id);
+    const binEntity = await this.getBinById(id, true);
     const payload = new CuLockRequest({
-      command: Command.OPEN_LOCK,
       protocol: ProtocolType.CU,
       deviceId: binEntity.cuLockId,
       lockIds: [binEntity.lockId],
@@ -329,12 +328,28 @@ export class BinService {
         cuLockId: binEntity.cuLockId,
       });
 
-      await this._publisherService.publish(Transport.MQTT, EVENT_TYPE.LOADCELL.START_READING, {
-        bindId: binEntity.id,
-        ...payload,
-      });
+      if (binEntity.loadcells.length > 0) {
+        const loadcellHardwareIds = binEntity.loadcells.map((i) => i.hardwareId).filter((i) => i !== 0 || i !== undefined);
 
-      return this._updateSuccessOpenStatus(binEntity);
+        if (loadcellHardwareIds.length > 0) {
+          await this._publisherService.publish(
+            Transport.MQTT,
+            EVENT_TYPE.LOADCELL.START_READING,
+            { hardwareIds: [...new Set(loadcellHardwareIds)] },
+            {},
+            { async: true },
+          );
+        }
+      }
+
+      const isOk = await this._updateSuccessOpenStatus(binEntity);
+
+      await this._publisherService.publish(Transport.MQTT, EVENT_TYPE.LOCK.TRACKING, payload);
+
+      binEntity.state.isLocked = false;
+      this._em.persist(binEntity);
+      await this._em.flush();
+      return isOk;
     } catch (error) {
       throw error;
     }
@@ -430,21 +445,20 @@ export class BinService {
     );
   }
 
-  @Transactional()
   private async _updateSuccessOpenStatus(bin: BinEntity): Promise<boolean> {
     bin.markAlive();
-
-    for (const loadcells of bin.loadcells) {
-      loadcells.state.isUpdatedWeight = false;
+    for (const loadcell of bin.loadcells) {
+      if (loadcell.state?.isUpdatedWeight === undefined || loadcell.state?.isUpdatedWeight === null) {
+        loadcell.state = {
+          ...loadcell.state,
+          isUpdatedWeight: false,
+        };
+      }
+      loadcell.state.isUpdatedWeight = false;
     }
 
-    const result = await this._binRepository.nativeUpdate(
-      {
-        _id: bin._id,
-      },
-      bin,
-    );
-    return result > 0;
+    this._em.persist(bin);
+    return true;
   }
 
   public async activate(id: string): Promise<boolean> {

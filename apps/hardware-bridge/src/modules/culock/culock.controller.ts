@@ -15,19 +15,20 @@ export class CulockController {
   ) {}
 
   @MessagePattern(EVENT_TYPE.LOCK.OPEN)
-  public async open(@Payload() cuOpenRequest: CuLockRequest): Promise<BaseResponse> {
-    cuOpenRequest.command = Command.OPEN_LOCK;
-    return this._culockService.open(cuOpenRequest);
+  public async open(@Payload() request: CuLockRequest): Promise<BaseResponse> {
+    request.command = Command.OPEN_LOCK;
+    return this._culockService.open(request);
   }
 
   @MessagePattern(EVENT_TYPE.LOCK.STATUS)
-  public async status(@Payload() cuOpenRequest: CuLockRequest): Promise<BaseResponse> {
-    cuOpenRequest.command = Command.GET_STATUS;
-    return this._culockService.status(cuOpenRequest);
+  public async status(@Payload() request: CuLockRequest): Promise<BaseResponse> {
+    request.command = Command.GET_STATUS;
+    return this._culockService.status(request);
   }
 
-  @MessagePattern('lock/track')
-  public async track(@Payload() cuOpenRequest: CuLockRequest): Promise<void> {
-    return this._lockMonitoringService.track(cuOpenRequest);
+  @MessagePattern(EVENT_TYPE.LOCK.TRACKING)
+  public async track(@Payload() request: CuLockRequest): Promise<void> {
+    request.command = Command.GET_STATUS;
+    return this._lockMonitoringService.track(request);
   }
 }

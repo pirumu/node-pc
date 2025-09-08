@@ -7,11 +7,12 @@ import { PublisherService, Transport } from '@framework/publisher';
 import { Injectable, Logger } from '@nestjs/common';
 import { Observable, interval, timer, of } from 'rxjs';
 import { switchMap, takeUntil, filter, take, catchError, finalize } from 'rxjs/operators';
+import { EVENT_TYPE } from '@common/constants';
 
 @Injectable()
 export class LockMonitoringService {
   private readonly _logger = new Logger(LockMonitoringService.name);
-  private readonly _pollInterval = 1000; // 3s
+  private readonly _pollInterval = 1000; // 1s
   private readonly _timeoutDuration = 60 * 60 * 1000; // 1h
 
   constructor(
@@ -22,21 +23,26 @@ export class LockMonitoringService {
   public async track(request: CuLockRequest): Promise<void> {
     this._createLockPollingObservable(request).subscribe({
       next: (status) => {
-        this._publisherService.publish(Transport.MQTT, 'lock-tracking/status', { status }).catch((err) => {
-          this._logger.error(`Failed to publish tracking status`, {
-            message: err.message,
-            name: err.name,
-            stack: err.stack,
+        this._publisherService
+          .publish(Transport.MQTT, EVENT_TYPE.LOCK.TRACKING_STATUS, { cuLockId: request.deviceId, isClosed: status }, {}, { async: true })
+          .catch((err) => {
+            this._logger.error(`Failed to publish tracking status`, {
+              message: err.message,
+              name: err.name,
+              stack: err.stack,
+            });
           });
-        });
       },
       error: (err: Error) => {
         if (err.message.includes('Lock monitoring timeout')) {
           this._publisherService
-            .publish(Transport.MQTT, 'lock-tracking/status', {
-              status: false,
-              error: 'timeout',
-            })
+            .publish(
+              Transport.MQTT,
+              EVENT_TYPE.LOCK.TRACKING_STATUS,
+              { cuLockId: request.deviceId, isClosed: false, error: 'timout' },
+              {},
+              { async: true },
+            )
             .catch((err) => {
               this._logger.error(`Failed to publish tracking status`, {
                 message: err.message,
