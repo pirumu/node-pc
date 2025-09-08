@@ -332,13 +332,13 @@ export class BinService {
         const loadcellHardwareIds = binEntity.loadcells.map((i) => i.hardwareId).filter((i) => i !== 0 || i !== undefined);
 
         if (loadcellHardwareIds.length > 0) {
-          await this._publisherService.publish(
-            Transport.MQTT,
-            EVENT_TYPE.LOADCELL.START_READING,
-            { hardwareIds: [...new Set(loadcellHardwareIds)] },
-            {},
-            { async: true },
-          );
+          // await this._publisherService.publish(
+          //   Transport.MQTT,
+          //   EVENT_TYPE.LOADCELL.START_READING,
+          //   { hardwareIds: [...new Set(loadcellHardwareIds)] },
+          //   {},
+          //   { async: true },
+          // );
         }
       }
 
