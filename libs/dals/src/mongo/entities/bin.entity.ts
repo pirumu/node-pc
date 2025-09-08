@@ -62,6 +62,9 @@ export class BinItem {
 
   @Property({ nullable: true })
   position?: string;
+
+  @Property({ default: 0 })
+  damageQuantity: number = 0;
 }
 
 @Embeddable()
@@ -127,6 +130,7 @@ export class BinEntity extends AbstractEntity {
   height: number;
 
   // Quantity properties
+
   @Property()
   minQty: number;
 

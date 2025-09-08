@@ -11,8 +11,8 @@ export class IssuedItemLocation {
   @Property()
   binId!: ObjectId;
 
-  @Property()
-  loadcellId!: ObjectId;
+  @Property({ nullable: true })
+  loadcellId: ObjectId | null;
 
   @Property()
   quantity!: number;

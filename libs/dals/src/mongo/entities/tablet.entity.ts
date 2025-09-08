@@ -7,11 +7,14 @@ import { SiteEntity } from './site.entity';
 
 @Entity({ collection: 'tablets' })
 export class TabletEntity extends AbstractEntity {
+  @Property()
+  publicKey!: string;
+
   @Property({ unique: true })
   clientId!: string;
 
   @Property()
-  publicKey!: string;
+  accessKey!: string;
 
   @ManyToOne(() => ClusterEntity, { fieldName: 'clusterId', ref: true })
   cluster!: Ref<ClusterEntity>;

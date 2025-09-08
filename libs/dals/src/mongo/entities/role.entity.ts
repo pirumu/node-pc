@@ -1,7 +1,7 @@
+import { PartialProperties } from '@framework/types';
 import { Entity, Property, Enum } from '@mikro-orm/core';
 
 import { AbstractEntity } from './abstract.entity';
-import { PartialProperties } from '@framework/types';
 
 export const ROLES = {
   SUPER_ADMIN: 'SUPER_ADMIN',

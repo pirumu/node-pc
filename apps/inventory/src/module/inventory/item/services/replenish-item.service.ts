@@ -1,4 +1,4 @@
-import { AnotherItem, ExecutionStep, ItemToReplenish, PlannedItem } from '@common/business/types';
+import { AnotherItem, BinItemType, ExecutionStep, ItemToReplenish, PlannedItem } from '@common/business/types';
 import { AuthUserDto, PaginatedResult } from '@common/dto';
 import { LoadcellEntity, TransactionType } from '@dals/mongo/entities';
 import { RefHelper } from '@dals/mongo/helpers';
@@ -120,6 +120,8 @@ export class ReplenishItemService {
 
         plan.push({
           name: item.name,
+          binId: bin.id,
+          binItemType: BinItemType.LOADCELL,
           itemId: replenishItem.itemId,
           requestQty: qtyToReplenishHere,
           currentQty: loadcell.availableQuantity,
@@ -128,7 +130,7 @@ export class ReplenishItemService {
           loadcellHardwareId: loadcell.hardwareId,
           location: {
             binId: bin.id,
-            binName: `${bin.x}-${bin.y}`,
+            binName: `${bin.index}-${bin.x}`,
             cabinetId: cabinet.id,
             cabinetName: cabinet.name,
             clusterId: cabinet.id,
@@ -138,11 +140,13 @@ export class ReplenishItemService {
           },
           keepTrackItems: bin.loadcells.map((l) => ({
             loadcellId: l.id,
+            binItemType: BinItemType.LOADCELL,
             loadcellHardwareId: l.hardwareId,
             itemId: l.item?.id || '',
             name: l.item?.unwrap()?.name || '',
             binId: l.bin?.id || '',
             currentQty: l.availableQuantity,
+            requestQty: 0,
             loadcellLabel: l.label,
           })),
         });
@@ -195,6 +199,8 @@ export class ReplenishItemService {
 
       const itemsToReplenish: ItemToReplenish[] = items.map((item) => ({
         itemId: item.itemId,
+        binId: item.binId,
+        binItemType: BinItemType.LOADCELL,
         name: item.name,
         requestQty: item.requestQty,
         loadcellId: item.loadcellId,
@@ -227,6 +233,7 @@ export class ReplenishItemService {
         keepTrackItems: Array.from(trackingItemsMap.values()),
         instructions: instructions,
         location: location,
+        issueHistory: null,
       });
 
       stepIndex++;

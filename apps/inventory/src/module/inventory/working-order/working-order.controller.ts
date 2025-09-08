@@ -25,24 +25,26 @@ export class WorkingOrderController extends BaseController {
     responseSchema: WorkingOrderResponse,
   })
   @Get('/:code')
-  public async getWorkingOrderByCode(@Param('code') code: string): Promise<WorkingOrderResponse> {
+  public async getWorkingOrderByCode(@Param('code') code: string): Promise<WorkingOrderResponse | null> {
     const result = await this._workingOrderService.getWorkingOrderByCode(code);
-    return new WorkingOrderResponse({
-      id: result.id,
-      wo: result.wo || '',
-      vehicleNum: result.vehicleNum || '',
-      vehicleType: result.vehicleType || '',
-      platform: result.platform || '',
-      cardNumber: result.code || '',
-    });
+    return result
+      ? new WorkingOrderResponse({
+          id: result.id,
+          wo: result.wo || '',
+          vehicleNum: result.vehicleNum || '',
+          vehicleType: result.vehicleType || '',
+          platform: result.platform || '',
+          cardNumber: result.code || '',
+        })
+      : null;
   }
 
   @ApiDocs({
     responseSchema: WorkingOrderResponse,
   })
-  @Post('/:id')
-  public async update(@Param('id') id: string, @Body() data: UpdateWorkingOrderRequest): Promise<WorkingOrderResponse> {
-    const result = await this._workingOrderService.updateWorkingOrder(id, data);
+  @Post('/')
+  public async upsert(@Body() data: UpdateWorkingOrderRequest): Promise<WorkingOrderResponse> {
+    const result = await this._workingOrderService.updateWorkingOrder(data);
     return new WorkingOrderResponse({
       id: result.id,
       wo: result.wo || '',
