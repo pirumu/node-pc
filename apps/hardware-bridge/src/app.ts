@@ -1,6 +1,5 @@
-import { AppConfig, SwaggerConfig } from '@config/contracts';
+import { AppConfig } from '@config/contracts';
 import { CONFIG_KEY } from '@config/core';
-import { setupSwagger } from '@framework/bootstrap';
 import { GlobalExceptionFilter, GlobalRpcExceptionFilter } from '@framework/filter';
 import { APP_LOGGER } from '@framework/logger';
 import { INestApplication, Logger } from '@nestjs/common';
@@ -49,11 +48,6 @@ export class Application {
     );
   }
 
-  private static _setupSwagger(app: INestApplication, configService: ConfigService): void {
-    const swaggerConfig = configService.getOrThrow<SwaggerConfig>(CONFIG_KEY.SWAGGER);
-    return setupSwagger(app, swaggerConfig);
-  }
-
   private static async _bootstrap(): Promise<void> {
     const app = await NestFactory.create(HwbModule, {
       bufferLogs: false,
@@ -70,8 +64,6 @@ export class Application {
     app.useGlobalFilters(new GlobalExceptionFilter(appConfig.debug));
     app.useGlobalFilters(new GlobalRpcExceptionFilter(appConfig.debug));
     app.enableShutdownHooks(Object.values(ShutdownSignal));
-
-    this._setupSwagger(app, configService);
 
     await this._bootstrapMicroservices(app, configService);
     await app.listen(appConfig.port);
