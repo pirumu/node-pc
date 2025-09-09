@@ -33,7 +33,7 @@ export type BinDto = {
   width: number;
   height: number;
   type: string;
-  loadcellIds: string[];
+  loadcellIds: Array<{ $oid: string } | string>;
   items: BinItemDto[];
   createdBy: string;
   updatedBy: string;
