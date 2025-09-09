@@ -17,8 +17,10 @@ export const getMongoDBConfig = (): MongoDBConfig => {
     default: 'admin',
   });
 
+  const replicaSet = resolve('MONGO_REPLICASET', String, { default: undefined });
   // Construct URI if not provided
   let uri = resolve('MONGO_URI', String, { default: undefined });
+
   if (!uri) {
     if (username && password) {
       uri = `mongodb://${username}:${password}@${host}:${port}/${database}?authSource=${authSource}`;
@@ -35,7 +37,7 @@ export const getMongoDBConfig = (): MongoDBConfig => {
     username,
     password,
     authSource,
-
+    replicaSet,
     // Connection Pool Settings
     maxPoolSize: resolve('MONGO_MAX_POOL_SIZE', (v: string) => parseInt(v, 10), {
       default: 10,

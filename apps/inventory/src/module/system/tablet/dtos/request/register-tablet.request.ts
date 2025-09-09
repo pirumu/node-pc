@@ -13,21 +13,27 @@ export class RegisterTabletRequest {
   @IsString()
   public clientId: string;
 
-  // @ApiProperty()
-  // @Expose()
-  // @IsNotEmpty()
-  // @IsString()
-  // public publicKey: string;
+  @ApiProperty()
+  @Expose()
+  @IsMongoId()
+  @IsString()
+  siteId: string;
+
+  @ApiProperty()
+  @Expose()
+  @IsMongoId()
+  @IsString()
+  accessKey: string;
 
   @ApiProperty()
   @Expose()
   @IsNotEmpty()
   @IsMongoId()
-  public clusterId: string;
+  clusterId: string;
 
   @ApiProperty({ required: false, default: false })
   @Expose()
   @IsOptional()
   @IsBoolean()
-  public isMfaEnabled: boolean;
+  isMfaEnabled: boolean;
 }

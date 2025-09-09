@@ -12,6 +12,7 @@ import { InjectRepository } from '@mikro-orm/nestjs';
 import { Injectable, Logger } from '@nestjs/common';
 
 import { OpenCabinetBinRequest } from './dtos/request';
+import { sleep } from '@framework/time/sleep';
 
 @Injectable()
 export class BinService {
@@ -332,13 +333,13 @@ export class BinService {
         const loadcellHardwareIds = binEntity.loadcells.map((i) => i.hardwareId).filter((i) => i !== 0 || i !== undefined);
 
         if (loadcellHardwareIds.length > 0) {
-          // await this._publisherService.publish(
-          //   Transport.MQTT,
-          //   EVENT_TYPE.LOADCELL.START_READING,
-          //   { hardwareIds: [...new Set(loadcellHardwareIds)] },
-          //   {},
-          //   { async: true },
-          // );
+          await this._publisherService.publish(
+            Transport.MQTT,
+            EVENT_TYPE.LOADCELL.START_READING,
+            { hardwareIds: [...new Set(loadcellHardwareIds)] },
+            {},
+            { async: true },
+          );
         }
       }
 
@@ -350,6 +351,39 @@ export class BinService {
       this._em.persist(binEntity);
       await this._em.flush();
       return isOk;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  public async close(cuLockId: number, isClosed: boolean, error?: string): Promise<void> {
+    const em = this._em.fork();
+    const binEntity = await em.findOneOrFail(
+      BinEntity,
+      {
+        cuLockId: cuLockId,
+      },
+      {
+        populate: ['loadcells'],
+      },
+    );
+    binEntity.state.isLocked = isClosed;
+    await em.persistAndFlush(binEntity);
+    try {
+      if (binEntity.loadcells.length > 0) {
+        const loadcellHardwareIds = binEntity.loadcells.map((i) => i.hardwareId).filter((i) => i !== 0 || i !== undefined);
+        if (loadcellHardwareIds.length > 0) {
+          sleep(2000).then(() => {
+            this._publisherService.publish(
+              Transport.MQTT,
+              EVENT_TYPE.LOADCELL.STOP_READING,
+              { hardwareIds: [...new Set(loadcellHardwareIds)] },
+              {},
+              { async: true },
+            );
+          });
+        }
+      }
     } catch (error) {
       throw error;
     }

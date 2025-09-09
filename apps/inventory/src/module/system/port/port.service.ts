@@ -1,9 +1,8 @@
 import { PaginatedResult, PaginationMeta } from '@common/dto';
 import { PortEntity, PortStatus } from '@dals/mongo/entities';
-import { EntityRepository, FindOptions, ObjectId } from '@mikro-orm/mongodb';
+import { EntityRepository, ObjectId } from '@mikro-orm/mongodb';
 import { InjectRepository } from '@mikro-orm/nestjs';
 import { Injectable } from '@nestjs/common';
-import { FilterQuery } from 'mongoose';
 
 @Injectable()
 export class PortService {

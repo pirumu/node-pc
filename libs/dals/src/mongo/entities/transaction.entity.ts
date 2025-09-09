@@ -2,10 +2,10 @@ import { Nullable, PartialProperties, Properties } from '@framework/types';
 import { Entity, Property, Enum, ManyToOne, OneToMany, Collection, Ref, Embeddable, Embedded } from '@mikro-orm/core';
 
 import { AbstractEntity } from './abstract.entity';
+import { IssueHistoryEntity } from './issue-history.entity';
 // eslint-disable-next-line import/no-cycle
 import { TransactionEventEntity } from './transaction-event.entity';
 import { UserEntity } from './user.entity';
-import { IssueHistoryEntity } from '@dals/mongo/entities/issue-history.entity';
 
 export enum TransactionType {
   ISSUE = 'ISSUE',

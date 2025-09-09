@@ -15,6 +15,7 @@ import { ClsModule } from 'nestjs-cls';
 
 import { configs } from './config';
 import { MqttConfig } from './config/mqtt.config';
+import { LocalToCloudModule } from './local-to-cloud';
 import { SyncWorkerController } from './sync-worker.controller';
 import { SyncWorkerService } from './sync-worker.service';
 
@@ -68,6 +69,11 @@ import { SyncWorkerService } from './sync-worker.service';
 
         return {
           driver: MongoDriver,
+          replicas: [
+            {
+              name: mongoConfig.replicaSet,
+            },
+          ],
           entities: SYNC_WORKER_ENTITIES,
           clientUrl: mongoConfig.uri,
           driverOptions,
@@ -107,6 +113,7 @@ import { SyncWorkerService } from './sync-worker.service';
       inject: [ConfigService],
     }),
     ServicesModule,
+    LocalToCloudModule,
   ],
   controllers: [SyncWorkerController],
   providers: [SyncWorkerService],

@@ -86,6 +86,13 @@ export class LoadcellService {
         currentWeight: payload.weight,
         pendingChange: 0,
       },
+      calibration: {
+        zeroWeight: payload.weight, // add tare weight on register loadcell.
+        unitWeight: 0,
+        calibratedQuantity: 0,
+        calculatedWeight: 0,
+        calibrationDue: null,
+      },
       state: {
         status: LOADCELL_STATUS.RUNNING,
         isUpdatedWeight: false,
@@ -133,14 +140,14 @@ export class LoadcellService {
     }
 
     // Step 1: Handle initial state: setting the zero-weight for the first time.
-    if (!loadcell.state.isCalibrated && !loadcell.state.isUpdatedWeight) {
-      Logger.log(`Performing initial zero-weight set for loadcell ${loadcell.id}.`);
-      loadcell.calibration.zeroWeight = Number(newWeight);
-      loadcell.liveReading.currentWeight = Number(newWeight);
-      loadcell.state.isUpdatedWeight = true;
-      await em.flush();
-      return loadcell;
-    }
+    // if (!loadcell.state.isCalibrated && !loadcell.state.isUpdatedWeight) {
+    //   Logger.log(`Performing initial zero-weight set for loadcell ${loadcell.id}.`);
+    //   loadcell.calibration.zeroWeight = Number(newWeight);
+    //   loadcell.liveReading.currentWeight = Number(newWeight);
+    //   loadcell.state.isUpdatedWeight = true;
+    //   await em.flush();
+    //   return loadcell;
+    // }
 
     // Step 2: Check if the associated Bin is locked. This dictates the entire logic flow.
     await em.populate(loadcell, ['bin']); // Ensure bin.state is loaded
@@ -155,7 +162,7 @@ export class LoadcellService {
     let changeInQuantity = 0;
 
     if (unitWeight > 0) {
-      // Calculate quantities "on-the-fly" without storing th_em.
+      // Calculate quantities "on-the-fly" without storing them.
       const oldNetWeight = oldWeight - zeroWeight;
       const oldCalculatedQuantity = this._calculateRoundedQuantity(oldNetWeight / unitWeight);
 

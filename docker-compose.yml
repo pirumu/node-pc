@@ -26,9 +26,10 @@ services:
     ports:
       - "27017:27017"
     environment:
-#      - MONGO_INITDB_ROOT_USERNAME=super_admin
-#      - MONGO_INITDB_ROOT_PASSWORD=123123
+      #      - MONGO_INITDB_ROOT_USERNAME=super_admin
+      #      - MONGO_INITDB_ROOT_PASSWORD=123123
       - MONGO_INITDB_DATABASE=ast
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
     volumes:
       - ./data/mongo_data:/data/db
       - ./data/mongo_config:/data/configdb
