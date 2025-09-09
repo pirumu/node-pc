@@ -53,6 +53,11 @@ export class UserMapper {
         return new ObjectId(site.$oid);
       }),
       permissions: user.permissions || [],
+      cardId: user.cardId,
+      pin: user.pin,
+      employeeId: user.employeeId,
+      department: new ObjectId(user.departmentId),
+      emailVerifiedAt: user.emailVerifiedAt ? new Date(user.emailVerifiedAt) : null,
       updatedAt: new Date(user.updatedAt),
       createdAt: new Date(user.createdAt),
       createdBy: new ObjectId(user.createdBy),

@@ -17,4 +17,10 @@ export type UserDto = {
   updatedAt: string;
   createdAt: string;
   remember_token: string;
+
+  pin: string;
+  cardId: string;
+  employeeId: string;
+  departmentId: string;
+  emailVerifiedAt: string | null;
 };
