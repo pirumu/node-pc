@@ -70,7 +70,16 @@ export class SyncWorkerService {
           break;
         }
 
-        const siteIds = result.list.map((user) => user.siteIds.map((site) => site.$oid)).flat();
+        const siteIds = result.list
+          .map((user) =>
+            user.siteIds.map((site) => {
+              if (typeof site === 'string') {
+                return site;
+              }
+              return site.$oid;
+            }),
+          )
+          .flat();
         const uniqueSiteIds = [...new Set(siteIds)];
 
         if (uniqueSiteIds.length > 0) {
@@ -78,21 +87,11 @@ export class SyncWorkerService {
             uniqueSiteIds.map((id) => ({
               _id: new ObjectId(id),
             })),
-            {
-              onConflictFields: ['_id'],
-              onConflictAction: 'ignore',
-            },
           );
         }
         const { list, next } = result;
 
-        await this._userRepository.upsertMany(
-          list.map((user) => UserMapper.fromDto(user)),
-          {
-            onConflictFields: ['_id'],
-            onConflictAction: 'merge',
-          },
-        );
+        await this._userRepository.upsertMany(list.map((user) => UserMapper.fromDto(user)));
 
         if (!next) {
           break;
@@ -122,13 +121,7 @@ export class SyncWorkerService {
 
         const { list, next } = result;
 
-        await this._clusterRepository.upsertMany(
-          list.map((cluster) => ClusterMapper.fromDto(cluster)),
-          {
-            onConflictFields: ['_id'],
-            onConflictAction: 'merge',
-          },
-        );
+        await this._clusterRepository.upsertMany(list.map((cluster) => ClusterMapper.fromDto(cluster)));
 
         if (!next) {
           break;
@@ -159,13 +152,7 @@ export class SyncWorkerService {
 
         const { list, next } = result;
 
-        await this._cabinetRepository.upsertMany(
-          list.map((cabinet) => CabinetMapper.fromDto(cabinet)),
-          {
-            onConflictFields: ['_id'],
-            onConflictAction: 'merge',
-          },
-        );
+        await this._cabinetRepository.upsertMany(list.map((cabinet) => CabinetMapper.fromDto(cabinet)));
 
         if (!next) {
           break;
@@ -196,13 +183,7 @@ export class SyncWorkerService {
 
         const { list, next } = result;
 
-        await this._itemTypeRepository.upsertMany(
-          list.map((itemType) => ItemTypeMapper.fromDto(itemType)),
-          {
-            onConflictFields: ['_id'],
-            onConflictAction: 'merge',
-          },
-        );
+        await this._itemTypeRepository.upsertMany(list.map((itemType) => ItemTypeMapper.fromDto(itemType)));
 
         if (!next) {
           break;
@@ -233,13 +214,7 @@ export class SyncWorkerService {
 
         const { list, next } = result;
 
-        await this._itemRepository.upsertMany(
-          list.map((item) => ItemMapper.fromDto(item)),
-          {
-            onConflictFields: ['_id'],
-            onConflictAction: 'merge',
-          },
-        );
+        await this._itemRepository.upsertMany(list.map((item) => ItemMapper.fromDto(item)));
 
         if (!next) {
           break;
@@ -270,13 +245,7 @@ export class SyncWorkerService {
 
         const { list, next } = result;
 
-        await this._areaRepository.upsertMany(
-          list.map((area) => AreaMapper.fromDto(area)),
-          {
-            onConflictFields: ['_id'],
-            onConflictAction: 'merge',
-          },
-        );
+        await this._areaRepository.upsertMany(list.map((area) => AreaMapper.fromDto(area)));
 
         if (!next) {
           break;
@@ -307,13 +276,7 @@ export class SyncWorkerService {
 
         const { list, next } = result;
 
-        await this._conditionRepository.upsertMany(
-          list.map((condition) => ConditionMapper.fromDto(condition)),
-          {
-            onConflictFields: ['_id'],
-            onConflictAction: 'merge',
-          },
-        );
+        await this._conditionRepository.upsertMany(list.map((condition) => ConditionMapper.fromDto(condition)));
 
         if (!next) {
           break;
@@ -344,13 +307,7 @@ export class SyncWorkerService {
 
         const { list, next } = result;
 
-        await this._binRepository.upsertMany(
-          list.map((bin) => BinMapper.fromDto(bin)),
-          {
-            onConflictFields: ['_id'],
-            onConflictAction: 'merge',
-          },
-        );
+        await this._binRepository.upsertMany(list.map((bin) => BinMapper.fromDto(bin)));
 
         if (!next) {
           break;
@@ -381,13 +338,7 @@ export class SyncWorkerService {
 
         const { list, next } = result;
 
-        await this._loadcellRepository.upsertMany(
-          list.map((loadcell) => LoadcellMapper.fromDto(loadcell)),
-          {
-            onConflictFields: ['_id'],
-            onConflictAction: 'merge',
-          },
-        );
+        await this._loadcellRepository.upsertMany(list.map((loadcell) => LoadcellMapper.fromDto(loadcell)));
 
         if (!next) {
           break;
@@ -417,13 +368,7 @@ export class SyncWorkerService {
         }
         const { list, next } = result;
 
-        await this._workingOrderRepository.upsertMany(
-          list.map((workingOrder) => WorkingOrderMapper.fromDto(workingOrder)),
-          {
-            onConflictFields: ['_id'],
-            onConflictAction: 'merge',
-          },
-        );
+        await this._workingOrderRepository.upsertMany(list.map((workingOrder) => WorkingOrderMapper.fromDto(workingOrder)));
 
         if (!next) {
           break;
