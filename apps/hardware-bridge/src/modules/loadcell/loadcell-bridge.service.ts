@@ -138,6 +138,12 @@ export class LoadcellBridgeService implements OnModuleInit, OnModuleDestroy {
     const verifiedPorts: string[] = [];
 
     for (const port of availablePorts) {
+      try {
+        if (await this._serialAdapter.isOpen(port)) {
+          continue;
+        }
+      } catch (_e) {}
+
       const isLoadcell = await this._verifyLoadcellPort(port);
       if (isLoadcell) {
         verifiedPorts.push(port);

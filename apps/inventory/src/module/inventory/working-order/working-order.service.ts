@@ -1,8 +1,8 @@
 import { PaginatedResult, PaginationMeta } from '@common/dto';
-import { SiteEntity, WorkingOrderEntity } from '@dals/mongo/entities';
+import { WorkingOrderEntity } from '@dals/mongo/entities';
 import { AppHttpException } from '@framework/exception';
-import { EntityManager, FilterQuery, FindOptions, ObjectId, Reference } from '@mikro-orm/mongodb';
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { EntityManager, FilterQuery, FindOptions, ObjectId } from '@mikro-orm/mongodb';
+import { Injectable } from '@nestjs/common';
 
 @Injectable()
 export class WorkingOrderService {
@@ -39,22 +39,23 @@ export class WorkingOrderService {
     return workingOrder;
   }
 
-  public async getWorkingOrderByCode(code: string): Promise<WorkingOrderEntity> {
-    const workingOrder = await this._em.findOne(WorkingOrderEntity, {
+  public async getWorkingOrderByCode(code: string): Promise<WorkingOrderEntity | null> {
+    return this._em.findOne(WorkingOrderEntity, {
       code: code.trim(),
     });
-
-    if (!workingOrder) {
-      throw AppHttpException.badRequest({ message: `Working order with code ${code} not found` });
-    }
-    return workingOrder;
   }
 
-  public async updateWorkingOrder(id: string, data: Partial<WorkingOrderEntity>): Promise<WorkingOrderEntity> {
-    const workingOrder = await this.getWorkingOrder(id);
-    this._em.assign(workingOrder, data);
-    await this._em.flush();
-
-    return this.getWorkingOrder(id);
+  public async updateWorkingOrder(data: Partial<WorkingOrderEntity>): Promise<WorkingOrderEntity> {
+    const workingOrder = new WorkingOrderEntity({
+      description: data.description || '',
+      wo: data.wo || '',
+      vehicleNum: data.vehicleNum || '',
+      vehicleType: data.vehicleType || '',
+      platform: data.platform || '',
+      code: data.code || '',
+    });
+    await this._em.upsert(workingOrder);
+    await this._em.refresh(workingOrder);
+    return workingOrder;
   }
 }

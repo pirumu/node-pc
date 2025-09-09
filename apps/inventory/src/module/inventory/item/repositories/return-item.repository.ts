@@ -16,7 +16,6 @@ export class ReturnItemRepository {
 
     const pipeline: any[] = [];
 
-    // --- Giai đoạn 1 & 2: Match, Join, Filter (Tương tự như trước) ---
     pipeline.push({
       $match: {
         userId: new ObjectId(userId),
@@ -86,7 +85,7 @@ export class ReturnItemRepository {
       $project: {
         _id: 0,
         id: '$_id.itemId',
-        binId: '$_id.binId', // Lấy binId từ _id của group
+        binId: '$_id.binId',
         name: 1,
         partNo: 1,
         materialNo: 1,
@@ -94,23 +93,17 @@ export class ReturnItemRepository {
         type: 1,
         image: 1,
         description: 1,
-        location: 1, // Thêm trường location đã tạo ở trên
-        issuedQuantity: '$issuedQuantityInBin', // Đổi tên cho nhất quán
-        itemInfo: '$loadcellDetails', // Đổi tên cho nhất quán
+        location: 1,
+        issuedQuantity: '$issuedQuantityInBin',
+        itemInfo: '$loadcellDetails',
         workingOrders: [],
       },
     });
 
-    // --- Giai đoạn 5: Phân trang và thực thi ---
     const countPipeline = [...pipeline, { $count: 'total' }];
 
     try {
-      const dataPipeline = [
-        ...pipeline,
-        { $sort: { name: 1, location: 1 } }, // Sắp xếp theo tên item, rồi đến location
-        { $skip: (page - 1) * limit },
-        { $limit: limit },
-      ];
+      const dataPipeline = [...pipeline, { $sort: { name: 1, location: 1 } }, { $skip: (page - 1) * limit }, { $limit: limit }];
 
       const [totalResult, rows] = await Promise.all([
         this._em.aggregate(IssueHistoryEntity, countPipeline),

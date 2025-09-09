@@ -12,7 +12,6 @@ export class TransactionController {
   constructor(
     private readonly _em: EntityManager,
     private readonly _transactionService: TransactionService,
-    private readonly _publisherService: PublisherService,
   ) {}
 
   @EventPattern(EVENT_TYPE.PROCESS.START)

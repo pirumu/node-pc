@@ -5,6 +5,7 @@ import { AbstractEntity } from './abstract.entity';
 // eslint-disable-next-line import/no-cycle
 import { TransactionEventEntity } from './transaction-event.entity';
 import { UserEntity } from './user.entity';
+import { IssueHistoryEntity } from '@dals/mongo/entities/issue-history.entity';
 
 export enum TransactionType {
   ISSUE = 'ISSUE',
@@ -118,7 +119,11 @@ export class TxLocation {
 @Embeddable()
 export class TxItemToTake {
   @Property({ type: 'string' })
+  binItemType: string;
+  @Property({ type: 'string' })
   itemId: string;
+  @Property({ type: 'string' })
+  binId: string;
   @Property({ type: 'string' })
   name: string;
   @Property({ type: 'integer' })
@@ -142,6 +147,8 @@ export class TxItemToTake {
 @Embeddable()
 export class TxAnotherItem {
   @Property({ type: 'string' })
+  binItemType: string;
+  @Property({ type: 'string' })
   binId: string;
   @Property({ type: 'string' })
   name: string;
@@ -151,6 +158,8 @@ export class TxAnotherItem {
   loadcellId: string;
   @Property({ type: 'integer' })
   currentQty: number;
+  @Property({ type: 'integer' })
+  requestQty: number;
   @Property({ type: 'integer' })
   loadcellHardwareId: number;
 
@@ -165,7 +174,11 @@ export class TxAnotherItem {
 @Embeddable()
 export class TXItemToReturn {
   @Property({ type: 'string' })
+  binItemType: string;
+  @Property({ type: 'string' })
   itemId: string;
+  @Property({ type: 'string' })
+  binId: string;
   @Property({ type: 'string' })
   name: string;
   @Property({ type: 'integer' })
@@ -180,8 +193,9 @@ export class TXItemToReturn {
 
   @Property({ type: 'integer' })
   loadcellHardwareId: number;
-  @Property({ type: 'string' })
-  conditionId: string;
+
+  @Property({ type: 'string', nullable: true })
+  conditionId?: string;
 
   constructor(props: Properties<TXItemToReturn>) {
     Object.assign(this, props);
@@ -190,6 +204,8 @@ export class TXItemToReturn {
 
 @Embeddable()
 export class TxItemToReplenish {
+  @Property({ type: 'string' })
+  binItemType: string;
   @Property({ type: 'string' })
   binId: string;
   @Property({ type: 'string' })
@@ -238,6 +254,9 @@ export class TxExecutionStep {
 
   @Property({ type: 'array' })
   instructions: string[] = [];
+
+  @Property({ type: 'json', nullable: true })
+  issueHistory: Properties<IssueHistoryEntity> | null;
 
   constructor(props: Properties<TxExecutionStep>) {
     Object.assign(this, props);

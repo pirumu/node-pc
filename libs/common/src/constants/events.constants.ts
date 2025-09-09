@@ -27,6 +27,8 @@ export const EVENT_TYPE = {
   LOCK: {
     OPEN: 'lock/open',
     STATUS: 'lock/status',
+    TRACKING: 'lock/track',
+    TRACKING_STATUS: 'lock/track/status',
     OPEN_SUCCESS: 'lock/open-success',
     OPEN_FAIL: 'lock/open-fail',
     STATUS_CHANGED: 'lock/status-changed',

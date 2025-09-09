@@ -1,8 +1,9 @@
 import { PartialProperties } from '@framework/types';
-import { Entity, Property, ManyToOne } from '@mikro-orm/core';
+import { Entity, Property, ManyToOne, Embeddable, Embedded } from '@mikro-orm/core';
 import { Ref } from '@mikro-orm/mongodb';
 
 import { AbstractEntity } from './abstract.entity';
+import { BinEntity } from './bin.entity';
 import { ItemEntity } from './item.entity';
 import { LoadcellEntity } from './loadcell.entity';
 // eslint-disable-next-line import/no-cycle
@@ -13,8 +14,11 @@ export class TransactionEventEntity extends AbstractEntity {
   @ManyToOne(() => TransactionEntity, { fieldName: 'transactionId', ref: true })
   transaction!: Ref<TransactionEntity>;
 
-  @ManyToOne(() => LoadcellEntity, { fieldName: 'loadcellId', ref: true })
-  loadcell!: Ref<LoadcellEntity>;
+  @ManyToOne(() => LoadcellEntity, { fieldName: 'loadcellId', ref: true, nullable: true })
+  loadcell: Ref<LoadcellEntity> | null;
+
+  @ManyToOne(() => BinEntity, { fieldName: 'binId', ref: true })
+  bin: Ref<BinEntity>;
 
   @ManyToOne(() => ItemEntity, { fieldName: 'itemId', ref: true })
   item!: Ref<ItemEntity>;
@@ -22,8 +26,8 @@ export class TransactionEventEntity extends AbstractEntity {
   @Property()
   stepId: string;
 
-  @Property()
-  output: any;
+  @Embedded(() => EventOutput, { object: true })
+  output = new EventOutput();
 
   @Property()
   quantityBefore!: number;
@@ -36,6 +40,26 @@ export class TransactionEventEntity extends AbstractEntity {
 
   constructor(data?: PartialProperties<TransactionEventEntity>) {
     super(data);
+    if (data) {
+      Object.assign(this, data);
+    }
+  }
+}
+
+@Embeddable()
+export class EventOutput {
+  @Property()
+  isValid: boolean;
+
+  @Property({ type: 'array', default: [] })
+  errors: Array<{
+    itemId: string;
+    actualQty: number;
+    expectQty: number;
+    msg: string;
+  }>;
+
+  constructor(data?: PartialProperties<EventOutput>) {
     if (data) {
       Object.assign(this, data);
     }

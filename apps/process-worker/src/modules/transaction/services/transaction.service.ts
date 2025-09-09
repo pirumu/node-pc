@@ -1,4 +1,4 @@
-import { ExecutionStep } from '@common/business/types';
+import { BinItemType, ExecutionStep } from '@common/business/types';
 import { CONDITION_TYPE, EVENT_TYPE } from '@common/constants';
 import { CuLockRequest } from '@culock/dto';
 import { LOCK_STATUS, ProtocolType } from '@culock/protocols';
@@ -262,7 +262,7 @@ export class TransactionService {
       },
     );
 
-    await this._publisher.publish(Transport.MQTT, EVENT_TYPE.PROCESS.TRANSACTION_COMPLETED, { transactionId: tx.id }, {}, { async: true });
+    await this._publisher.publish(Transport.MQTT, EVENT_TYPE.PROCESS.STEP_ERROR, { transactionId: tx.id }, {}, { async: true });
   }
 
   public async forceNextStep(em: EntityManager, transactionId: string, next: boolean): Promise<any> {
@@ -334,7 +334,27 @@ export class TransactionService {
     const wasLockOpened = await this._attemptToOpenLockWithRetry(em, transaction, bin);
 
     if (wasLockOpened) {
-      await this._triggerRealtimeServices(transaction, step as any);
+      const stepItems = [...step.itemsToIssue, ...step.itemsToReturn, ...step.itemsToReplenish, ...step.keepTrackItems];
+
+      // because the bin cannot contain both loadcell and normal items.
+      const isProcessLoadcellItem = stepItems.every((i) => i.binItemType === BinItemType.LOADCELL);
+
+      if (isProcessLoadcellItem) {
+        await this._triggerRealtimeServices(step);
+        // wait for loadcell stable
+        await sleep(EXECUTION_CONFIG.LOADCELL_STABILIZATION_MS);
+      }
+
+      await this._publisher.publish(
+        Transport.MQTT,
+        EVENT_TYPE.BIN.OPENED,
+        {
+          transactionId: transaction.id,
+          binId: step.binId,
+        },
+        {},
+        { async: true },
+      );
     }
   }
 
@@ -400,7 +420,7 @@ export class TransactionService {
     );
   }
 
-  private async _triggerRealtimeServices(transaction: TransactionEntity, step: ExecutionStep): Promise<void> {
+  private async _triggerRealtimeServices(step: TxExecutionStep): Promise<void> {
     const hardwareIds = new Set<number>([
       ...step.itemsToIssue.map((i) => i.loadcellHardwareId),
       ...step.itemsToReturn.map((i) => i.loadcellHardwareId),
@@ -408,23 +428,10 @@ export class TransactionService {
       ...step.keepTrackItems.map((i) => i.loadcellHardwareId),
     ]);
 
-    await this._publisher.publish(
+    return this._publisher.publish(
       Transport.MQTT,
       EVENT_TYPE.LOADCELL.START_READING,
       { hardwareIds: [...hardwareIds] },
-      {},
-      { async: true },
-    );
-
-    await sleep(EXECUTION_CONFIG.LOADCELL_STABILIZATION_MS);
-
-    await this._publisher.publish(
-      Transport.MQTT,
-      EVENT_TYPE.BIN.OPENED,
-      {
-        transactionId: transaction.id,
-        binId: step.binId,
-      },
       {},
       { async: true },
     );
@@ -483,41 +490,46 @@ export class TransactionService {
     const events = await em.find(
       TransactionEventEntity,
       { transaction: new ObjectId(transaction.id), stepId: completedStepId },
-      { populate: ['loadcell', 'loadcell.bin'] },
+      { populate: ['loadcell', 'bin', 'item'] },
     );
-    const nonTrackableTypes = (await em.find(ItemTypeEntity, { category: { $ne: ITEM_TYPE_CATEGORY.CONSUMABLE } })).map((it) => it.id);
+    const trackableTypes = (await em.find(ItemTypeEntity, { category: { $ne: ITEM_TYPE_CATEGORY.CONSUMABLE } })).map((it) => it.id);
 
     for (const event of events) {
       if (event.quantityChanged >= 0) {
         continue;
       }
-      const item = await em.findOne(ItemEntity, new ObjectId(event.item.id));
-      if (!item || nonTrackableTypes.includes(item.itemType.id)) {
+      const item = RefHelper.get(event.item);
+      if (!item || !trackableTypes.includes(item.itemType.id)) {
         continue;
       }
 
-      const issuedQty = -event.quantityChanged;
+      const issuedQty = Math.abs(event.quantityChanged);
       const userRef = Reference.create(transaction.user);
       const itemRef = Reference.create(item);
-      const loadcell = RefHelper.getRequired(event.loadcell, 'LoadcellEntity');
-      const bin = RefHelper.getRequired(loadcell.bin, 'BinEntity');
+      const loadcell = RefHelper.get(event.loadcell);
+      const bin = RefHelper.getRequired(event.bin, 'BinEntity');
 
       let issueHistory = await em.findOne(IssueHistoryEntity, { user: userRef, item: itemRef });
 
       if (issueHistory) {
         issueHistory.totalIssuedQuantity += issuedQty;
-        const locationIndex = issueHistory.locations.findIndex((loc) => loc.loadcellId.toString() === event.loadcell.id.toString());
+        const locationIndex = issueHistory.locations.findIndex((loc) => {
+          if (loc.loadcellId) {
+            return loc.loadcellId.toString() === event.loadcell?.id;
+          }
+          return loc.binId.toString() === event.bin.id;
+        });
         if (locationIndex > -1) {
           issueHistory.locations[locationIndex].quantity += issuedQty;
         } else {
-          issueHistory.locations.push(new IssuedItemLocation({ binId: bin._id, loadcellId: loadcell._id, quantity: issuedQty }));
+          issueHistory.locations.push(new IssuedItemLocation({ binId: bin._id, loadcellId: loadcell?._id || null, quantity: issuedQty }));
         }
       } else {
         issueHistory = new IssueHistoryEntity({
           user: userRef,
           item: itemRef,
           totalIssuedQuantity: issuedQty,
-          locations: [new IssuedItemLocation({ binId: bin._id, loadcellId: loadcell._id, quantity: issuedQty })],
+          locations: [new IssuedItemLocation({ binId: bin._id, loadcellId: loadcell?._id || null, quantity: issuedQty })],
         });
         em.persist(issueHistory);
       }
@@ -562,17 +574,34 @@ export class TransactionService {
       }
 
       const actualReturnedQty = event.quantityChanged;
-      const loadcell = await em.findOne(LoadcellEntity, new ObjectId(plannedItem.loadcellId), { populate: ['bin'] });
-      if (loadcell) {
-        if (loadcell.damageQuantity === undefined || loadcell.damageQuantity === null || isNaN(loadcell.damageQuantity)) {
-          loadcell.damageQuantity = 0;
+      // loadcell item.
+      if (plannedItem.loadcellId !== 'N/A') {
+        const loadcell = await em.findOne(LoadcellEntity, new ObjectId(plannedItem.loadcellId), { populate: ['bin'] });
+        if (loadcell) {
+          if (loadcell.damageQuantity === undefined || loadcell.damageQuantity === null || isNaN(loadcell.damageQuantity)) {
+            loadcell.damageQuantity = 0;
+          }
+          loadcell.damageQuantity += actualReturnedQty;
+          this._logger.log(
+            `[${transaction.id}] Item ${plannedItem.name} returned as DAMAGED. Updating damage quantity for loadcell ${loadcell.id} by ${actualReturnedQty}.`,
+          );
+          if (loadcell.bin) {
+            binsToMarkAsDamaged.add(loadcell.bin.id);
+          }
         }
-        loadcell.damageQuantity += actualReturnedQty;
-        this._logger.log(
-          `[${transaction.id}] Item ${plannedItem.name} returned as DAMAGED. Updating damage quantity for loadcell ${loadcell.id} by ${actualReturnedQty}.`,
-        );
-        if (loadcell.bin) {
-          binsToMarkAsDamaged.add(loadcell.bin.id);
+      } else {
+        const bin = await em.findOne(BinEntity, new ObjectId(plannedItem.binId));
+        if (bin) {
+          bin.items = bin.items.map((i) => {
+            if (i.itemId.equals(event.item._id)) {
+              if (i.damageQuantity === undefined || i.damageQuantity === null || isNaN(i.damageQuantity)) {
+                i.damageQuantity = 0;
+              }
+              i.damageQuantity += actualReturnedQty;
+            }
+            return i;
+          });
+          binsToMarkAsDamaged.add(bin.id);
         }
       }
     }
@@ -610,7 +639,10 @@ export class TransactionService {
           `[${transaction.id}] User returned ${returnedQty} of item ${itemRef.id}. Previous outstanding: ${issueHistory.totalIssuedQuantity}.`,
         );
         issueHistory.totalIssuedQuantity -= returnedQty;
-        const locationIndex = issueHistory.locations.findIndex((loc) => loc.loadcellId.toString() === event.loadcell.id.toString());
+        const locationIndex = event.loadcell
+          ? issueHistory.locations.findIndex((loc) => loc.loadcellId?.toString() === event.loadcell?.id)
+          : issueHistory.locations.findIndex((loc) => loc.binId.toString() === event.bin.id);
+
         if (locationIndex > -1) {
           issueHistory.locations[locationIndex].quantity -= returnedQty;
           if (issueHistory.locations[locationIndex].quantity <= 0) {

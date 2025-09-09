@@ -43,12 +43,13 @@ export class ItemProcessingService {
         return new TxExecutionStep({
           stepId: s.stepId,
           binId: s.binId,
-          itemsToIssue: s.itemsToIssue.map((s) => new TxItemToTake(s as any)),
-          itemsToReturn: s.itemsToReturn.map((s) => new TXItemToReturn(s as any)),
-          itemsToReplenish: s.itemsToReplenish.map((s) => new TxItemToReplenish(s as any)),
-          keepTrackItems: s.keepTrackItems.map((s) => new TxAnotherItem(s as any)),
+          itemsToIssue: s.itemsToIssue.map((s) => new TxItemToTake(s)),
+          itemsToReturn: s.itemsToReturn.map((s) => new TXItemToReturn(s)),
+          itemsToReplenish: s.itemsToReplenish.map((s) => new TxItemToReplenish(s)),
+          keepTrackItems: s.keepTrackItems.map((s) => new TxAnotherItem(s)),
           instructions: s.instructions,
           location: new TxLocation(s.location),
+          issueHistory: s.issueHistory,
         });
       }),
       totalRequestQty: totalRequestQty,

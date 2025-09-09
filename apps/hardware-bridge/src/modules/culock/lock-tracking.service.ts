@@ -1,130 +1,112 @@
+import { EVENT_TYPE } from '@common/constants';
 import { ControlUnitLockService } from '@culock';
 import { CuLockRequest } from '@culock/dto';
 import { LOCK_STATUS, ProtocolType } from '@culock/protocols';
 import { CuResponse } from '@culock/protocols/cu';
 import { ScuResponse } from '@culock/protocols/scu/scu.types';
 import { PublisherService, Transport } from '@framework/publisher';
-import { Injectable, Logger } from '@nestjs/common';
-import { Observable, interval, timer, of } from 'rxjs';
-import { switchMap, takeUntil, filter, take, catchError, finalize } from 'rxjs/operators';
+import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
+import { Observable, interval, of, Subscription, EMPTY } from 'rxjs';
+import { switchMap, filter, take, catchError, finalize, timeout } from 'rxjs/operators';
 
 @Injectable()
-export class LockMonitoringService {
+export class LockMonitoringService implements OnModuleDestroy {
   private readonly _logger = new Logger(LockMonitoringService.name);
-  private readonly _pollInterval = 1000; // 3s
+  private readonly _pollInterval = 1000; // 1s
   private readonly _timeoutDuration = 60 * 60 * 1000; // 1h
+
+  private readonly _activeMonitors = new Map<number, Subscription>();
 
   constructor(
     private readonly _publisherService: PublisherService,
     private readonly _controlUnitLockService: ControlUnitLockService,
   ) {}
 
-  public async track(request: CuLockRequest): Promise<void> {
-    this._createLockPollingObservable(request).subscribe({
-      next: (status) => {
-        this._publisherService.publish(Transport.MQTT, 'lock-tracking/status', { status }).catch((err) => {
-          this._logger.error(`Failed to publish tracking status`, {
-            message: err.message,
-            name: err.name,
-            stack: err.stack,
-          });
-        });
+  public track(request: CuLockRequest): void {
+    const deviceId = request.deviceId;
+
+    if (this._activeMonitors.has(deviceId)) {
+      this._logger.log(`Stopping existing monitor for device ${deviceId} before starting a new one.`);
+      this._activeMonitors.get(deviceId)?.unsubscribe();
+    }
+
+    const monitorSubscription = this._createLockPollingObservable(request).subscribe({
+      next: (isClosed) => {
+        this._logger.log(`Lock for device ${deviceId} is now closed. Publishing status.`);
+        this._publishStatus(deviceId, isClosed);
       },
-      error: (err: Error) => {
-        if (err.message.includes('Lock monitoring timeout')) {
-          this._publisherService
-            .publish(Transport.MQTT, 'lock-tracking/status', {
-              status: false,
-              error: 'timeout',
-            })
-            .catch((err) => {
-              this._logger.error(`Failed to publish tracking status`, {
-                message: err.message,
-                name: err.name,
-                stack: err.stack,
-              });
-            });
+      error: (err) => {
+        this._logger.error(`Error during lock monitoring for device ${deviceId}:`, err.message);
+        if (err.name === 'TimeoutError') {
+          this._publishStatus(deviceId, false, 'timeout');
         }
-        this._logger.error(`Failed to publish tracking status`, {
-          message: err.message,
-          name: err.name,
-          stack: err.stack,
-        });
       },
-      complete: () => {},
     });
+    this._activeMonitors.set(deviceId, monitorSubscription);
+  }
+
+  public onModuleDestroy(): void {
+    this._logger.log('Stopping all active lock monitors...');
+    this._activeMonitors.forEach((sub) => sub.unsubscribe());
+    this._activeMonitors.clear();
   }
 
   private _createLockPollingObservable(request: CuLockRequest): Observable<boolean> {
-    const timeout$ = timer(this._timeoutDuration);
-
     return interval(this._pollInterval).pipe(
-      // Poll lock status service
       switchMap(async () => this._checkLockStatus(request)),
-
-      // Filter and process results
-      switchMap((result: CuResponse | ScuResponse | null) => {
-        if (result) {
-          return of(null);
-        }
-        if (request.protocol === ProtocolType.CU) {
-          const lockStatuses = (result as unknown as CuResponse).lockStatuses;
-          const isClosed = Object.values(lockStatuses).every((status) => status !== LOCK_STATUS.OPENED);
-          if (isClosed) {
-            this._logger.log(`Lock ${request.lockIds} is now closed`);
-            return of(true);
-          }
-        }
-
-        if (request.protocol === ProtocolType.SCU) {
-          const lockStatuses = (result as unknown as ScuResponse).lockStatus;
-          const isClosed = lockStatuses !== LOCK_STATUS.OPENED;
-          if (isClosed) {
-            this._logger.log(`Lock ${request.lockIds} is now closed`);
-            return of(true);
-          }
-        }
-
-        return of(null);
+      filter((result): result is CuResponse | ScuResponse => result !== null),
+      switchMap((result) => {
+        const isClosed = this._isLockClosed(result, request.protocol);
+        return isClosed ? of(true) : EMPTY;
       }),
-
-      // Stop when we get a result or timeout
-      filter((result) => result !== null),
       take(1),
-
-      // Handle timeout
-      takeUntil(
-        timeout$.pipe(
-          switchMap(() => {
-            this._logger.warn(`Lock monitoring timeout for ${request.lockIds}`);
-            throw new Error(`Lock monitoring timeout after ${this._timeoutDuration}ms`);
-          }),
-        ),
-      ),
-
-      // Error handling
+      timeout(this._timeoutDuration),
       catchError((error) => {
-        this._logger.error('Lock monitoring error:', error);
         throw error;
       }),
-
-      // Cleanup
       finalize(() => {
-        this._logger.log(`Lock monitoring finished for ${request.lockIds}`);
+        this._logger.log(`Lock monitoring finished for device ${request.deviceId}.`);
+        this._activeMonitors.delete(request.deviceId);
       }),
     );
   }
 
+  private _isLockClosed(result: CuResponse | ScuResponse, protocol: ProtocolType): boolean {
+    if (protocol === ProtocolType.CU) {
+      const lockStatuses = (result as CuResponse).lockStatuses;
+      return Object.values(lockStatuses).every((status) => status !== LOCK_STATUS.OPENED);
+    }
+    if (protocol === ProtocolType.SCU) {
+      const lockStatus = (result as ScuResponse).lockStatus;
+      return lockStatus !== LOCK_STATUS.OPENED;
+    }
+    return false;
+  }
+
   private async _checkLockStatus(request: CuLockRequest): Promise<CuResponse | ScuResponse | null> {
     try {
-      return (await this._controlUnitLockService.execute(request)) as CuResponse | ScuResponse;
+      const res = await this._controlUnitLockService.execute(request);
+      if (request.protocol === ProtocolType.CU) {
+        return res as unknown as CuResponse;
+      }
+      return res as unknown as ScuResponse;
     } catch (error) {
-      this._logger.error('Error checking lock status:', {
-        message: error.message,
-        name: error.name,
-        stack: error.stack,
-      });
+      this._logger.error(`Error checking lock status for device ${request.deviceId}:`, error.message);
       return null;
     }
+  }
+
+  private _publishStatus(deviceId: number, isClosed: boolean, error?: string): void {
+    const payload: { cuLockId: number; isClosed: boolean; error?: string } = {
+      cuLockId: deviceId,
+      isClosed,
+    };
+    if (error) {
+      payload.error = error;
+    }
+
+    this._publisherService.publish(Transport.MQTT, EVENT_TYPE.LOCK.TRACKING_STATUS, payload, {}, { async: true }).catch((err) => {
+      this._logger.error(`Failed to publish tracking status for device ${deviceId}`, err);
+    });
   }
 }

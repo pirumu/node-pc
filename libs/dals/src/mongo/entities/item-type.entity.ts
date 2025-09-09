@@ -6,8 +6,9 @@ import { SiteEntity } from './site.entity';
 
 export const ITEM_TYPE_CATEGORY = {
   CONSUMABLE: 'CONSUMABLE',
+  PERISHABLE: 'PERISHABLE',
   DURABLE: 'DURABLE',
-  TORQUE_RWENCH: 'TORQUE_RWENCH',
+  EUC: 'EUC',
 } as const;
 
 export type ItemTypeCategoryType = (typeof ITEM_TYPE_CATEGORY)[keyof typeof ITEM_TYPE_CATEGORY];

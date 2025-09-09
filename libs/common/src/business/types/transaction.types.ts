@@ -1,3 +1,8 @@
+export enum BinItemType {
+  NORMAL = 'NORMAL',
+  LOADCELL = 'LOADCELL',
+}
+
 export type Location = {
   binId: string;
   binName: string;
@@ -11,16 +16,20 @@ export type Location = {
 
 export type AnotherItem = {
   binId: string;
+  binItemType: BinItemType;
   name: string;
   itemId: string;
   loadcellId: string;
   loadcellHardwareId: number;
   loadcellLabel: string;
   currentQty: number;
+  requestQty: number;
 };
 
 export type PlannedItem = {
   itemId: string;
+  binId: string;
+  binItemType: BinItemType;
   loadcellId: string;
   loadcellHardwareId: number;
   loadcellLabel: string;
@@ -34,6 +43,8 @@ export type PlannedItem = {
 
 export type ItemToTake = {
   itemId: string;
+  binId: string;
+  binItemType: BinItemType;
   name: string;
   currentQty: number;
   requestQty: number;
@@ -54,4 +65,5 @@ export type ExecutionStep = {
   keepTrackItems: AnotherItem[];
   instructions: string[];
   location: Location;
+  issueHistory: any | null;
 };
