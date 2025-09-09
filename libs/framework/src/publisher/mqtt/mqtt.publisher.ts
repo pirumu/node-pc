@@ -1,7 +1,7 @@
 import { TRACING_ID } from '@framework/constants';
 import { MQTTPublishOptions } from '@framework/publisher/mqtt/mqtt.types';
 import { SnowflakeId } from '@framework/snowflake';
-import { Logger, OnModuleInit } from '@nestjs/common';
+import { Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { ClientProxy, ClientProxyFactory, MqttRecordBuilder, Transport } from '@nestjs/microservices';
 import { ClsServiceManager } from 'nestjs-cls';
 import { EMPTY, of } from 'rxjs';
@@ -9,7 +9,7 @@ import { catchError, timeout } from 'rxjs/operators';
 
 import { IPublisher } from '../publisher.types';
 
-export class MQTTPublisher implements IPublisher, OnModuleInit {
+export class MQTTPublisher implements IPublisher, OnModuleInit, OnModuleDestroy {
   private readonly _logger = new Logger(MQTTPublisher.name);
   private readonly _client: ClientProxy;
 
@@ -108,17 +108,6 @@ export class MQTTPublisher implements IPublisher, OnModuleInit {
     require('rxjs').config.onUnhandledError = (err: any) => {
       this._logDetailedError('RxJS Unhandled Error (caught)', err);
     };
-
-    process.on('unhandledRejection', (reason, promise) => {
-      this._logger.error('=== UNHANDLED REJECTION ===');
-      this._logger.error('Promise:', promise);
-      this._logDetailedError('Unhandled Rejection Reason', reason);
-      this._logger.error('=== END UNHANDLED REJECTION ===');
-    });
-
-    process.on('uncaughtException', (error) => {
-      this._logDetailedError('Uncaught Exception', error);
-    });
   }
 
   public async onModuleDestroy(): Promise<void> {

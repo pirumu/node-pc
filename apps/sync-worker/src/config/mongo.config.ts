@@ -17,13 +17,21 @@ export const getMongoDBConfig = (): MongoDBConfig => {
     default: 'admin',
   });
 
+  const replicaSet = resolve('MONGO_REPLICASET', String, { default: undefined });
   // Construct URI if not provided
   let uri = resolve('MONGO_URI', String, { default: undefined });
+
   if (!uri) {
     if (username && password) {
       uri = `mongodb://${username}:${password}@${host}:${port}/${database}?authSource=${authSource}`;
+      if (replicaSet) {
+        uri = uri + `&replicaSet=${replicaSet}`;
+      }
     } else {
       uri = `mongodb://${host}:${port}/${database}`;
+      if (replicaSet) {
+        uri = uri + `&replicaSet=${replicaSet}`;
+      }
     }
   }
 
