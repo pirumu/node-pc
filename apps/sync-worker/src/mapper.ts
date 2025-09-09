@@ -218,7 +218,12 @@ export class BinMapper {
       site: new ObjectId(bin.siteId),
       cluster: new ObjectId(bin.clusterId),
       cabinet: new ObjectId(bin.cabinetId),
-      loadcells: bin.loadcellIds.map((loadcellId) => new ObjectId(loadcellId)),
+      loadcells: (bin.loadcellIds || []).map((loadcellId) => {
+        if (typeof loadcellId === 'string') {
+          return new ObjectId(loadcellId);
+        }
+        return new ObjectId(loadcellId.$oid);
+      }),
       cuLockId: bin.cuLockId,
       lockId: bin.lockId,
       x: bin.x,
