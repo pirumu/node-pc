@@ -54,6 +54,7 @@ export class UserMapper {
       }),
       permissions: user.permissions || [],
       cardId: user.cardId,
+      pin: user.pin,
       employeeId: user.employeeId,
       department: new ObjectId(user.departmentId),
       emailVerifiedAt: user.emailVerifiedAt ? new Date(user.emailVerifiedAt) : null,
@@ -232,6 +233,7 @@ export class BinMapper {
       items: bin.items.map((item) => ({
         itemId: new ObjectId(item.itemId),
         qty: item.qty,
+        qtyOriginal: item.qtyOriginal,
         critical: item.critical,
         min: item.min,
         max: item.max,

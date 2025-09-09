@@ -28,6 +28,9 @@ export class BinItem {
   critical: number;
 
   @Property()
+  qtyOriginal: number;
+
+  @Property()
   min: number;
 
   @Property()
