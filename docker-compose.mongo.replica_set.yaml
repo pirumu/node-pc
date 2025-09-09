@@ -1,0 +1,71 @@
+version: '2.4'
+services:
+  mongo_primary:
+    image: mongo:8.0.11
+    container_name: mongo_primary
+    ports:
+      - 20211:27017
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: 12345678
+    command:
+      [
+        "mongod",
+        "--replSet", "rs0",
+        "--auth",
+        "--bind_ip_all",
+        "--keyFile", "/etc/mongo-keyfile"
+      ]
+    volumes:
+      - ./configs/docker/mongodb/mongodb-keyfile:/etc/mongo-keyfile:ro
+    networks:
+      - mongo-network
+  mongo_secondary:
+    image: mongo:8.0.11
+    container_name: mongo_secondary
+    ports:
+      - 20212:27017
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: 12345678
+    command:
+      [
+        "mongod",
+        "--replSet", "rs0",
+        "--auth",
+        "--bind_ip_all",
+        "--keyFile", "/etc/mongo-keyfile"
+      ]
+    volumes:
+      - ./docker/mongodb/mongodb-keyfile:/etc/mongo-keyfile:ro
+    networks:
+      - mongo-network
+  mongo-setup:
+    image: mongo:8.0.11
+    depends_on:
+      - mongo_primary
+      - mongo_secondary
+    entrypoint: >
+      bash -c "
+        echo 'Waiting for MongoDB to be ready...';
+        until mongosh --host mongo_primary:27017 -u root -p 12345678 --authenticationDatabase admin --eval \"db.adminCommand('ping')\"; do
+          echo 'Not ready yet. Retrying...';
+          sleep 2;
+        done;
+
+        echo 'Connected. Running replica set initiation...';
+        echo \"
+          rs.initiate({
+            _id: 'rs0',
+            members: [
+              { _id: 0, host: 'host.docker.internal:20211' },
+              { _id: 1, host: 'host.docker.internal:20212' }
+            ]
+          });
+        \" | mongosh --host mongo_primary:27017 -u root -p 12345678 --authenticationDatabase admin
+      "
+    networks:
+      - mongo-network
+networks:
+  mongo-network:
+    driver: bridge
