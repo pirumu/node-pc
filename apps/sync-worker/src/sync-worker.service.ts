@@ -70,8 +70,14 @@ export class SyncWorkerService {
           break;
         }
 
-        const siteIds = result.list.map((user) => user.siteIds.map((site) => site.$oid)).flat();
-        const uniqueSiteIds = [...new Set(siteIds)];
+        const siteIds = result.list.map((user) => user.siteIds.map((site) => site)).flat();
+        const siteStrIds = siteIds.map((siteId) => {
+          if (typeof siteId === 'string') {
+            return siteId;
+          }
+          return siteId.$oid;
+        });
+        const uniqueSiteIds = [...new Set(siteStrIds)];
 
         if (uniqueSiteIds.length > 0) {
           await this._siteRepository.upsertMany(

@@ -7,9 +7,6 @@ import { SiteEntity } from './site.entity';
 
 @Entity({ collection: 'tablets' })
 export class TabletEntity extends AbstractEntity {
-  @Property()
-  publicKey!: string;
-
   @Property({ unique: true })
   clientId!: string;
 

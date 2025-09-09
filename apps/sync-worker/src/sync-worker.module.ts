@@ -69,6 +69,11 @@ import { SyncWorkerService } from './sync-worker.service';
 
         return {
           driver: MongoDriver,
+          replicas: [
+            {
+              name: mongoConfig.replicaSet,
+            },
+          ],
           entities: SYNC_WORKER_ENTITIES,
           clientUrl: mongoConfig.uri,
           driverOptions,

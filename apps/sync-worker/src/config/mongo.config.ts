@@ -24,14 +24,8 @@ export const getMongoDBConfig = (): MongoDBConfig => {
   if (!uri) {
     if (username && password) {
       uri = `mongodb://${username}:${password}@${host}:${port}/${database}?authSource=${authSource}`;
-      if (replicaSet) {
-        uri = uri + `&replicaSet=${replicaSet}`;
-      }
     } else {
       uri = `mongodb://${host}:${port}/${database}`;
-      if (replicaSet) {
-        uri = uri + `&replicaSet=${replicaSet}`;
-      }
     }
   }
 
@@ -43,7 +37,7 @@ export const getMongoDBConfig = (): MongoDBConfig => {
     username,
     password,
     authSource,
-
+    replicaSet,
     // Connection Pool Settings
     maxPoolSize: resolve('MONGO_MAX_POOL_SIZE', (v: string) => parseInt(v, 10), {
       default: 10,
