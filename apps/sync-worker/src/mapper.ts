@@ -46,7 +46,7 @@ export class UserMapper {
       email: user.email,
       status: user.status,
       role: user.roleKey,
-      sites: (user.siteIds || []).map((site) => new ObjectId(site.$oid)),
+      sites: (user.siteIds || []).map((site) => new ObjectId(site)),
       permissions: user.permissions || [],
       updatedAt: new Date(user.updatedAt),
       createdAt: new Date(user.createdAt),
