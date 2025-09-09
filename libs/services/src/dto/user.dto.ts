@@ -10,7 +10,7 @@ export type UserDto = {
   avatar: string | null;
   roleKey: string;
   status: string;
-  siteIds: Array<{ $oid: string }>;
+  siteIds: string[];
   permissions: string[];
   createdBy: string;
   updatedBy: string;
