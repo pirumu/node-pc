@@ -107,7 +107,7 @@ export class SyncWorkerService {
     return isSuccess;
   }
 
-  public async syncClusters(): Promise<boolean> {
+  public async syncClusters(clusterId?: string): Promise<boolean> {
     let isSuccess = true;
     let nextPage: string | undefined = undefined;
 
@@ -119,15 +119,21 @@ export class SyncWorkerService {
           break;
         }
 
-        const { list, next } = result;
+        let { list } = result;
 
-        await this._clusterRepository.upsertMany(list.map((cluster) => ClusterMapper.fromDto(cluster)));
+        if (clusterId) {
+          list = list.filter((i) => i.id === clusterId);
+        }
 
-        if (!next) {
+        const items = list.map((cluster) => ClusterMapper.fromDto(cluster));
+
+        await this._clusterRepository.upsertMany(items);
+
+        if (!result.next) {
           break;
         }
 
-        nextPage = next;
+        nextPage = result.next;
       } catch (e) {
         this._logger.error(e);
         isSuccess = false;

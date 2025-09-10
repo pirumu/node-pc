@@ -9,6 +9,8 @@ export type UserDto = {
   phone: string;
   avatar: string | null;
   roleKey: string;
+  cardId: string;
+  pin: string;
   status: string;
   siteIds: Array<{ $oid: string } | string>;
   permissions: string[];

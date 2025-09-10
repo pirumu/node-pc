@@ -60,7 +60,7 @@ export class TCPPublisher implements IPublisher {
         ),
       );
     } catch (error) {
-      throw error;
+      // throw error;
     }
   }
 }

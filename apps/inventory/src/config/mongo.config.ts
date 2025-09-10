@@ -14,7 +14,7 @@ export const getMongoDBConfig = (): MongoDBConfig => {
   const username = resolve('MONGO_USERNAME', String, { default: undefined });
   const password = resolve('MONGO_PASSWORD', String, { default: undefined });
   const authSource = resolve('MONGO_AUTH_SOURCE', String, {
-    default: 'admin',
+    default: undefined,
   });
 
   // Construct URI if not provided

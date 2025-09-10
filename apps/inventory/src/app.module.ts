@@ -76,6 +76,7 @@ import { WsModule } from './module/ws';
           heartbeatFrequencyMS: mongoConfig.heartbeatFrequencyMS,
           retryWrites: mongoConfig.retryWrites,
           retryReads: mongoConfig.retryReads,
+          readPreference: 'primary',
         };
 
         if (sslConfig) {
@@ -87,6 +88,12 @@ import { WsModule } from './module/ws';
           driver: MongoDriver,
           entities: ALL_ENTITIES,
           clientUrl: mongoConfig.uri,
+          replicas: [
+            {
+              host: '127.0.0.1:27018',
+              name: mongoConfig.replicaSet || 'rs0',
+            },
+          ],
           driverOptions,
           debug: true,
           logLevel: mongoConfig.logLevel || 'info',

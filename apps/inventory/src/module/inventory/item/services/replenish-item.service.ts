@@ -149,6 +149,7 @@ export class ReplenishItemService {
             requestQty: 0,
             loadcellLabel: l.label,
           })),
+          history: null,
         });
 
         neededToReplenish -= qtyToReplenishHere;
@@ -208,6 +209,7 @@ export class ReplenishItemService {
         loadcellHardwareId: item.loadcellHardwareId,
         conditionId: item.conditionId,
         currentQty: item.currentQty,
+        history: item.history,
       }));
 
       const trackingItemsMap = new Map<string, AnotherItem>();
@@ -233,7 +235,7 @@ export class ReplenishItemService {
         keepTrackItems: Array.from(trackingItemsMap.values()),
         instructions: instructions,
         location: location,
-        issueHistory: null,
+        issueHistories: [],
       });
 
       stepIndex++;

@@ -12,7 +12,7 @@ import { switchMap, filter, take, catchError, finalize, timeout } from 'rxjs/ope
 @Injectable()
 export class LockMonitoringService implements OnModuleDestroy {
   private readonly _logger = new Logger(LockMonitoringService.name);
-  private readonly _pollInterval = 1000; // 1s
+  private readonly _pollInterval = 1500; // 1s
   private readonly _timeoutDuration = 60 * 60 * 1000; // 1h
 
   private readonly _activeMonitors = new Map<number, Subscription>();

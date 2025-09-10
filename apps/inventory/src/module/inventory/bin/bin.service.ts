@@ -121,6 +121,7 @@ export class BinService {
 
       return {
         id: bin.id,
+        index: bin.index,
         x: bin.x,
         y: bin.y,
         width: bin.width,
@@ -211,7 +212,7 @@ export class BinService {
             max: lc.metadata.max || 1,
             min: lc.metadata.min || 1,
             critical: lc.metadata.critical || 1,
-            isCalibrated: !!lc.metadata.itemId && lc.state.isCalibrated !== undefined && lc.state.isCalibrated,
+            isCalibrated: !!lc.metadata.itemId && lc.state?.isCalibrated !== undefined && lc.state?.isCalibrated,
             calibration: lc.calibration,
             loadcell: lc,
             liveReading: lc.liveReading,
@@ -267,7 +268,7 @@ export class BinService {
     let binStatus: 'good' | 'on-loan' | 'low/critical';
     if (onLoanItemIds.size > 0) {
       binStatus = 'on-loan';
-    } else if (totalQtyOH > 0 && totalQtyOH <= bin.criticalQty) {
+    } else if (totalQtyOH >= 0 && totalQtyOH <= bin.criticalQty) {
       binStatus = 'low/critical';
     } else {
       binStatus = 'good';
@@ -280,7 +281,7 @@ export class BinService {
       width: bin.width,
       height: bin.height,
       type: bin.type,
-
+      index: bin.index,
       status: binStatus,
       totalQtyOH: totalQtyOH,
 
@@ -329,23 +330,23 @@ export class BinService {
         cuLockId: binEntity.cuLockId,
       });
 
-      if (binEntity.loadcells.length > 0) {
-        const loadcellHardwareIds = binEntity.loadcells.map((i) => i.hardwareId).filter((i) => i !== 0 || i !== undefined);
-
-        if (loadcellHardwareIds.length > 0) {
-          await this._publisherService.publish(
-            Transport.MQTT,
-            EVENT_TYPE.LOADCELL.START_READING,
-            { hardwareIds: [...new Set(loadcellHardwareIds)] },
-            {},
-            { async: true },
-          );
-        }
-      }
+      // if (binEntity.loadcells.length > 0) {
+      //   const loadcellHardwareIds = binEntity.loadcells.map((i) => i.hardwareId).filter((i) => i !== 0 || i !== undefined || i !== null);
+      //
+      //   if (loadcellHardwareIds.length > 0) {
+      //     await this._publisherService.publish(
+      //       Transport.MQTT,
+      //       EVENT_TYPE.LOADCELL.START_READING,
+      //       { hardwareIds: [...new Set(loadcellHardwareIds)] },
+      //       {},
+      //       { async: true },
+      //     );
+      //   }
+      // }
 
       const isOk = await this._updateSuccessOpenStatus(binEntity);
 
-      await this._publisherService.publish(Transport.MQTT, EVENT_TYPE.LOCK.TRACKING, payload);
+      // await this._publisherService.publish(Transport.MQTT, EVENT_TYPE.LOCK.TRACKING, payload);
 
       binEntity.state.isLocked = false;
       this._em.persist(binEntity);
@@ -371,7 +372,7 @@ export class BinService {
     await em.persistAndFlush(binEntity);
     try {
       if (binEntity.loadcells.length > 0) {
-        const loadcellHardwareIds = binEntity.loadcells.map((i) => i.hardwareId).filter((i) => i !== 0 || i !== undefined);
+        const loadcellHardwareIds = binEntity.loadcells.map((i) => i.hardwareId).filter((i) => i !== 0 || i !== undefined || i !== null);
         if (loadcellHardwareIds.length > 0) {
           sleep(2000).then(() => {
             this._publisherService.publish(

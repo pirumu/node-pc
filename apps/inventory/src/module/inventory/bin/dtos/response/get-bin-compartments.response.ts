@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Expose } from 'class-transformer';
+import { Default } from '@framework/decorators';
 
 export class BinItemDto {
   @ApiProperty({ example: 'item_001', description: 'Item ID' })
@@ -98,7 +99,7 @@ export class GetBinCompartmentsResponse {
 
   @ApiProperty({ example: 45, description: 'Total quantity on hand' })
   @Expose()
-  totalQtyOH: number;
+  totalQtyOH: number = 0;
 
   @ApiProperty({
     enum: ['good', 'average', 'low-critical', 'unavailable'],
@@ -107,4 +108,8 @@ export class GetBinCompartmentsResponse {
   })
   @Expose()
   status: 'good' | 'average' | 'low-critical' | 'unavailable';
+
+  @ApiProperty({})
+  @Expose()
+  index: number;
 }

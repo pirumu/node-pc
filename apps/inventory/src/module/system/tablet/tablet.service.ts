@@ -15,13 +15,31 @@ export class TabletService {
   }
 
   public async register(dto: RegisterTabletRequest): Promise<boolean> {
-    const tablet = await this._tabletRepository.upsert({
+    await this._tabletRepository.upsert({
       clientId: dto.clientId,
       site: new ObjectId(dto.siteId),
+      cloudUrl: dto.cloudUrl,
       cluster: new ObjectId(dto.clusterId),
       accessKey: dto.accessKey,
       isMfaEnabled: dto.isMfaEnabled,
     });
+
+    try {
+      await fetch('http://localhost:3005/sync/all', {
+        method: 'POST',
+        body: JSON.stringify({
+          host: dto.cloudUrl,
+          accessKey: dto.accessKey,
+          clusterId: dto.clusterId,
+        }),
+        headers: {
+          ['Content-Type']: 'application/json',
+          Accept: 'application/json',
+        },
+      });
+    } catch (e) {
+      console.error(e);
+    }
 
     return true;
   }

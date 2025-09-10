@@ -1,6 +1,6 @@
 import { AnotherItem, ExecutionStep, PlannedItem, ItemToReturn, BinItemType } from '@common/business/types';
 import { AuthUserDto, PaginatedResult } from '@common/dto';
-import { BinEntity, IssuedItemLocation, IssueHistoryEntity, ItemEntity, LoadcellEntity, TransactionType } from '@dals/mongo/entities';
+import { BinEntity, IssueHistoryEntity, ItemEntity, LoadcellEntity, TransactionType } from '@dals/mongo/entities';
 import { RefHelper } from '@dals/mongo/helpers';
 import { AppHttpException } from '@framework/exception';
 import { EntityManager } from '@mikro-orm/core';
@@ -45,7 +45,6 @@ export class ReturnItemService {
     }
 
     const { plan, totalReturnQty } = await this._planReturnItems(user, returnItems);
-
     const steps = this._groupReturnPlanByBin(plan);
 
     if (!steps || steps.length === 0) {
@@ -73,6 +72,31 @@ export class ReturnItemService {
       historyMap.set(history.item.id, history);
     }
 
+    const allLoadcellIds = userIssueHistories.flatMap((h) =>
+      h.locations.map((l) => l.loadcellId).filter((id): id is ObjectId => id !== null),
+    );
+    const allBinIdsFromHistory = userIssueHistories.flatMap((h) => h.locations.map((l) => l.binId));
+
+    const [loadcells, bins] = await Promise.all([
+      allLoadcellIds.length > 0
+        ? this._em.find(
+            LoadcellEntity,
+            { _id: { $in: allLoadcellIds } },
+            { populate: ['item', 'bin', 'bin.loadcells.item', 'cabinet', 'cluster', 'site'] },
+          )
+        : Promise.resolve([]),
+      allBinIdsFromHistory.length > 0
+        ? this._em.find(BinEntity, { _id: { $in: allBinIdsFromHistory } }, { populate: ['items', 'cabinet', 'cluster', 'site'] })
+        : Promise.resolve([]),
+    ]);
+
+    const allItemIdsFromBins = bins.flatMap((b) => b.items.map((i) => i.itemId));
+    const itemsFromBins = await this._em.find(ItemEntity, { _id: { $in: allItemIdsFromBins } });
+
+    const loadcellsMap = new Map<string, LoadcellEntity>(loadcells.map((l) => [l.id, l]));
+    const binsMap = new Map<string, BinEntity>(bins.map((b) => [b.id, b]));
+    const itemsMap = new Map<string, ItemEntity>(itemsFromBins.map((i) => [i.id, i]));
+
     let plan: PlannedItem[] = [];
     let totalReturnQty = 0;
     const allocatedLoadcellIds = new Set<string>();
@@ -86,41 +110,27 @@ export class ReturnItemService {
         throw AppHttpException.badRequest({ message: `Item ${returnItem.itemId} has no issue history for user.` });
       }
 
-      const totalIssued = history.locations.reduce((sum, loc) => sum + loc.quantity, 0);
-      if (neededToReturn > totalIssued) {
+      const relevantLocations = history.locations.filter((loc) => loc.binId.toHexString() === returnItem.binId);
+
+      const totalIssuedInBin = relevantLocations.reduce((sum, loc) => sum + loc.quantity, 0);
+      if (neededToReturn > totalIssuedInBin) {
         throw AppHttpException.badRequest({
-          message: `Cannot return ${neededToReturn} units of ${returnItem.itemId}. Only issued ${totalIssued} units.`,
+          message: `Cannot return ${neededToReturn} units of ${returnItem.itemId} to bin ${returnItem.binId}. Only ${totalIssuedInBin} units were issued from this location.`,
         });
       }
 
-      const loadcellIds = history.locations.map((l) => l.loadcellId).filter((id): id is ObjectId => id !== null);
-      const binIdsFromHistory = history.locations.map((l) => l.binId);
-
-      const [loadcells, bins] = await Promise.all([
-        this._em.find(
-          LoadcellEntity,
-          { _id: { $in: loadcellIds } },
-          { populate: ['item', 'bin', 'bin.loadcells.item', 'cabinet', 'cluster', 'site'] },
-        ),
-        this._em.find(BinEntity, { _id: { $in: binIdsFromHistory } }, { populate: ['items', 'cabinet', 'cluster', 'site'] }),
-      ]);
-
-      const loadcellsMap = new Map<string, LoadcellEntity>(loadcells.map((l) => [l.id, l]));
-      const binsMap = new Map<string, BinEntity>(bins.map((b) => [b.id, b]));
-      const itemsMap = new Map<string, ItemEntity>(
-        (await this._em.find(ItemEntity, { _id: { $in: bins.flatMap((b) => b.items.map((i) => i.itemId)) } })).map((i) => [i.id, i]),
-      );
-
-      for (const issuedLocation of history.locations) {
+      for (const issuedLocation of relevantLocations) {
         if (neededToReturn <= 0) {
           break;
         }
-        const qtyToReturnHere = Math.min(neededToReturn, issuedLocation.quantity);
 
+        const qtyToReturnHere = Math.min(neededToReturn, issuedLocation.quantity);
         if (issuedLocation.loadcellId) {
           const loadcell = loadcellsMap.get(issuedLocation.loadcellId.toHexString());
           if (!loadcell) {
-            continue;
+            throw AppHttpException.badRequest({
+              message: `Could not allocate full return quantity for item ${returnItem.itemId}. Loadcell not found`,
+            });
           }
 
           allocatedLoadcellIds.add(loadcell.id);
@@ -129,7 +139,6 @@ export class ReturnItemService {
           const bin = RefHelper.getRequired(loadcell.bin, 'BinEntity');
           const cabinet = RefHelper.getRequired(loadcell.cabinet, 'CabinetEntity');
           const cluster = RefHelper.getRequired(loadcell.cluster, 'ClusterEntity');
-          const site = RefHelper.getRequired(loadcell.site, 'SiteEntity');
 
           plan.push({
             name: item.name,
@@ -149,11 +158,11 @@ export class ReturnItemService {
               cabinetName: cabinet.name,
               clusterId: cluster.id,
               clusterName: cluster.name,
-              siteId: site.id,
-              siteName: site.name,
+              siteId: loadcell.site?.id || 'N/A',
+              siteName: 'N/A',
             },
             keepTrackItems: bin.loadcells
-              .filter((l) => !!l.item?.isInitialized())
+              .filter((l) => !!l.item)
               .map((l) => ({
                 loadcellId: l.id,
                 binItemType: BinItemType.LOADCELL,
@@ -165,24 +174,30 @@ export class ReturnItemService {
                 binId: bin.id,
                 loadcellLabel: l.label,
               })),
+            history: history.toPOJO(),
           });
           neededToReturn -= qtyToReturnHere;
         } else {
           const bin = binsMap.get(issuedLocation.binId.toHexString());
           if (!bin) {
-            continue;
+            throw AppHttpException.badRequest({
+              message: `Could not allocate full return quantity for item ${returnItem.itemId}. Bin not found`,
+            });
           }
           const binItem = bin.items.find((i) => i.itemId.toHexString() === returnItem.itemId);
           if (!binItem) {
-            continue;
+            throw AppHttpException.badRequest({
+              message: `Could not allocate full return quantity for item ${returnItem.itemId}.Bin item not found`,
+            });
           }
+
           const item = itemsMap.get(returnItem.itemId);
           if (!item) {
-            continue;
+            throw AppHttpException.badRequest({ message: `Could not allocate full return quantity for item ${returnItem.itemId}.` });
           }
+
           const cabinet = RefHelper.getRequired(bin.cabinet, 'CabinetEntity');
           const cluster = RefHelper.getRequired(bin.cluster, 'ClusterEntity');
-          const site = RefHelper.getRequired(bin.site, 'SiteEntity');
 
           plan.push({
             name: item.name,
@@ -202,19 +217,18 @@ export class ReturnItemService {
               cabinetName: cabinet.name,
               clusterId: cluster.id,
               clusterName: cluster.name,
-              siteId: site.id,
-              siteName: site.name,
+              siteId: bin.site?.id || 'N/A',
+              siteName: 'N/A',
             },
             keepTrackItems: [],
+            history: history.toPOJO(),
           });
+
           neededToReturn -= qtyToReturnHere;
         }
       }
-
       if (neededToReturn > 0) {
-        throw AppHttpException.badRequest({
-          message: `Could not allocate full return quantity for item ${returnItem.itemId}. Inconsistent issue history.`,
-        });
+        throw AppHttpException.badRequest({ message: `Could not allocate full return quantity for item ${returnItem.itemId}.` });
       }
     }
 
@@ -227,66 +241,68 @@ export class ReturnItemService {
   }
 
   private _groupReturnPlanByBin(plan: PlannedItem[]): ExecutionStep[] {
-    const binGroups = new Map<string, PlannedItem[]>();
+    try {
+      const binGroups = new Map<string, PlannedItem[]>();
 
-    for (const item of plan) {
-      const binId = item.location.binId;
+      for (const item of plan) {
+        const binId = item.location.binId;
 
-      if (!binGroups.has(binId)) {
-        binGroups.set(binId, []);
+        if (!binGroups.has(binId)) {
+          binGroups.set(binId, []);
+        }
+
+        binGroups.get(binId)!.push(item);
       }
 
-      binGroups.get(binId)!.push(item);
-    }
+      const steps: ExecutionStep[] = [];
+      let stepIndex = 1;
 
-    const steps: ExecutionStep[] = [];
-    let stepIndex = 1;
+      for (const [binId, items] of binGroups) {
+        // now all item in same bin is grouped.
+        const itemsToReturn: ItemToReturn[] = items.map((item) => ({
+          itemId: item.itemId,
+          binItemType: item.binItemType,
+          binId: binId,
+          name: item.name,
+          requestQty: item.requestQty,
+          currentQty: item.currentQty,
+          loadcellId: item.loadcellId,
+          loadcellHardwareId: item.loadcellHardwareId,
+          loadcellLabel: item.loadcellLabel,
+          conditionId: isMongoId(item.conditionId) ? item.conditionId : undefined,
+          history: item.history,
+        }));
 
-    for (const [binId, items] of binGroups) {
-      // now all item in same bin is grouped.
-      const location = items[0].location;
+        const trackingItemsMap = new Map<string, AnotherItem>();
 
-      const itemsToReturn: ItemToReturn[] = items.map((item) => ({
-        itemId: item.itemId,
-        binItemType: BinItemType.LOADCELL,
-        binId: binId,
-        name: item.name,
-        requestQty: item.requestQty,
-        currentQty: item.currentQty,
-        loadcellId: item.loadcellId,
-        loadcellHardwareId: item.loadcellHardwareId,
-        loadcellLabel: item.loadcellLabel,
-        conditionId: isMongoId(item.conditionId) ? item.conditionId : undefined,
-      }));
-
-      const trackingItemsMap = new Map<string, AnotherItem>();
-      items.forEach((item) => {
-        item.keepTrackItems.forEach((trackItem) => {
-          trackingItemsMap.set(trackItem.loadcellId, trackItem);
+        items.forEach((item) => {
+          item.keepTrackItems.forEach((trackItem) => {
+            if (trackItem.loadcellId !== 'N/A') {
+              trackingItemsMap.set(trackItem.loadcellId, trackItem);
+            }
+          });
         });
-      });
 
-      const instructions = [
-        `Step ${stepIndex}: Go to cabinet ${location.cabinetName} and find bin ${location.binName}`,
-        ...itemsToReturn.map((item) => `Return ${item.requestQty} units of item ${item.name} from loadcell ${item.loadcellLabel}`),
-        `End: close bin ${location.binName}`,
-      ];
+        const instructions: any[] = [];
 
-      steps.push({
-        stepId: `return_step_${stepIndex}_${binId}`,
-        binId: binId,
-        itemsToIssue: [],
-        itemsToReplenish: [],
-        itemsToReturn: itemsToReturn,
-        keepTrackItems: Array.from(trackingItemsMap.values()),
-        instructions: instructions,
-        location: location,
-        issueHistory: null,
-      });
+        steps.push({
+          stepId: `return_step_${stepIndex}_${binId}`,
+          binId: binId,
+          itemsToIssue: [],
+          itemsToReplenish: [],
+          itemsToReturn: itemsToReturn,
+          keepTrackItems: Array.from(trackingItemsMap.values()),
+          instructions: instructions,
+          location: items[0].location,
+          issueHistories: itemsToReturn.map((i) => i.history),
+        });
 
-      stepIndex++;
+        stepIndex++;
+      }
+
+      return steps;
+    } catch (err) {
+      throw err;
     }
-
-    return steps;
   }
 }

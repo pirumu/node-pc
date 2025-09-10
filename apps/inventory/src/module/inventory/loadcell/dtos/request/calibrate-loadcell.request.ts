@@ -31,7 +31,6 @@ export class CalibrateLoadcellRequest {
     example: 10,
   })
   @IsNumber()
-  @IsOptional()
   @Transform(({ value }) => Number(value))
-  measuredQuantity?: number;
+  measuredQuantity: number;
 }

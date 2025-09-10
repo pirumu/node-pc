@@ -58,6 +58,7 @@ import { TransactionModule } from './modules/transaction';
           heartbeatFrequencyMS: mongoConfig.heartbeatFrequencyMS,
           retryWrites: mongoConfig.retryWrites,
           retryReads: mongoConfig.retryReads,
+          readPreference: 'primary',
         };
 
         const sslConfig = buildSSLConfig(mongoConfig.ssl);

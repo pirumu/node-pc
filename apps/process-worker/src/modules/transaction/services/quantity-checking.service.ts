@@ -49,6 +49,7 @@ export type PlannedActionResult = {
 };
 
 export type ValidationResult = {
+  itemName: string;
   itemId: string;
   actualQty: number;
   expectQty: number;
@@ -138,6 +139,7 @@ export class QuantityCheckingService implements OnModuleDestroy {
           return {
             transactionId: tx._id,
             itemId: e.item._id,
+            binId: e.bin._id,
             loadcell: e.loadcell?._id || null,
             stepId: e.stepId,
             output: e.output,
@@ -199,15 +201,18 @@ export class QuantityCheckingService implements OnModuleDestroy {
 
       const loadcell = finalLoadcells.find((lc) => lc.id === plannedAction.item.loadcellId);
 
-      if (isProcessLoadcellItem && !loadcell) {
-        result.isValid = false;
-        validationResults.push({
-          itemId: plannedAction.item.itemId,
-          expectQty: plannedAction.item.requestQty,
-          actualQty: 0,
-          msg: `Loadcell for item ${plannedAction.item.itemId} not found.`,
-        });
-        continue;
+      if (isProcessLoadcellItem) {
+        if (!loadcell) {
+          result.isValid = false;
+          validationResults.push({
+            itemName: plannedAction.item.name,
+            itemId: plannedAction.item.itemId,
+            expectQty: plannedAction.item.requestQty,
+            actualQty: 0,
+            msg: `Loadcell for item ${plannedAction.item.itemId} not found.`,
+          });
+          continue;
+        }
       }
 
       const quantityBefore = plannedAction.item.currentQty;
@@ -227,15 +232,16 @@ export class QuantityCheckingService implements OnModuleDestroy {
 
       const quantityChanged = quantityAfter - quantityBefore;
 
-      if (plannedAction.type !== PlanActionType.KEEP_TRACK && quantityChanged === 0) {
-        result.isValid = false;
-        validationResults.push({
-          itemId: plannedAction.item.itemId,
-          actualQty: 0,
-          expectQty: plannedAction.item.requestQty,
-          msg: `No action was taken for item ${plannedAction.item.name}.`,
-        });
-      }
+      // if (plannedAction.type !== PlanActionType.KEEP_TRACK && quantityChanged === 0) {
+      //   result.isValid = false;
+      //   validationResults.push({
+      //     itemName: plannedAction.item.name,
+      //     itemId: plannedAction.item.itemId,
+      //     actualQty: 0,
+      //     expectQty: plannedAction.item.requestQty,
+      //     msg: `No action was taken for item ${plannedAction.item.name}.`,
+      //   });
+      // }
 
       const validationError = this._validateChange(quantityChanged, plannedAction);
       if (validationError) {
@@ -282,62 +288,6 @@ export class QuantityCheckingService implements OnModuleDestroy {
     ];
   }
 
-  private _validateChangeLegacy(changedQty: number, plannedAction: PlannedActionResult): string | null {
-    const { type, item } = plannedAction;
-    const requestQty = item.requestQty;
-    const itemName = item.name;
-
-    switch (type) {
-      case PlanActionType.ISSUE: {
-        const hasTakenQty = -changedQty;
-        if (hasTakenQty < 0) {
-          return `Action was issue, but ${-hasTakenQty} of ${itemName} were added instead.`;
-        }
-        if (hasTakenQty > requestQty) {
-          return `Over picked ${itemName}! Required: ${requestQty}, taken: ${hasTakenQty}.`;
-        }
-        if (hasTakenQty < requestQty) {
-          return `Under picked ${itemName}! Required: ${requestQty}, taken: ${hasTakenQty}.`;
-        }
-        break;
-      }
-      case PlanActionType.RETURN: {
-        const hasReturnedQty = changedQty;
-        if (hasReturnedQty < 0) {
-          return `Action was return, but ${-hasReturnedQty} of ${itemName} were taken instead.`;
-        }
-        if (hasReturnedQty > requestQty) {
-          return `Over returned ${itemName}! Required: ${requestQty}, returned: ${hasReturnedQty}.`;
-        }
-        break;
-      }
-      case PlanActionType.REPLENISH: {
-        const hasReplenishedQty = changedQty;
-        if (hasReplenishedQty < 0) {
-          return `Action was replenish, but ${-hasReplenishedQty} of ${itemName} were taken instead.`;
-        }
-        if (hasReplenishedQty > requestQty) {
-          return `Over replenished ${itemName}! Required: ${requestQty}, replenished: ${hasReplenishedQty}.`;
-        }
-        if (hasReplenishedQty < requestQty) {
-          return `Under replenished ${itemName}! Required: ${requestQty}, replenished: ${hasReplenishedQty}.`;
-        }
-        break;
-      }
-      case PlanActionType.KEEP_TRACK: {
-        if (changedQty !== 0) {
-          if (changedQty < 0) {
-            return `Item ${itemName} should not be touched, but ${-changedQty} were taken.`;
-          } else {
-            return `Item ${itemName} should not be touched, but ${changedQty} were added.`;
-          }
-        }
-        break;
-      }
-    }
-    return null;
-  }
-
   private _validateChange(changedQty: number, plannedAction: PlannedActionResult): ValidationResult | null {
     const { type, item } = plannedAction;
     const requestQty = item.requestQty;
@@ -349,6 +299,7 @@ export class QuantityCheckingService implements OnModuleDestroy {
         const expectQty = requestQty;
         if (actualQty < 0) {
           return {
+            itemName: item.name,
             itemId: item.itemId,
             actualQty,
             expectQty,
@@ -357,6 +308,7 @@ export class QuantityCheckingService implements OnModuleDestroy {
         }
         if (actualQty > expectQty) {
           return {
+            itemName: item.name,
             itemId: item.itemId,
             actualQty,
             expectQty,
@@ -365,6 +317,7 @@ export class QuantityCheckingService implements OnModuleDestroy {
         }
         if (actualQty < expectQty) {
           return {
+            itemName: item.name,
             itemId: item.itemId,
             actualQty,
             expectQty,
@@ -380,6 +333,7 @@ export class QuantityCheckingService implements OnModuleDestroy {
 
         if (actualQty < 0) {
           return {
+            itemName: item.name,
             itemId: item.itemId,
             actualQty,
             expectQty,
@@ -388,6 +342,7 @@ export class QuantityCheckingService implements OnModuleDestroy {
         }
         if (actualQty > expectQty) {
           return {
+            itemName: item.name,
             itemId: item.itemId,
             actualQty,
             expectQty,
@@ -403,6 +358,7 @@ export class QuantityCheckingService implements OnModuleDestroy {
 
         if (actualQty < 0) {
           return {
+            itemName: item.name,
             itemId: item.itemId,
             actualQty,
             expectQty,
@@ -411,6 +367,7 @@ export class QuantityCheckingService implements OnModuleDestroy {
         }
         if (actualQty > expectQty) {
           return {
+            itemName: item.name,
             itemId: item.itemId,
             actualQty,
             expectQty,
@@ -419,6 +376,7 @@ export class QuantityCheckingService implements OnModuleDestroy {
         }
         if (actualQty < expectQty) {
           return {
+            itemName: item.name,
             itemId: item.itemId,
             actualQty,
             expectQty,
@@ -438,13 +396,14 @@ export class QuantityCheckingService implements OnModuleDestroy {
               ? `Item ${itemName} should not be touched, but ${-actualQty} were taken.`
               : `Item ${itemName} should not be touched, but ${actualQty} were added.`;
 
-          return { itemId: item.itemId, actualQty, expectQty, msg };
+          return { itemName: item.name, itemId: item.itemId, actualQty, expectQty, msg };
         }
         return null;
       }
 
       default:
         return {
+          itemName: 'unknown',
           itemId: item.itemId,
           actualQty: changedQty,
           expectQty: 0,

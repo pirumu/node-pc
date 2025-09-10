@@ -122,6 +122,8 @@ export class LoadcellService {
   // =================================================================
 
   private async _processLoadcellUpdate(em: EntityManager, loadcell: LoadcellEntity, newWeight: number): Promise<LoadcellEntity> {
+    await em.refresh(loadcell);
+
     loadcell.heartbeat = Date.now();
     if (!loadcell.state) {
       loadcell.state = new LoadcellState();
@@ -160,12 +162,10 @@ export class LoadcellService {
     const { zeroWeight, unitWeight } = loadcell.calibration;
     const oldWeight = loadcell.liveReading.currentWeight;
     let changeInQuantity = 0;
-
     if (unitWeight > 0) {
       // Calculate quantities "on-the-fly" without storing them.
       const oldNetWeight = oldWeight - zeroWeight;
       const oldCalculatedQuantity = this._calculateRoundedQuantity(oldNetWeight / unitWeight);
-
       const newNetWeight = Number(newWeight) - zeroWeight;
       const newCalculatedQuantity = this._calculateRoundedQuantity(newNetWeight / unitWeight);
 
@@ -173,9 +173,12 @@ export class LoadcellService {
     }
 
     // Step 4: Update the persistent liveReading object with the latest data.
-    loadcell.liveReading.currentWeight = Number(newWeight);
     if (changeInQuantity !== 0) {
+      loadcell.liveReading.currentWeight = Number(newWeight);
       loadcell.liveReading.pendingChange += changeInQuantity;
+      if (!loadcell.synchronization) {
+        loadcell.synchronization = new Synchronization();
+      }
       loadcell.synchronization.localToCloud.isSynced = false;
       Logger.log(
         `Detected change of ${changeInQuantity} for loadcell ${loadcell.id}. Pending change is now ${loadcell.liveReading.pendingChange}.`,

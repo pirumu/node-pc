@@ -76,7 +76,7 @@ export class LoadcellsResponse {
   @ApiProperty()
   @Type(() => CalibrationData)
   @Expose({ toClassOnly: true })
-  data: CalibrationData;
+  calibration: CalibrationData;
 
   @ApiProperty()
   @Type(() => LoadcellState)

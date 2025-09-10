@@ -42,7 +42,13 @@ export class BinController extends BaseController {
       siteId: query.siteId,
       binId: query.binId,
     });
-    const data = rows.map((row) => this.toDto<GetBinCompartmentsResponse>(GetBinCompartmentsResponse, row));
+    const data = rows.map((row) =>
+      this.toDto<GetBinCompartmentsResponse>(GetBinCompartmentsResponse, {
+        ...row,
+        totalQtyOH: row.totalQtyOH || 0,
+        index: row.index || 0,
+      }),
+    );
     return new PaginationResponse(data, meta);
   }
 
@@ -53,7 +59,11 @@ export class BinController extends BaseController {
   @Get(BIN_ROUTES.GET_BIN_COMPARTMENT_DETAIL)
   public async getBinCompartmentDetail(@Param('id') binId: string): Promise<GetBinCompartmentDetail> {
     const result = await this._binService.getCompartmentDetails(binId);
-    return this.toDto<GetBinCompartmentDetail>(GetBinCompartmentDetail, result);
+    return this.toDto<GetBinCompartmentDetail>(GetBinCompartmentDetail, {
+      ...result,
+      totalQtyOH: result.totalQtyOH || 0,
+      index: result.index || 0,
+    });
   }
 
   @ApiDocs({

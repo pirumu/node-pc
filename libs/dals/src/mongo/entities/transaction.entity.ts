@@ -255,8 +255,8 @@ export class TxExecutionStep {
   @Property({ type: 'array' })
   instructions: string[] = [];
 
-  @Property({ type: 'json', nullable: true })
-  issueHistory: Properties<IssueHistoryEntity> | null;
+  @Property({ type: 'array' })
+  issueHistories: any[] = [];
 
   constructor(props: Properties<TxExecutionStep>) {
     Object.assign(this, props);

@@ -45,7 +45,7 @@ export class SignatureGuard implements CanActivate {
     verifier.update(stringToSign);
     verifier.end();
 
-    const isVerified = verifier.verify(device.publicKey, signatureFromClient, 'base64');
+    const isVerified = verifier.verify('', signatureFromClient, 'base64');
 
     if (!isVerified) {
       throw AppHttpException.unauthorized({ message: 'Invalid signature' });

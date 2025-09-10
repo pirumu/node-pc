@@ -10,7 +10,7 @@ export const getAppConfig = (): AppConfig => ({
     (value) => {
       return parseInt(<string>value, 10);
     },
-    { default: 3000 },
+    { default: 3004 },
   ),
   url: resolve('APP_URL', String, { default: 'http://localhost:3000' }),
   env: resolve('APP_ENV', String, { default: 'develop' }),

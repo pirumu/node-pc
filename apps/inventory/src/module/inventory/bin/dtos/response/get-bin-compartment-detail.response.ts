@@ -209,4 +209,8 @@ export class GetBinCompartmentDetail {
   @Expose()
   @Type(() => ItemDto)
   items: ItemDto[];
+
+  @ApiProperty({})
+  @Expose()
+  index: number;
 }

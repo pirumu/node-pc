@@ -301,7 +301,7 @@ export class IssueItemRepository {
     if (expiryDate) {
       where = {
         ...baseConditions,
-        // $or: [{ ['metadata.expiryDate' as any]: { $gte: new Date(expiryDate) } }, { ['metadata.expiryDate' as any]: null }],
+        $or: [{ ['metadata.expiryDate' as any]: { $gte: new Date(expiryDate) } }, { ['metadata.expiryDate' as any]: null }],
       };
     } else {
       where = baseConditions;
@@ -328,8 +328,8 @@ export class IssueItemRepository {
     }
 
     const baseConditions = {
-      item: { $in: itemIds.map((id) => new ObjectId(id)) },
-      bin: { $in: binIds.map((id) => new ObjectId(id)) },
+      ['items.itemId']: { $in: itemIds.map((id) => new ObjectId(id)) },
+      _id: { $in: binIds.map((id) => new ObjectId(id)) },
       state: { isDamaged: false, isFailed: false },
       ['items.qty']: { $gt: 0 },
     };

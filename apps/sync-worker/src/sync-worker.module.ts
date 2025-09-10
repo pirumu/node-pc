@@ -71,6 +71,7 @@ import { SyncWorkerService } from './sync-worker.service';
           driver: MongoDriver,
           replicas: [
             {
+              host: '127.0.0.1:20212',
               name: mongoConfig.replicaSet,
             },
           ],

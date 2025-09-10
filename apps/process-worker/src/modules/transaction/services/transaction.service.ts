@@ -9,7 +9,6 @@ import {
   IssuedItemLocation,
   IssueHistoryEntity,
   ITEM_TYPE_CATEGORY,
-  ItemEntity,
   ItemTypeEntity,
   LoadcellEntity,
   TransactionEntity,
@@ -57,18 +56,20 @@ export class TransactionService {
 
     switch (tx.type) {
       case TransactionType.ISSUE:
-        await this._processIssueHistoryOnIssueSuccess(em, tx, payload.stepId);
+        await Promise.allSettled([
+          this._processQuantityNormalItemOnSuccess(em, tx, payload.stepId),
+          this._processIssueHistoryOnIssueSuccess(em, tx, payload.stepId),
+        ]);
         break;
       case TransactionType.RETURN:
         await Promise.allSettled([
+          this._processQuantityNormalItemOnSuccess(em, tx, payload.stepId),
           this._processIssueHistoryOnReturnSuccess(em, tx, payload.stepId),
           this._processDamageItemsOnReturnSuccess(em, tx, payload.stepId),
         ]);
         break;
     }
-
     const completedStep = tx.currentStep(payload.stepId);
-
     if (completedStep) {
       await this._handleLockedBinUpdateByStep(em, tx.id, completedStep);
     }
@@ -101,7 +102,7 @@ export class TransactionService {
       ...step.itemsToReplenish.map((i) => i.loadcellId),
       ...step.keepTrackItems.map((i) => i.loadcellId),
     ]);
-    const uniqueLoadcellIds = [...new Set(loadcellIdStrings)].map((id) => new ObjectId(id));
+    const uniqueLoadcellIds = [...new Set(loadcellIdStrings)].filter((id) => id !== 'N/A').map((id) => new ObjectId(id));
 
     if (uniqueLoadcellIds.length === 0) {
       this._logger.log(`[Tx ${tx.id}] No loadcells to update for transaction ${tx.id}.`);
@@ -166,7 +167,7 @@ export class TransactionService {
       ...step.itemsToReplenish.map((i) => i.loadcellId),
       ...step.keepTrackItems.map((i) => i.loadcellId),
     ];
-    const uniqueLoadcellIds = [...new Set(loadcellIdStrings)].map((id) => new ObjectId(id));
+    const uniqueLoadcellIds = [...new Set(loadcellIdStrings)].filter((id) => id !== 'N/A').map((id) => new ObjectId(id));
 
     if (uniqueLoadcellIds.length === 0) {
       this._logger.log(`[Tx ${txId}] No loadcells to update for transaction ${txId}.`);
@@ -249,7 +250,7 @@ export class TransactionService {
 
   public async handleStepFail(em: EntityManager, payload: { transactionId: string; stepId: string; errors: string[] }): Promise<void> {
     const tx = await em.findOneOrFail(TransactionEntity, new ObjectId(payload.transactionId));
-    this._logger.error(`[${tx.id}] Step ${payload.stepId} failed. Errors: ${payload.errors.join(', ')}`);
+    this._logger.error(`[${tx.id}] Step ${payload.stepId} failed. `, payload);
 
     await em.nativeUpdate(
       TransactionEntity,
@@ -281,15 +282,7 @@ export class TransactionService {
       }
     }
 
-    await em.nativeUpdate(
-      TransactionEntity,
-      {
-        _id: tx._id,
-      },
-      {
-        status: TransactionStatus.COMPLETED_WITH_ERROR,
-      },
-    );
+    return this.process(tx.id);
   }
 
   private async _executeStep(em: EntityManager, transaction: TransactionEntity): Promise<void> {
@@ -481,6 +474,32 @@ export class TransactionService {
     );
   }
 
+  private async _processQuantityNormalItemOnSuccess(em: EntityManager, transaction: TransactionEntity, completedStepId: string) {
+    this._logger.log(`[${transaction.id}] Processing update normal item qty for completed step ${completedStepId}.`);
+    const events = await em.find(
+      TransactionEventEntity,
+      { transaction: new ObjectId(transaction.id), stepId: completedStepId },
+      { populate: ['loadcell', 'bin', 'item'] },
+    );
+    for (const event of events) {
+      const item = RefHelper.get(event.item);
+      const loadcell = RefHelper.get(event.loadcell);
+      const bin = RefHelper.get(event.bin);
+      if (!bin || !item || loadcell) {
+        continue;
+      }
+
+      bin.items = bin.items.map((i) => {
+        if (i.itemId.equals(item._id)) {
+          i.qty += event.quantityChanged;
+        }
+        return i;
+      });
+      em.persist(bin);
+    }
+    await em.flush();
+  }
+
   private async _processIssueHistoryOnIssueSuccess(
     em: EntityManager,
     transaction: TransactionEntity,
@@ -498,6 +517,7 @@ export class TransactionService {
       if (event.quantityChanged >= 0) {
         continue;
       }
+
       const item = RefHelper.get(event.item);
       if (!item || !trackableTypes.includes(item.itemType.id)) {
         continue;
@@ -510,7 +530,6 @@ export class TransactionService {
       const bin = RefHelper.getRequired(event.bin, 'BinEntity');
 
       let issueHistory = await em.findOne(IssueHistoryEntity, { user: userRef, item: itemRef });
-
       if (issueHistory) {
         issueHistory.totalIssuedQuantity += issuedQty;
         const locationIndex = issueHistory.locations.findIndex((loc) => {

@@ -18,6 +18,7 @@ export const getAppConfig = (): AppConfig => ({
   enableCors: resolve('APP_ENABLE_CORS', (v) => v === 'true', {
     default: false,
   }),
+
   corsOrigin: resolve('APP_CORS_ORIGIN', (v) => (typeof v === 'string' ? v.split(',') : []), {
     default: [],
   }),

@@ -1,5 +1,5 @@
 import { PaginatedResult, PaginationMeta } from '@common/dto';
-import { PortEntity, PortStatus } from '@dals/mongo/entities';
+import { LoadcellEntity, PortEntity, PortStatus } from '@dals/mongo/entities';
 import { EntityRepository, ObjectId } from '@mikro-orm/mongodb';
 import { InjectRepository } from '@mikro-orm/nestjs';
 import { Injectable } from '@nestjs/common';
@@ -68,7 +68,12 @@ export class PortService {
     const data = result[0]?.data || [];
     const total = result[0]?.count[0]?.total || 0;
 
-    const entities = data.map((item: any) => this._portRepository.map(item));
+    const entities = data.map((item: any) => {
+      const e = this._portRepository.map(item);
+      e.populate(['loadcells']);
+      return e;
+    });
+    console.log(JSON.stringify(entities, null, 4));
 
     return new PaginatedResult(
       entities,

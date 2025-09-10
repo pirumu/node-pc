@@ -23,9 +23,9 @@ export const getMongoDBConfig = (): MongoDBConfig => {
 
   if (!uri) {
     if (username && password) {
-      uri = `mongodb://${username}:${password}@${host}:${port}/${database}?authSource=${authSource}`;
+      uri = `mongodb://127.0.0.1:20211/ast`;
     } else {
-      uri = `mongodb://${host}:${port}/${database}`;
+      uri = `mongodb://127.0.0.1:20211/ast`;
     }
   }
 

@@ -49,7 +49,7 @@ export class ItemProcessingService {
           keepTrackItems: s.keepTrackItems.map((s) => new TxAnotherItem(s)),
           instructions: s.instructions,
           location: new TxLocation(s.location),
-          issueHistory: s.issueHistory,
+          issueHistories: s.issueHistories,
         });
       }),
       totalRequestQty: totalRequestQty,

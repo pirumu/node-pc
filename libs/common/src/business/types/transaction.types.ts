@@ -39,6 +39,7 @@ export type PlannedItem = {
   location: Location;
   keepTrackItems: AnotherItem[];
   conditionId?: string;
+  history: any;
 };
 
 export type ItemToTake = {
@@ -51,6 +52,7 @@ export type ItemToTake = {
   loadcellId: string;
   loadcellHardwareId: number;
   loadcellLabel: string;
+  history: any;
 };
 
 export type ItemToReturn = ItemToTake & { conditionId?: string };
@@ -65,5 +67,5 @@ export type ExecutionStep = {
   keepTrackItems: AnotherItem[];
   instructions: string[];
   location: Location;
-  issueHistory: any | null;
+  issueHistories: any | null;
 };

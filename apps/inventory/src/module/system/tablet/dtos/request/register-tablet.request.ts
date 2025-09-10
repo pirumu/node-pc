@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Expose } from 'class-transformer';
-import { IsBoolean, IsMongoId, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { IsBoolean, IsMongoId, IsNotEmpty, IsOptional, IsString, IsUrl } from 'class-validator';
 
 export class RegisterTabletRequest {
   @ApiProperty({
@@ -21,15 +21,18 @@ export class RegisterTabletRequest {
 
   @ApiProperty()
   @Expose()
-  @IsMongoId()
   @IsString()
   accessKey: string;
 
   @ApiProperty()
   @Expose()
-  @IsNotEmpty()
   @IsMongoId()
   clusterId: string;
+
+  @ApiProperty()
+  @Expose()
+  @IsUrl()
+  cloudUrl: string;
 
   @ApiProperty({ required: false, default: false })
   @Expose()

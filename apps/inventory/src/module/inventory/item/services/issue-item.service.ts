@@ -61,7 +61,6 @@ export class IssueItemService {
         requestedBinItems.push(item);
       }
     }
-
     // Create detailed withdrawal plan
     // This determines exactly which bins to visit and how much to take from each
     const [
@@ -221,6 +220,7 @@ export class IssueItemService {
               loadcellLabel: l.label,
             };
           }),
+          history: history,
         });
 
         // Reduce the remaining necessary quantity
@@ -373,6 +373,7 @@ export class IssueItemService {
             siteId: site.id,
             siteName: site.name,
           },
+          history: null,
           keepTrackItems: bin.items.map((item) => {
             return {
               name: itemsMap.get(item.itemId.toHexString())?.name || 'N/A',
@@ -453,6 +454,7 @@ export class IssueItemService {
         loadcellId: item.loadcellId,
         loadcellLabel: item.loadcellLabel,
         loadcellHardwareId: item.loadcellHardwareId,
+        history: item.history,
       }));
 
       // Merge and deduplicate tracking items from all items in this bin
@@ -489,7 +491,7 @@ export class IssueItemService {
         keepTrackItems: Array.from(trackingItemsMap.values()),
         instructions: instructions,
         location: items[0].location,
-        issueHistory: null,
+        issueHistories: null,
       });
 
       stepIndex++;

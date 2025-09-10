@@ -11,6 +11,9 @@ export class TabletEntity extends AbstractEntity {
   clientId!: string;
 
   @Property()
+  cloudUrl!: string;
+
+  @Property()
   accessKey!: string;
 
   @ManyToOne(() => ClusterEntity, { fieldName: 'clusterId', ref: true })

@@ -1,43 +1,32 @@
+import { EVENT_TYPE } from '@common/constants';
 import { PaginatedResult, PaginationMeta } from '@common/dto';
-import {
-  LoadcellEntity,
-  ItemEntity,
-  BinEntity,
-  LoadcellMetadata,
-  BinState,
-  LoadcellState,
-  CalibrationData,
-  LiveReading,
-} from '@dals/mongo/entities';
+import { LoadcellEntity, LoadcellMetadata, BinState, LoadcellState, CalibrationData, LiveReading } from '@dals/mongo/entities';
 import { AppHttpException } from '@framework/exception';
 import { PublisherService, Transport } from '@framework/publisher';
-import { EntityManager, EntityRepository, FindOptions, ObjectId, Reference, Transactional } from '@mikro-orm/mongodb';
+import { EntityManager, EntityRepository, FindOptions, ObjectId, Reference } from '@mikro-orm/mongodb';
 import { InjectRepository } from '@mikro-orm/nestjs';
-import { Injectable, Logger } from '@nestjs/common';
-import { FilterQuery } from 'mongoose';
+import { Injectable } from '@nestjs/common';
 
 import { CalibrateLoadcellRequest, GetLoadCellsRequest } from './dtos/request';
-import { EVENT_TYPE } from '@common/constants';
-// import { DeviceActivatedEvent } from './events';
 
 @Injectable()
 export class LoadcellService {
-  private readonly _logger = new Logger(LoadcellService.name);
-
   constructor(
     private readonly _publisherService: PublisherService,
     private readonly _em: EntityManager,
-    @InjectRepository(ItemEntity) private readonly _itemRepository: EntityRepository<ItemEntity>,
-    @InjectRepository(BinEntity) private readonly _binRepository: EntityRepository<BinEntity>,
     @InjectRepository(LoadcellEntity) private readonly _loadcellRepository: EntityRepository<LoadcellEntity>,
   ) {}
 
   public async getLoadCells(query: GetLoadCellsRequest): Promise<PaginatedResult<LoadcellEntity>> {
     const { portId, page, limit } = query;
-    const where: FilterQuery<LoadcellEntity> = {};
+    let where = {};
 
     if (portId) {
-      where.port._id = new ObjectId(portId);
+      where = {
+        port: {
+          _id: new ObjectId(portId),
+        },
+      };
     }
 
     const options: FindOptions<LoadcellEntity, keyof LoadcellEntity> = {
@@ -88,13 +77,15 @@ export class LoadcellService {
     const hardwareId = loadcellToDecommission.hardwareId;
     const port = loadcellToDecommission.port.unwrap();
 
+    const data = new CalibrationData();
+    data.zeroWeight = loadcellToDecommission.calibration.zeroWeight;
     const newRawLoadcell = new LoadcellEntity({
       hardwareId: hardwareId,
       port: Reference.create(port),
       code: `RAW-${hardwareId}`,
       label: `LC#${hardwareId}`,
       state: new LoadcellState(),
-      calibration: new CalibrationData(),
+      calibration: data,
       metadata: new LoadcellMetadata(),
       liveReading: new LiveReading(),
     });
@@ -125,7 +116,7 @@ export class LoadcellService {
    * before calibration. The service does not create new item data blocks.
    */
   public async calibrate(loadcellId: string, calibrateData: CalibrateLoadcellRequest): Promise<boolean> {
-    const { itemId, zeroWeight, measuredWeight } = calibrateData;
+    const { itemId, zeroWeight, measuredWeight, measuredQuantity } = calibrateData;
 
     const targetLoadcell = await this._loadcellRepository.findOne(new ObjectId(loadcellId), { populate: ['item', 'bin'] });
 
@@ -142,9 +133,8 @@ export class LoadcellService {
         });
       }
 
-      const metadata = targetLoadcell.metadata;
       const netWeight = measuredWeight - zeroWeight;
-      const maxQuantity = metadata.max;
+      const maxQuantity = measuredQuantity;
       const unitWeight = maxQuantity > 0 ? netWeight / maxQuantity : 0;
       const calculatedQuantity = unitWeight > 0 ? Math.max(0, Math.floor(netWeight / unitWeight)) : 0;
 
@@ -174,14 +164,14 @@ export class LoadcellService {
         throw AppHttpException.badRequest({ message: `Cannot merge a cloud-synced loadcell with itself.` });
       }
 
-      sourceLoadcell.code = targetLoadcell.code;
+      sourceLoadcell.code = sourceLoadcell.code || targetLoadcell.code;
       sourceLoadcell.hardwareId = targetLoadcell.hardwareId;
       sourceLoadcell.port = targetLoadcell.port;
       sourceLoadcell.heartbeat = targetLoadcell.heartbeat;
 
       const metadata = sourceLoadcell.metadata;
       const netWeight = measuredWeight - zeroWeight;
-      const maxQuantity = metadata.max;
+      const maxQuantity = measuredQuantity;
       const unitWeight = maxQuantity > 0 ? netWeight / maxQuantity : 0;
       const calculatedQuantity = unitWeight > 0 ? Math.max(0, Math.floor(netWeight / unitWeight)) : 0;
 
