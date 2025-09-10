@@ -75,3 +75,9 @@ export class Application {
     this._bootstrap().catch((error) => Logger.error(error.message, Application.name));
   }
 }
+
+process.on('unhandledRejection', (reason: any, p) => {
+  if ('codeName' in reason && reason.codeName === 'IndexKeySpecsConflict') {
+    // skip.
+  }
+});

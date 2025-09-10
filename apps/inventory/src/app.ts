@@ -75,7 +75,7 @@ export class Application {
     await this._bootstrapMicroservices(app, configService);
     await app.listen(appConfig.port);
 
-    Logger.log(`${appConfig.name} listen in ${appConfig.url}`, Application.name);
+    Logger.log(`${appConfig.name} listen in ${appConfig.port}`, Application.name);
   }
 
   public static start(): void {

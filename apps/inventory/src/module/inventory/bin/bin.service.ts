@@ -188,11 +188,11 @@ export class BinService {
           const quantity = lc.availableQuantity;
           const criticalThreshold = lc.metadata.critical;
 
-          let itemStatus: 'good' | 'on-loan' | 'low/critical';
+          let itemStatus: 'good' | 'on-loan' | 'low-critical';
           if (onLoanItemIds.has(item.id)) {
             itemStatus = 'on-loan';
           } else if (quantity > 0 && quantity <= criticalThreshold) {
-            itemStatus = 'low/critical';
+            itemStatus = 'low-critical';
           } else {
             itemStatus = 'good';
           }
@@ -233,11 +233,11 @@ export class BinService {
             const quantity = binItem.qty;
             const criticalThreshold = binItem.critical;
 
-            let itemStatus: 'good' | 'on-loan' | 'low/critical';
+            let itemStatus: 'good' | 'on-loan' | 'low-critical';
             if (onLoanItemIds.has(itemEntity.id)) {
               itemStatus = 'on-loan';
             } else if (quantity > 0 && quantity <= criticalThreshold) {
-              itemStatus = 'low/critical';
+              itemStatus = 'low-critical';
             } else {
               itemStatus = 'good';
             }
@@ -265,11 +265,11 @@ export class BinService {
       totalQtyOH = bin.items.reduce((sum, item) => sum + item.qty, 0);
     }
 
-    let binStatus: 'good' | 'on-loan' | 'low/critical';
+    let binStatus: 'good' | 'on-loan' | 'low-critical';
     if (onLoanItemIds.size > 0) {
       binStatus = 'on-loan';
     } else if (totalQtyOH >= 0 && totalQtyOH <= bin.criticalQty) {
-      binStatus = 'low/critical';
+      binStatus = 'low-critical';
     } else {
       binStatus = 'good';
     }

@@ -220,7 +220,7 @@ export class IssueItemService {
               loadcellLabel: l.label,
             };
           }),
-          history: history,
+          history: null,
         });
 
         // Reduce the remaining necessary quantity

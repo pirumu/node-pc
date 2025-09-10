@@ -72,7 +72,7 @@ import { TransactionModule } from './modules/transaction';
           entities: ALL_ENTITIES,
           clientUrl: mongoConfig.uri,
           driverOptions,
-          debug: true,
+          debug: false,
           ensureDatabase: true,
           logLevel: mongoConfig.logLevel || 'info',
           highlighter: new MongoHighlighter(),

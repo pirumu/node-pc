@@ -250,7 +250,7 @@ export class TransactionService {
 
   public async handleStepFail(em: EntityManager, payload: { transactionId: string; stepId: string; errors: string[] }): Promise<void> {
     const tx = await em.findOneOrFail(TransactionEntity, new ObjectId(payload.transactionId));
-    this._logger.error(`[${tx.id}] Step ${payload.stepId} failed. `, payload);
+    this._logger.error(`[${tx.id}] Step ${payload.stepId} failed.`, payload);
 
     await em.nativeUpdate(
       TransactionEntity,
@@ -262,8 +262,6 @@ export class TransactionService {
         lastError: { stepId: payload.stepId, messages: payload.errors },
       },
     );
-
-    await this._publisher.publish(Transport.MQTT, EVENT_TYPE.PROCESS.STEP_ERROR, { transactionId: tx.id }, {}, { async: true });
   }
 
   public async forceNextStep(em: EntityManager, transactionId: string, next: boolean): Promise<any> {

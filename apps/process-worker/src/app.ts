@@ -56,10 +56,15 @@ export class Application {
     await this._bootstrapMicroservices(app, configService);
     await app.listen(appConfig.port);
 
-    Logger.log(`${appConfig.name} listen in ${appConfig.url}`, Application.name);
+    Logger.log(`${appConfig.name} listen in ${appConfig.port}`, Application.name);
   }
 
   public static start(): void {
     this._bootstrap().catch((error) => Logger.error(error.message, Application.name));
   }
 }
+process.on('unhandledRejection', (reason: any, p) => {
+  if ('codeName' in reason && reason.codeName === 'IndexKeySpecsConflict') {
+    // skip.
+  }
+});

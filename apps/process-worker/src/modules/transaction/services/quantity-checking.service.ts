@@ -126,7 +126,7 @@ export class QuantityCheckingService implements OnModuleDestroy {
       if (!step || step.binId !== binId) {
         return;
       }
-
+      console.log(step);
       const finalLoadcells = await em.find(LoadcellEntity, {
         bin: new ObjectId(binId),
         item: { $ne: null },

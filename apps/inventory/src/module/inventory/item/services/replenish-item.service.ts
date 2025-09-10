@@ -54,9 +54,6 @@ export class ReplenishItemService {
     return { transactionId, steps };
   }
 
-  /**
-   * Plan replenishment - similar structure to _planReturn
-   */
   private async _planReplenish(user: AuthUserDto, replenishItems: ItemRequest['items']) {
     const itemIds = replenishItems.map((item) => item.itemId);
 
