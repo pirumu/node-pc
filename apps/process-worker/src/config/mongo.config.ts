@@ -10,7 +10,7 @@ export const getMongoDBConfig = (): MongoDBConfig => {
     },
     { default: 27017 },
   );
-  const database = resolve('MONGO_DATABASE', String, { require: true });
+  const database = resolve('MONGO_DATABASE', String, { default: 'test' });
   const username = resolve('MONGO_USERNAME', String, { default: undefined });
   const password = resolve('MONGO_PASSWORD', String, { default: undefined });
   const authSource = resolve('MONGO_AUTH_SOURCE', String, {

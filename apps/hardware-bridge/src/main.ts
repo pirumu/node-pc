@@ -1,4 +1,4 @@
 import '@framework/extensions';
-import { Application } from './app';
+import { HardwareBridgeApplication } from './app';
 
-Application.start();
+HardwareBridgeApplication.start();

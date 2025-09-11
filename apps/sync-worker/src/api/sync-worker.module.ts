@@ -13,9 +13,10 @@ import { ServicesModule } from '@services';
 import { Request } from 'express';
 import { ClsModule } from 'nestjs-cls';
 
-import { configs } from './config';
-import { MqttConfig } from './config/mqtt.config';
-import { LocalToCloudModule } from './local-to-cloud';
+import { configs } from '../config';
+import { MqttConfig } from '../config/mqtt.config';
+import { LocalToCloudModule } from '../local-to-cloud';
+
 import { SyncWorkerController } from './sync-worker.controller';
 import { SyncWorkerService } from './sync-worker.service';
 
@@ -60,6 +61,7 @@ import { SyncWorkerService } from './sync-worker.service';
           heartbeatFrequencyMS: mongoConfig.heartbeatFrequencyMS,
           retryWrites: mongoConfig.retryWrites,
           retryReads: mongoConfig.retryReads,
+          readPreference: 'primary',
         };
 
         if (sslConfig) {
@@ -71,21 +73,16 @@ import { SyncWorkerService } from './sync-worker.service';
           driver: MongoDriver,
           replicas: [
             {
-              host: '127.0.0.1:20212',
+              clientUrl: mongoConfig.replicaSetUri,
               name: mongoConfig.replicaSet,
             },
           ],
           entities: SYNC_WORKER_ENTITIES,
           clientUrl: mongoConfig.uri,
           driverOptions,
-          debug: true,
+          debug: mongoConfig.debug,
           logLevel: mongoConfig.logLevel || 'info',
           highlighter: new MongoHighlighter(),
-          discovery: {
-            checkDuplicateFieldNames: true,
-            checkDuplicateEntities: true,
-            checkNonPersistentCompositeProps: true,
-          },
           logger: (msg) => Logger.log(msg, 'MikroORM'),
         };
       },
@@ -98,13 +95,6 @@ import { SyncWorkerService } from './sync-worker.service';
       useFactory: (configService: ConfigService) => {
         const config = configService.getOrThrow<MqttConfig>(CONFIG_KEY.MQTT);
         return {
-          tcp: {
-            enabled: true,
-            options: {
-              host: '192.168.0.107',
-              port: 3002,
-            },
-          },
           mqtt: {
             options: config.publisher,
             enabled: true,

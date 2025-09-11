@@ -6,17 +6,30 @@ export type MqttConfig = { publisher: Required<MqttOptions>['options']; consumer
 export const getMqttConfig = (): MqttConfig => {
   return {
     publisher: {
-      url: resolve('MQTT_URI', String, { default: 'mqtt://192.168.0.107:1883' }),
-      protocolVersion: resolve('MQTT_PROTOCOL_VERSION', Number, { default: 5 }),
-      username: resolve('MQTT_USERNAME', String, { default: '' }),
-      password: resolve('MQTT_PASSWORD', String, { default: '' }),
+      url: resolve('MQTT_PUBLISHER_URI', String, { default: 'mqtt://127.0.0.1:1883' }),
+      protocolVersion: resolve('MQTT_PUBLISHER_PROTOCOL_VERSION', Number, { default: 5 }),
+      username: resolve('MQTT_PUBLISHER_USERNAME', String, { default: '' }),
+      password: resolve('MQTT_PUBLISHER_PASSWORD', String, { default: '' }),
       clientId: resolve('MQTT_PUBLISHER_ID', String, { default: 'mqtt-inventory-publisher' }),
+      subscribeOptions: {
+        qos: resolve(
+          'MQTT_PUBLISHER_QOS',
+          (value): any => {
+            const newValue = Number(value);
+            if (newValue < 0 || newValue > 2) {
+              throw new Error('Invalid QOS. Expect 0 | 1 | 2 ');
+            }
+            return newValue as 0 | 1 | 2;
+          },
+          { default: 0 },
+        ),
+      },
     },
     consumer: {
-      url: resolve('MQTT_URI', String, { default: 'mqtt://192.168.0.107:1883' }),
-      protocolVersion: resolve('MQTT_PROTOCOL_VERSION', Number, { default: 5 }),
-      username: resolve('MQTT_USERNAME', String, { default: '' }),
-      password: resolve('MQTT_PASSWORD', String, { default: '' }),
+      url: resolve('MQTT_CONSUMER_URI', String, { default: 'mqtt://127.0.0.1:1883' }),
+      protocolVersion: resolve('MQTT_CONSUMER_PROTOCOL_VERSION', Number, { default: 5 }),
+      username: resolve('MQTT_CONSUMER_USERNAME', String, { default: '' }),
+      password: resolve('MQTT_CONSUMER_PASSWORD', String, { default: '' }),
       clientId: resolve('MQTT_CONSUMER_ID', String, { default: 'mqtt-inventory-consumer' }),
     },
   };

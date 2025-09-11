@@ -17,6 +17,7 @@ import { ClsModule } from 'nestjs-cls';
 import { configs } from './config';
 import { AuthConfig } from './config/auth.config';
 import { MqttConfig } from './config/mqtt.config';
+import { TcpConfig } from './config/tcp.config';
 import { AuthModule, JwtAuthMiddleware } from './module/auth';
 import { INVENTORY_MODULES } from './module/inventory';
 import { SYSTEM_MODULES } from './module/system';
@@ -88,14 +89,8 @@ import { WsModule } from './module/ws';
           driver: MongoDriver,
           entities: ALL_ENTITIES,
           clientUrl: mongoConfig.uri,
-          replicas: [
-            {
-              host: '127.0.0.1:27018',
-              name: mongoConfig.replicaSet || 'rs0',
-            },
-          ],
           driverOptions,
-          debug: true,
+          debug: mongoConfig.debug,
           logLevel: mongoConfig.logLevel || 'info',
           highlighter: new MongoHighlighter(),
           discovery: {
@@ -114,18 +109,16 @@ import { WsModule } from './module/ws';
       global: true,
       useFactory: (configService: ConfigService) => {
         const mqttConfig = configService.getOrThrow<MqttConfig>(CONFIG_KEY.MQTT);
+        const tpcConfig = configService.getOrThrow<TcpConfig>(CONFIG_KEY.TCP);
 
         return {
           tcp: {
-            enabled: true,
-            options: {
-              host: '192.168.0.107',
-              port: 3003,
-            },
+            enabled: !!tpcConfig.publisher,
+            options: tpcConfig.publisher,
           },
           mqtt: {
+            enabled: !!mqttConfig.publisher,
             options: mqttConfig.publisher,
-            enabled: true,
           },
         };
       },

@@ -6,7 +6,7 @@
     "webpack": true,
     "deleteOutDir": true,
     "sourceMap": false,
-    "minify": false,
+    "minify": true,
     "tsConfigPath": "apps/inventory/tsconfig.app.json"
   },
   "builder": {
@@ -18,15 +18,6 @@
   "monorepo": true,
   "root": "apps/inventory",
   "projects": {
-    "cache": {
-      "type": "library",
-      "root": "libs/cache",
-      "entryFile": "index",
-      "sourceRoot": "libs/cache/src",
-      "compilerOptions": {
-        "tsConfigPath": "libs/cache/tsconfig.lib.json"
-      }
-    },
     "common": {
       "type": "library",
       "root": "libs/common",

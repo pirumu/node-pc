@@ -10,6 +10,7 @@ export type MongoDBConfig = {
   password?: string;
   authSource?: string;
   replicaSet?: string;
+  replicaSetUri?: string;
   // Connection options
   maxPoolSize: number;
   minPoolSize: number;

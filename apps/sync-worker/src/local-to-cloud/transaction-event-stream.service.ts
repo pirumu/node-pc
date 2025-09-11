@@ -25,8 +25,9 @@ export class TransactionEventStreamService implements OnModuleInit, OnModuleDest
       },
     );
     txEventStream.on('change', (change) => {
-      this._logger.log('Change stream change:', change);
+      // this._logger.log('Change stream change:', change);
       if (change.operationType === 'insert' || change.operationType === 'update') {
+        this._logger.log('Tx Event', change.operationType, change.fullDocument);
       }
     });
 

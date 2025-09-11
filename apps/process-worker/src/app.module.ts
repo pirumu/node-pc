@@ -86,16 +86,16 @@ import { TransactionModule } from './modules/transaction';
     PublisherModule.forRootAsync({
       global: true,
       useFactory: (configService: ConfigService) => {
-        const mqttConfig = configService.getOrThrow<MqttConfig>(CONFIG_KEY.MQTT);
         const tcpConfig = configService.getOrThrow<TcpConfig>(CONFIG_KEY.TCP);
+        const mqttConfig = configService.getOrThrow<MqttConfig>(CONFIG_KEY.MQTT);
         return {
           tcp: {
-            enabled: true,
+            enabled: !!tcpConfig.publisher,
             options: tcpConfig.publisher,
           },
           mqtt: {
-            options: mqttConfig.publisher,
-            enabled: true,
+            enabled: !!mqttConfig.publisher,
+            options: mqttConfig.publisher as any,
           },
         };
       },

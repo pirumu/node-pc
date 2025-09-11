@@ -2,7 +2,7 @@ import { AppConfig } from '@config/contracts';
 import { resolve } from '@config/core';
 
 export const getAppConfig = (): AppConfig => ({
-  name: resolve('APP_NAME', String, { default: 'Gedong AST API' }),
+  name: resolve('APP_NAME', String, { default: 'Node PC API' }),
   version: process.env.APP_VERSION || '1',
   debug: resolve('APP_DEBUG', (v) => v === 'true', { default: false }),
   port: resolve(

@@ -71,8 +71,8 @@ import { HARDWARE_MODULES } from './modules';
         const config = configService.getOrThrow<MqttConfig>(CONFIG_KEY.MQTT);
         return {
           mqtt: {
-            options: config.publisher,
             enabled: true,
+            options: config.publisher,
           },
         };
       },

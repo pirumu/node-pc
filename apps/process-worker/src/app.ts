@@ -12,8 +12,28 @@ import { MqttOptions, Transport } from '@nestjs/microservices';
 
 import { AppModule } from './app.module';
 import { MqttConfig } from './config/mqtt.config';
+import { TcpConfig } from './config/tcp.config';
 
-export class Application {
+export class ProcessWorkerApplication {
+  private static _handlerUnhandedRejection() {
+    process.on('unhandledRejection', async (reason: any, p) => {
+      if ('codeName' in reason && reason.codeName === 'IndexKeySpecsConflict') {
+        // DB info skip.
+      } else {
+        Logger.warn(`Unhandled exception reason:`, reason, ProcessWorkerApplication.name);
+      }
+    });
+  }
+
+  private static _handlerUnhandException(app: INestApplication): void {
+    process.on('uncaughtException', async (err) => {
+      app.close().finally(() => {
+        Logger.error('Fatal Error. Process exit', err, ProcessWorkerApplication.name);
+        process.exit(1);
+      });
+    });
+  }
+
   private static async _bootstrapMicroservices(app: INestApplication, configService: ConfigService): Promise<void> {
     await this._connectMqtt(app, configService);
     await app.startAllMicroservices();
@@ -37,10 +57,13 @@ export class Application {
   }
 
   private static async _bootstrap(): Promise<void> {
+    this._handlerUnhandedRejection();
     const app = await NestFactory.create(AppModule, {
-      // bufferLogs: true,
+      bufferLogs: process.env.BUFFER_LOG === 'true',
       abortOnError: false,
     });
+    this._handlerUnhandException(app);
+
     app.useLogger(app.get(APP_LOGGER));
 
     const configService = app.get(ConfigService);
@@ -55,16 +78,33 @@ export class Application {
 
     await this._bootstrapMicroservices(app, configService);
     await app.listen(appConfig.port);
+    this._appInfo(configService);
+  }
 
-    Logger.log(`${appConfig.name} listen in ${appConfig.port}`, Application.name);
+  private static _appInfo(configService: ConfigService) {
+    const appConfig = configService.getOrThrow<AppConfig>(CONFIG_KEY.APP);
+    Logger.log(`🚀 ${appConfig.name} v${appConfig.version} started`, ProcessWorkerApplication.name);
+    Logger.log(`📡 HTTP server listening on port: ${appConfig.port}`, ProcessWorkerApplication.name);
+
+    const mqttConfig = configService.getOrThrow<MqttConfig>(CONFIG_KEY.MQTT);
+    const tcpConfig = configService.getOrThrow<TcpConfig>(CONFIG_KEY.TCP);
+
+    if (tcpConfig.publisher?.host) {
+      Logger.log(`🔌 TCP Publisher: ${tcpConfig.publisher.host}:${tcpConfig.publisher.port}`, ProcessWorkerApplication.name);
+    }
+    if (tcpConfig.consumer?.host) {
+      Logger.log(`🔌 TCP Consumer: ${tcpConfig.consumer?.host}:${tcpConfig.consumer?.port}`, ProcessWorkerApplication.name);
+    }
+
+    if (mqttConfig.publisher?.url) {
+      Logger.log(`📡 MQTT Publisher URI: ${mqttConfig.publisher?.url}`, ProcessWorkerApplication.name);
+    }
+    if (mqttConfig.consumer?.url) {
+      Logger.log(`📡 MQTT Consumer URI: ${mqttConfig.consumer?.url}`, ProcessWorkerApplication.name);
+    }
   }
 
   public static start(): void {
-    this._bootstrap().catch((error) => Logger.error(error.message, Application.name));
+    this._bootstrap().catch((error) => Logger.error(error.message, ProcessWorkerApplication.name));
   }
 }
-process.on('unhandledRejection', (reason: any, p) => {
-  if ('codeName' in reason && reason.codeName === 'IndexKeySpecsConflict') {
-    // skip.
-  }
-});

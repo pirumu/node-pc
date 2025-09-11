@@ -38,8 +38,6 @@ yarn.lock
 !.vscode/extensions.json
 
 # dotenv environment variable files
-env/inventory/.env
-env/sync-worker/.env
 .env.development
 .env.test
 .env.production

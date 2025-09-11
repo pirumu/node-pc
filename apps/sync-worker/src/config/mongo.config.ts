@@ -10,22 +10,23 @@ export const getMongoDBConfig = (): MongoDBConfig => {
     },
     { default: 27017 },
   );
-  const database = resolve('MONGO_DATABASE', String, { require: true });
+  const database = resolve('MONGO_DATABASE', String, { default: 'test' });
   const username = resolve('MONGO_USERNAME', String, { default: undefined });
   const password = resolve('MONGO_PASSWORD', String, { default: undefined });
   const authSource = resolve('MONGO_AUTH_SOURCE', String, {
     default: 'admin',
   });
 
-  const replicaSet = resolve('MONGO_REPLICASET', String, { default: undefined });
+  const replicaSet = resolve('MONGO_REPLICASET', String, { default: 'rs0' });
+  const replicaSetUri = resolve('MONGO_REPLICASET_URI', String, { default: 'mongodb://localhost:27017' });
   // Construct URI if not provided
   let uri = resolve('MONGO_URI', String, { default: undefined });
 
   if (!uri) {
     if (username && password) {
-      uri = `mongodb://127.0.0.1:20211/ast`;
+      uri = `mongodb://${username}:${password}@${host}:${port}/${database}?authSource=${authSource}`;
     } else {
-      uri = `mongodb://127.0.0.1:20211/ast`;
+      uri = `mongodb://${host}:${port}/${database}`;
     }
   }
 
@@ -38,6 +39,7 @@ export const getMongoDBConfig = (): MongoDBConfig => {
     password,
     authSource,
     replicaSet,
+    replicaSetUri,
     // Connection Pool Settings
     maxPoolSize: resolve('MONGO_MAX_POOL_SIZE', (v: string) => parseInt(v, 10), {
       default: 10,

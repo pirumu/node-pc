@@ -2,7 +2,7 @@ import { AppConfig } from '@config/contracts';
 import { resolve } from '@config/core';
 
 export const getAppConfig = (): AppConfig => ({
-  name: resolve('APP_NAME', String, { default: 'Gedong AST API' }),
+  name: resolve('APP_NAME', String, { default: 'Hardware bridge' }),
   version: process.env.APP_VERSION || '1',
   debug: resolve('APP_DEBUG', (v) => v === 'true', { default: false }),
   port: resolve(
@@ -10,11 +10,11 @@ export const getAppConfig = (): AppConfig => ({
     (value) => {
       return parseInt(<string>value, 10);
     },
-    { default: 3002 },
+    { default: 3001 },
   ),
-  url: resolve('APP_URL', String, { default: 'http://localhost:3002' }),
+  url: resolve('APP_URL', String, { default: 'http://localhost:3001' }),
   env: resolve('APP_ENV', String, { default: 'develop' }),
-  apiPrefix: resolve('APP_PREFIX', String, { default: 'api' }),
+  apiPrefix: resolve('APP_PREFIX', String, { default: '' }),
   enableCors: resolve('APP_ENABLE_CORS', (v) => v === 'true', {
     default: false,
   }),

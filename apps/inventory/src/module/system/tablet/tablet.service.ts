@@ -25,6 +25,7 @@ export class TabletService {
     });
 
     try {
+      // todo: move to env.
       await fetch('http://localhost:3005/sync/all', {
         method: 'POST',
         body: JSON.stringify({

@@ -1,4 +1,4 @@
 import '@framework/extensions';
-import { Application } from './app';
+import { ProcessWorkerApplication } from './app';
 
-Application.start();
+ProcessWorkerApplication.start();

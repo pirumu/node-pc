@@ -2,7 +2,7 @@ import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import * as request from 'supertest';
 
-import { SyncWorkerModule } from './../src/sync-worker.module';
+import { SyncWorkerModule } from '../src/api/sync-worker.module';
 
 describe('SyncWorkerController (e2e)', () => {
   let app: INestApplication;

@@ -2,7 +2,7 @@ import { AppConfig } from '@config/contracts';
 import { resolve } from '@config/core';
 
 export const getAppConfig = (): AppConfig => ({
-  name: resolve('APP_NAME', String, { default: 'Gedong AST Sync Worker' }),
+  name: resolve('APP_NAME', String, { default: 'Sync Worker' }),
   version: process.env.APP_VERSION || '1',
   debug: resolve('APP_DEBUG', (v) => v === 'true', { default: false }),
   port: resolve(
@@ -12,7 +12,7 @@ export const getAppConfig = (): AppConfig => ({
     },
     { default: 3005 },
   ),
-  url: resolve('APP_URL', String, { default: 'http://localhost:3000' }),
+  url: resolve('APP_URL', String, { default: 'http://localhost:3005' }),
   env: resolve('APP_ENV', String, { default: 'develop' }),
   apiPrefix: '',
   logLevel: resolve(

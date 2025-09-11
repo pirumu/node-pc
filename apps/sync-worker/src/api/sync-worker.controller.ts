@@ -2,10 +2,10 @@ import { CloudConfig } from '@config/contracts';
 import { CONFIG_KEY } from '@config/core';
 import { Body, Controller, Get, Post } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-
-import { SyncWorkerService } from './sync-worker.service';
 import { ApiProperty } from '@nestjs/swagger';
 import { Expose, Type } from 'class-transformer';
+
+import { SyncWorkerService } from './sync-worker.service';
 
 export class SyncDto {
   @ApiProperty()

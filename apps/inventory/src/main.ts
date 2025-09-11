@@ -1,4 +1,4 @@
 import '@framework/extensions';
-import { Application } from './app';
+import { InventoryApplication } from './app';
 
-Application.start();
+InventoryApplication.start();

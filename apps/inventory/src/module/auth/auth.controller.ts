@@ -112,7 +112,6 @@ export class AuthController extends BaseController {
   public async loginByCard(@Param('cardId') cardId: string): Promise<any> {
     try {
       const responses = await this._authService.loginByCard(cardId);
-      console.log(responses);
 
       responses.forEach((res) => {
         if (res[0] === 'none') {

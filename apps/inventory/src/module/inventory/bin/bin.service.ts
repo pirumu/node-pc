@@ -1,4 +1,4 @@
-import { COMMAND_TYPE, EVENT_TYPE } from '@common/constants';
+import { EVENT_TYPE } from '@common/constants';
 import { PaginatedResult, PaginationMeta } from '@common/dto';
 import { CuLockRequest } from '@culock/dto';
 import { Command, ProtocolType } from '@culock/protocols';
@@ -6,13 +6,13 @@ import { CuResponse } from '@culock/protocols/cu';
 import { BinEntity, IssueHistoryEntity, ItemEntity } from '@dals/mongo/entities';
 import { AppHttpException } from '@framework/exception';
 import { PublisherService, Transport } from '@framework/publisher';
+import { sleep } from '@framework/time/sleep';
 import type { FilterQuery } from '@mikro-orm/core/typings';
-import { EntityManager, EntityRepository, ObjectId, Transactional } from '@mikro-orm/mongodb';
+import { EntityManager, EntityRepository, ObjectId } from '@mikro-orm/mongodb';
 import { InjectRepository } from '@mikro-orm/nestjs';
 import { Injectable, Logger } from '@nestjs/common';
 
 import { OpenCabinetBinRequest } from './dtos/request';
-import { sleep } from '@framework/time/sleep';
 
 @Injectable()
 export class BinService {
@@ -346,7 +346,7 @@ export class BinService {
 
       const isOk = await this._updateSuccessOpenStatus(binEntity);
 
-      // await this._publisherService.publish(Transport.MQTT, EVENT_TYPE.LOCK.TRACKING, payload);
+      await this._publisherService.publish(Transport.MQTT, EVENT_TYPE.LOCK.TRACKING, payload);
 
       binEntity.state.isLocked = false;
       this._em.persist(binEntity);
