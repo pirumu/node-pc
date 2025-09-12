@@ -30,7 +30,7 @@ export const getMqttConfig = (): MqttConfig => {
       protocolVersion: resolve('MQTT_CONSUMER_PROTOCOL_VERSION', Number, { default: 5 }),
       username: resolve('MQTT_CONSUMER_USERNAME', String, { default: '' }),
       password: resolve('MQTT_CONSUMER_PASSWORD', String, { default: '' }),
-      clientId: resolve('MQTT_CONSUMER_ID', String, { default: 'mqtt-hardware-bridge-consumer' }),
+      clientId: resolve('MQTT_CONSUMER_ID', String, { default: 'mqtt-lock-tracker-consumer' }),
     },
   };
 };
