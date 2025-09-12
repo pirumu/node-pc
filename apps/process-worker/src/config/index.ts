@@ -9,7 +9,6 @@ import { getTcpConfig, TcpConfig } from './tcp.config';
 interface IConfiguration {
   [CONFIG_KEY.APP]: AppConfig;
   [CONFIG_KEY.MONGO]: MongoDBConfig;
-  // [CONFIG_KEY.CACHE]: ICacheConfig;
   [CONFIG_KEY.MQTT]: MqttConfig;
   [CONFIG_KEY.TCP]: TcpConfig;
 }
@@ -17,7 +16,6 @@ interface IConfiguration {
 export const configs = (): IConfiguration => ({
   [CONFIG_KEY.APP]: getAppConfig(),
   [CONFIG_KEY.MONGO]: getMongoDBConfig(),
-  // [CONFIG_KEY.CACHE]: getCacheConfig(),
   [CONFIG_KEY.MQTT]: getMqttConfig(),
   [CONFIG_KEY.TCP]: getTcpConfig(),
 });

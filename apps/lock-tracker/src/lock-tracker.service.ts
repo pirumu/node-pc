@@ -1,5 +1,4 @@
 import { EVENT_TYPE } from '@common/constants';
-import { ControlUnitLockWithMutexService } from '@culock';
 import { CuLockRequest } from '@culock/dto';
 import { LOCK_STATUS, ProtocolType } from '@culock/protocols';
 import { CuResponse } from '@culock/protocols/cu';
@@ -17,10 +16,7 @@ export class LockTrackerService implements OnModuleDestroy {
 
   private readonly _activeMonitors = new Map<number, Subscription>();
 
-  constructor(
-    private readonly _publisherService: PublisherService,
-    private readonly _controlUnitLockService: ControlUnitLockWithMutexService,
-  ) {}
+  constructor(private readonly _publisherService: PublisherService) {}
 
   public track(request: CuLockRequest): void {
     const deviceId = request.deviceId;
@@ -85,7 +81,7 @@ export class LockTrackerService implements OnModuleDestroy {
 
   private async _checkLockStatus(request: CuLockRequest): Promise<CuResponse | ScuResponse | null> {
     try {
-      const res = await this._controlUnitLockService.execute(request);
+      const res = await this._publisherService.publish<CuResponse>(Transport.TCP, EVENT_TYPE.LOCK.STATUS, request);
       if (request.protocol === ProtocolType.CU) {
         return res as unknown as CuResponse;
       }

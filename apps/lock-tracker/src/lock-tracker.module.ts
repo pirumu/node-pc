@@ -13,6 +13,7 @@ import { ClsModule } from 'nestjs-cls';
 
 import { configs } from './config';
 import { MqttConfig } from './config/mqtt.config';
+import { TcpConfig } from './config/tcp.config';
 import { LockTrackerController } from './lock-tracker.controller';
 import { LockTrackerService } from './lock-tracker.service';
 
@@ -47,11 +48,16 @@ import { LockTrackerService } from './lock-tracker.service';
     PublisherModule.forRootAsync({
       global: true,
       useFactory: (configService: ConfigService) => {
-        const config = configService.getOrThrow<MqttConfig>(CONFIG_KEY.MQTT);
+        const mqttConfig = configService.getOrThrow<MqttConfig>(CONFIG_KEY.MQTT);
+        const tcpConfig = configService.getOrThrow<TcpConfig>(CONFIG_KEY.TCP);
         return {
+          tcp: {
+            enabled: true,
+            options: tcpConfig.publisher,
+          },
           mqtt: {
             enabled: true,
-            options: config.publisher,
+            options: mqttConfig.publisher,
           },
         };
       },
