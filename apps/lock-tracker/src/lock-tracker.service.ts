@@ -29,12 +29,12 @@ export class LockTrackerService implements OnModuleDestroy {
     const monitorSubscription = this._createLockPollingObservable(request).subscribe({
       next: (isClosed) => {
         this._logger.log(`Lock for device ${deviceId} is now closed. Publishing status.`);
-        this._publishStatus(deviceId, isClosed);
+        this._publishStatus(deviceId, request.lockIds, isClosed);
       },
       error: (err) => {
         this._logger.error(`Error during lock monitoring for device ${deviceId}:`, err.message);
         if (err.name === 'TimeoutError') {
-          this._publishStatus(deviceId, false, 'timeout');
+          this._publishStatus(deviceId, request.lockIds, false, 'timeout');
         }
       },
     });
@@ -92,9 +92,10 @@ export class LockTrackerService implements OnModuleDestroy {
     }
   }
 
-  private _publishStatus(deviceId: number, isClosed: boolean, error?: string): void {
-    const payload: { cuLockId: number; isClosed: boolean; error?: string } = {
+  private _publishStatus(deviceId: number, lockIds: number[], isClosed: boolean, error?: string): void {
+    const payload: { cuLockId: number; lockIds: number[]; isClosed: boolean; error?: string } = {
       cuLockId: deviceId,
+      lockIds: lockIds,
       isClosed,
     };
     if (error) {

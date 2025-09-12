@@ -8,7 +8,7 @@ import { BinService } from './bin.service';
 export class BinEventController {
   constructor(private readonly _binService: BinService) {}
   @EventPattern(EVENT_TYPE.LOCK.TRACKING_STATUS)
-  public async track(request: { cuLockId: number; isClosed: boolean; error?: string }): Promise<void> {
-    return this._binService.close(request.cuLockId, request.isClosed, request.error);
+  public async track(request: { cuLockId: number; lockIds: number[]; isClosed: boolean; error?: string }): Promise<void> {
+    return this._binService.close(request.cuLockId, request.lockIds, request.isClosed, request.error);
   }
 }

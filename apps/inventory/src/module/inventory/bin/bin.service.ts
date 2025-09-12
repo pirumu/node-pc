@@ -346,7 +346,7 @@ export class BinService {
 
       const isOk = await this._updateSuccessOpenStatus(binEntity);
 
-      await this._publisherService.publish(Transport.MQTT, EVENT_TYPE.LOCK.TRACKING, payload);
+      await this._publisherService.publish(Transport.MQTT, EVENT_TYPE.LOCK.TRACKING, payload, {}, { async: true });
 
       binEntity.state.isLocked = false;
       this._em.persist(binEntity);
@@ -357,12 +357,13 @@ export class BinService {
     }
   }
 
-  public async close(cuLockId: number, isClosed: boolean, error?: string): Promise<void> {
+  public async close(cuLockId: number, lockIds: number[], isClosed: boolean, error?: string): Promise<void> {
     const em = this._em.fork();
     const binEntity = await em.findOneOrFail(
       BinEntity,
       {
         cuLockId: cuLockId,
+        lockId: { $in: lockIds },
       },
       {
         populate: ['loadcells'],
