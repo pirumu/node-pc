@@ -1,11 +1,11 @@
 import { Module } from '@nestjs/common';
 
+import { BatchLoadcellService } from './batch-loadcell.service';
 import { LoadcellController } from './loadcell.controller';
-import { LoadcellService } from './loadcell.service';
 
 @Module({
   controllers: [LoadcellController],
-  providers: [LoadcellService],
-  exports: [LoadcellService],
+  providers: [BatchLoadcellService],
+  exports: [BatchLoadcellService],
 })
 export class LoadcellModule {}
