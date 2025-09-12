@@ -375,15 +375,13 @@ export class BinService {
       if (binEntity.loadcells.length > 0) {
         const loadcellHardwareIds = binEntity.loadcells.map((i) => i.hardwareId).filter((i) => i !== 0 || i !== undefined || i !== null);
         if (loadcellHardwareIds.length > 0) {
-          sleep(2000).then(() => {
-            this._publisherService.publish(
-              Transport.MQTT,
-              EVENT_TYPE.LOADCELL.STOP_READING,
-              { hardwareIds: [...new Set(loadcellHardwareIds)] },
-              {},
-              { async: true },
-            );
-          });
+          this._publisherService.publish(
+            Transport.MQTT,
+            EVENT_TYPE.LOADCELL.STOP_READING,
+            { hardwareIds: [...new Set(loadcellHardwareIds)] },
+            {},
+            { async: true },
+          );
         }
       }
     } catch (error) {

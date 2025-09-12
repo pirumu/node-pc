@@ -103,6 +103,7 @@ export class TransactionService {
     if (uniqueHardwareIds.length > 0) {
       this._logger.log(`[${tx.id}] Performing final flush for ${uniqueHardwareIds.length} loadcells in transaction.`);
       await this._loadcellService.flushBufferFor(uniqueHardwareIds);
+      await this._loadcellService.commitPendingChange(uniqueHardwareIds);
     }
   }
 

@@ -41,14 +41,47 @@ export class BatchLoadcellService implements OnModuleInit, OnModuleDestroy {
     this._logger.log(`Forced flush requested for ${hardwareIds.length} hardwareId(s).`);
     const payloadsToProcess: WeightCalculatedEvent[] = [];
     for (const id of hardwareIds) {
-      payloadsToProcess.push(this._eventBuffer.get(id)!);
       if (this._eventBuffer.has(id)) {
+        payloadsToProcess.push(this._eventBuffer.get(id)!);
         this._eventBuffer.delete(id);
       }
     }
-
+    if (payloadsToProcess.length === 0) {
+      this._logger.log('No pending events in buffer for the requested hardwareIds.');
+      return;
+    }
     await this._processBatch(payloadsToProcess);
     this._logger.log(`Forced flush completed for ${payloadsToProcess.length} event(s).`);
+  }
+
+  public async commitPendingChange(hardwareIds: number[]): Promise<void> {
+    if (hardwareIds.length === 0) {
+      return;
+    }
+    this._logger.log(`Commit pending change for ${hardwareIds.length} hardwareId(s).`);
+
+    const em = this._em.fork();
+
+    const existingLoadcells = await em.find(LoadcellEntity, { hardwareId: { $in: hardwareIds } }, { populate: ['bin.state'] });
+    const loadcells = existingLoadcells.filter((l) => l.liveReading.pendingChange !== 0);
+    const bulkOps = loadcells.map((l) => ({
+      updateOne: {
+        filter: { _id: l._id },
+        update: {
+          $inc: { availableQuantity: l.liveReading.pendingChange },
+          $set: {
+            ['synchronization.localToCloud.isSynced']: false,
+            ['liveReading.pendingChange']: 0,
+          },
+        },
+      },
+    }));
+    if (bulkOps.length) {
+      const commited = await em.getCollection(LoadcellEntity).bulkWrite(bulkOps);
+      this._logger.log(`Commited pending change for ${commited.modifiedCount} hardwareId(s).`);
+    } else {
+      this._logger.log(`Every pending change is commited.`);
+    }
   }
 
   public onWeighCalculated(payloads: WeightCalculatedEvent[]): void {
@@ -103,7 +136,7 @@ export class BatchLoadcellService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async _segregatePayloads(em: EntityManager, payloads: WeightCalculatedEvent[]) {
-    const hardwareIds = payloads.map((p) => p.hardwareId);
+    const hardwareIds = payloads.filter((p) => !!p).map((p) => p.hardwareId);
     const existingLoadcells = await em.find(LoadcellEntity, { hardwareId: { $in: hardwareIds } }, { populate: ['bin.state'] });
     const existingIds = new Set(existingLoadcells.map((lc) => lc.hardwareId));
     const loadcellMap = new Map(existingLoadcells.map((lc) => [lc.hardwareId, lc]));
