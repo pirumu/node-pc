@@ -35,7 +35,6 @@ export class TransactionController {
 
   @EventPattern(EVENT_TYPE.PROCESS.TRANSACTION_COMPLETED)
   public async onTxComplete(payload: { transactionId: string }): Promise<void> {
-    await sleep(1000);
     return this._transactionService.handleTxComplete(this._em.fork(), payload);
   }
 

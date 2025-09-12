@@ -1,5 +1,5 @@
 import { EVENT_TYPE } from '@common/constants';
-import { ControlUnitLockService } from '@culock';
+import { ControlUnitLockWithMutexService } from '@culock';
 import { CuLockRequest } from '@culock/dto';
 import { LOCK_STATUS, ProtocolType } from '@culock/protocols';
 import { CuResponse } from '@culock/protocols/cu';
@@ -19,7 +19,7 @@ export class LockTrackerService implements OnModuleDestroy {
 
   constructor(
     private readonly _publisherService: PublisherService,
-    private readonly _controlUnitLockService: ControlUnitLockService,
+    private readonly _controlUnitLockService: ControlUnitLockWithMutexService,
   ) {}
 
   public track(request: CuLockRequest): void {

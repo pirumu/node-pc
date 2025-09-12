@@ -12,7 +12,7 @@ export class BatchLoadcellService implements OnModuleInit, OnModuleDestroy {
   private _eventBuffer = new Map<number, WeightCalculatedEvent>();
 
   private _batchProcessorInterval: NodeJS.Timeout;
-  private readonly _batchIntervalMs = 2000;
+  private readonly _batchIntervalMs = 1000;
   private _isProcessing = false;
 
   constructor(
@@ -41,15 +41,12 @@ export class BatchLoadcellService implements OnModuleInit, OnModuleDestroy {
     this._logger.log(`Forced flush requested for ${hardwareIds.length} hardwareId(s).`);
     const payloadsToProcess: WeightCalculatedEvent[] = [];
     for (const id of hardwareIds) {
+      payloadsToProcess.push(this._eventBuffer.get(id)!);
       if (this._eventBuffer.has(id)) {
-        payloadsToProcess.push(this._eventBuffer.get(id)!);
         this._eventBuffer.delete(id);
       }
     }
-    if (payloadsToProcess.length === 0) {
-      this._logger.log('No pending events in buffer for the requested hardwareIds.');
-      return;
-    }
+
     await this._processBatch(payloadsToProcess);
     this._logger.log(`Forced flush completed for ${payloadsToProcess.length} event(s).`);
   }
@@ -192,6 +189,10 @@ export class BatchLoadcellService implements OnModuleInit, OnModuleDestroy {
       const updateOp: any = { $set: { ['liveReading.currentWeight']: payload.weight, heartbeat: Date.now() } };
 
       if (isBinLocked) {
+        this._logger.log(`Update locked bin pendingChange`, {
+          binId: entity.bin?.id,
+          pendingChange: entity.liveReading.pendingChange,
+        });
         const pendingChange = entity.liveReading.pendingChange;
         if (pendingChange !== 0) {
           updateOp.$inc = { availableQuantity: pendingChange };
@@ -202,7 +203,7 @@ export class BatchLoadcellService implements OnModuleInit, OnModuleDestroy {
         if (!entity.state?.isCalibrated) {
           bulkOps.push({
             updateOne: {
-              filter: { _id: entity.id },
+              filter: { _id: entity._id },
               update: { $set: { ['liveReading.currentWeight']: payload.weight, heartbeat: Date.now() } },
             },
           });
@@ -221,12 +222,13 @@ export class BatchLoadcellService implements OnModuleInit, OnModuleDestroy {
         }
 
         if (changeInQuantity !== 0) {
+          this._logger.log(`Detect pendingChange for loadcell: `, { id: entity.id, change: changeInQuantity });
           updateOp.$inc = { ['liveReading.pendingChange']: changeInQuantity };
           updateOp.$set['synchronization.localToCloud.isSynced'] = false;
         }
       }
 
-      bulkOps.push({ updateOne: { filter: { _id: entity.id }, update: updateOp } });
+      bulkOps.push({ updateOne: { filter: { _id: entity._id }, update: updateOp } });
     }
 
     if (bulkOps.length > 0) {

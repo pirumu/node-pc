@@ -56,6 +56,7 @@ export class TransactionService {
   public async handleStepSuccess(em: EntityManager, payload: { transactionId: string; stepId: string }): Promise<void> {
     const tx = await em.findOneOrFail(TransactionEntity, new ObjectId(payload.transactionId));
     this._logger.log(`[${tx.id}] Step ${payload.stepId} completed successfully.`);
+    await this._publisher.publish(Transport.MQTT, EVENT_TYPE.PROCESS.STEP_SUCCESS, payload, {}, { async: true });
 
     switch (tx.type) {
       case TransactionType.ISSUE:
@@ -82,10 +83,7 @@ export class TransactionService {
       }
     }
 
-    await Promise.all([
-      this._publisher.publish(Transport.MQTT, EVENT_TYPE.PROCESS.STEP_SUCCESS, payload, {}, { async: true }),
-      this._advanceToNextStep(em, tx, payload.stepId, false),
-    ]);
+    await this._advanceToNextStep(em, tx, payload.stepId, false);
   }
 
   public async handleTxComplete(em: EntityManager, payload: { transactionId: string }): Promise<void> {
@@ -135,12 +133,7 @@ export class TransactionService {
     if (!step) {
       return;
     }
-    const hardwareIds = new Set<number>([
-      ...step.itemsToIssue.map((i) => i.loadcellHardwareId),
-      ...step.itemsToReturn.map((i) => i.loadcellHardwareId),
-      ...step.itemsToReplenish.map((i) => i.loadcellHardwareId),
-      ...step.keepTrackItems.map((i) => i.loadcellHardwareId),
-    ]);
+    const hardwareIds = new Set<number>([...this._getHardwareIdsFromStep(step)]);
 
     await this._publisher.publish(Transport.MQTT, EVENT_TYPE.LOADCELL.STOP_READING, { hardwareIds: [...hardwareIds] }, {}, { async: true });
   }

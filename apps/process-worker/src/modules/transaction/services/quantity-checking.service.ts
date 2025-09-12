@@ -64,7 +64,7 @@ export class QuantityCheckingService implements OnModuleDestroy {
   private _activePollingLockStatusLoops = new Map<string, LockPollingContext>();
 
   private _closingTimers = new Map<string, NodeJS.Timeout>();
-  private readonly _finalizationDelayMs = 2000;
+  private readonly _finalizationDelayMs = 500;
 
   constructor(
     private readonly _orm: MikroORM,
@@ -110,11 +110,12 @@ export class QuantityCheckingService implements OnModuleDestroy {
     });
   }
 
-  private async _handleUserRequestCloseBin(event: { transactionId: string; binId: string }): Promise<void> {
+  public async handleUserRequestCloseBin(event: { transactionId: string; binId: string }): Promise<void> {
     const { transactionId, binId } = event;
     this._logger.log(
       `[${transactionId}] User requested to close bin ${binId}. Starting ${this._finalizationDelayMs}ms finalization countdown.`,
     );
+    this._stopLockPolling(transactionId);
 
     if (this._closingTimers.has(transactionId)) {
       clearTimeout(this._closingTimers.get(transactionId)!);
@@ -132,6 +133,7 @@ export class QuantityCheckingService implements OnModuleDestroy {
   private async _handleBinClosed(event: { transactionId: string; binId: string }): Promise<void> {
     return RequestContext.create(this._orm.em, async () => {
       const { transactionId, binId } = event;
+
       const em = RequestContext.getEntityManager()! as MongoEntityManager;
       this._logger.log(`[${transactionId}] Finalizing step transaction for bin ${binId}.`);
 
@@ -250,17 +252,6 @@ export class QuantityCheckingService implements OnModuleDestroy {
       }
 
       const quantityChanged = quantityAfter - quantityBefore;
-
-      // if (plannedAction.type !== PlanActionType.KEEP_TRACK && quantityChanged === 0) {
-      //   result.isValid = false;
-      //   validationResults.push({
-      //     itemName: plannedAction.item.name,
-      //     itemId: plannedAction.item.itemId,
-      //     actualQty: 0,
-      //     expectQty: plannedAction.item.requestQty,
-      //     msg: `No action was taken for item ${plannedAction.item.name}.`,
-      //   });
-      // }
 
       const validationError = this._validateChange(quantityChanged, plannedAction);
       if (validationError) {
@@ -454,12 +445,20 @@ export class QuantityCheckingService implements OnModuleDestroy {
     );
 
     if (status.isSuccess && Object.values(status.lockStatuses).every((s) => s === LOCK_STATUS.CLOSED)) {
-      this._stopLockPolling(transactionId);
       await em.nativeUpdate(BinEntity, { _id: bin._id }, { ['state.isLocked']: true });
-      return this._handleUserRequestCloseBin({
-        binId: bin.id,
-        transactionId: transactionId,
-      });
+      this._publisher
+        .publish(
+          Transport.MQTT,
+          EVENT_TYPE.BIN.CLOSED,
+          {
+            transactionId,
+            stepId: step.stepId,
+            binId: bin.id,
+          },
+          {},
+          { async: true },
+        )
+        .catch((err) => this._logger.error(err));
     }
   }
 
