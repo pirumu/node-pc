@@ -1,6 +1,5 @@
 import { AppConfig } from '@config/contracts';
 import { CONFIG_KEY } from '@config/core';
-import { ControlUnitLockModule } from '@culock';
 import { TRACING_ID } from '@framework/constants';
 import { AppLoggerModule } from '@framework/logger';
 import { PublisherModule } from '@framework/publisher';
@@ -69,7 +68,6 @@ import { LockTrackerService } from './lock-tracker.service';
       },
       inject: [ConfigService],
     }),
-    ControlUnitLockModule,
   ],
   controllers: [LockTrackerController],
   providers: [LockTrackerService],
