@@ -5,14 +5,10 @@ import { Controller } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
 
 import { CulockService } from './culock.service';
-import { LockMonitoringService } from './lock-tracking.service';
 
 @Controller()
 export class CulockController {
-  constructor(
-    private readonly _culockService: CulockService,
-    private readonly _lockMonitoringService: LockMonitoringService,
-  ) {}
+  constructor(private readonly _culockService: CulockService) {}
 
   @MessagePattern(EVENT_TYPE.LOCK.OPEN)
   public async open(@Payload() request: CuLockRequest): Promise<BaseResponse> {
@@ -24,11 +20,5 @@ export class CulockController {
   public async status(@Payload() request: CuLockRequest): Promise<BaseResponse> {
     request.command = Command.GET_STATUS;
     return this._culockService.status(request);
-  }
-
-  @MessagePattern(EVENT_TYPE.LOCK.TRACKING)
-  public async track(@Payload() request: CuLockRequest): Promise<void> {
-    request.command = Command.GET_STATUS;
-    return this._lockMonitoringService.track(request);
   }
 }

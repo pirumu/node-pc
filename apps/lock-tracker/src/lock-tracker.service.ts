@@ -10,8 +10,8 @@ import { Observable, interval, of, Subscription, EMPTY } from 'rxjs';
 import { switchMap, filter, take, catchError, finalize, timeout } from 'rxjs/operators';
 
 @Injectable()
-export class LockMonitoringService implements OnModuleDestroy {
-  private readonly _logger = new Logger(LockMonitoringService.name);
+export class LockTrackerService implements OnModuleDestroy {
+  private readonly _logger = new Logger(LockTrackerService.name);
   private readonly _pollInterval = 1500; // 1s
   private readonly _timeoutDuration = 60 * 60 * 1000; // 1h
 

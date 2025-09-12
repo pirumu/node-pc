@@ -108,6 +108,15 @@
         "tsConfigPath": "libs/loadcells/tsconfig.lib.json"
       }
     },
+    "lock-tracker": {
+      "type": "application",
+      "root": "apps/lock-tracker",
+      "entryFile": "main",
+      "sourceRoot": "apps/lock-tracker/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/lock-tracker/tsconfig.app.json"
+      }
+    },
     "process-worker": {
       "type": "application",
       "root": "apps/process-worker",

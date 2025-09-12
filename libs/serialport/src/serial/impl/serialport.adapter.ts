@@ -370,7 +370,7 @@ export class SerialPortAdapter implements ISerialAdapter, OnModuleDestroy {
     }
   }
 
-  // Enhanced cleanup - Clean connections but keep persistent callbacks
+  // Clean connections but keep persistent callbacks
   private _cleanupConnection(path: string): void {
     const connection = this._connections.get(path);
     if (connection) {
@@ -400,7 +400,6 @@ export class SerialPortAdapter implements ISerialAdapter, OnModuleDestroy {
   }
 
   // PUBLIC METHODS
-
   public async listPorts(loadUnknownManufacturer = false): Promise<SerialPortInfo[]> {
     if (this._isDestroyed) {
       return [];
@@ -478,9 +477,7 @@ export class SerialPortAdapter implements ISerialAdapter, OnModuleDestroy {
         }
       }
     };
-
-    // Run in background
-    attemptConnection();
+    return attemptConnection();
   }
 
   public async write(path: string, data: string | Buffer): Promise<boolean> {
@@ -502,7 +499,7 @@ export class SerialPortAdapter implements ISerialAdapter, OnModuleDestroy {
     });
   }
 
-  // Enhanced onDataStream - Store callbacks persistently
+  //onDataStream - Store callbacks persistently
   public onDataStream(path: string, callback: (data: Buffer) => void): () => void {
     // Store callback in persistent registry
     if (!this._persistentDataCallbacks.has(path)) {
@@ -540,7 +537,7 @@ export class SerialPortAdapter implements ISerialAdapter, OnModuleDestroy {
     };
   }
 
-  // Enhanced error callback registration
+  //error callback registration
   public onErrorStream(path: string, callback: (error: Error) => void): () => void {
     if (!this._persistentErrorCallbacks.has(path)) {
       this._persistentErrorCallbacks.set(path, []);

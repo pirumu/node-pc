@@ -6,5 +6,6 @@ import { LoadcellService } from './loadcell.service';
 @Module({
   controllers: [LoadcellController],
   providers: [LoadcellService],
+  exports: [LoadcellService],
 })
 export class LoadcellModule {}

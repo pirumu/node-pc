@@ -1,5 +1,4 @@
 import { EVENT_TYPE } from '@common/constants';
-import { PublisherService, Transport } from '@framework/publisher';
 import { sleep } from '@framework/time/sleep';
 import { EntityManager } from '@mikro-orm/mongodb';
 import { Controller } from '@nestjs/common';
@@ -24,12 +23,12 @@ export class TransactionController {
     return this._transactionService.forceNextStep(this._em.fork(), payload.transactionId, payload.isNextRequestItem);
   }
 
-  @EventPattern(EVENT_TYPE.PROCESS.STEP_SUCCESS)
+  @EventPattern(EVENT_TYPE.PROCESS.INTERNAL_STEP_SUCCESS)
   public async onStepSuccess(payload: { transactionId: string; stepId: string }): Promise<void> {
     return this._transactionService.handleStepSuccess(this._em.fork(), payload);
   }
 
-  @EventPattern(EVENT_TYPE.PROCESS.STEP_ERROR)
+  @EventPattern(EVENT_TYPE.PROCESS.INTERNAL_STEP_ERROR)
   public async onStepError(payload: { transactionId: string; stepId: string; errors: string[] }): Promise<void> {
     return this._transactionService.handleStepFail(this._em.fork(), payload);
   }

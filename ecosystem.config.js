@@ -9,7 +9,7 @@ module.exports = {
       exp_backoff_restart_delay: 1000,
       max_memory_restart: '1G',
       env: {
-        DOTENV_CONFIG_PATH: 'env/inventory/.env',
+        DOTENV_CONFIG_PATH: 'env/inventory/.env.prod',
       },
     },
     {
@@ -21,7 +21,7 @@ module.exports = {
       exp_backoff_restart_delay: 1000,
       max_memory_restart: '2G',
       env: {
-        DOTENV_CONFIG_PATH: 'env/hardware-bridge/.env',
+        DOTENV_CONFIG_PATH: 'env/hardware-bridge/.env.prod',
       },
     },
     {
@@ -33,7 +33,7 @@ module.exports = {
       exp_backoff_restart_delay: 1000,
       max_memory_restart: '2G',
       env: {
-        DOTENV_CONFIG_PATH: 'env/process-worker/.env',
+        DOTENV_CONFIG_PATH: 'env/process-worker/.env.prod',
       },
     },
     {
@@ -45,7 +45,19 @@ module.exports = {
       exp_backoff_restart_delay: 1000,
       max_memory_restart: '1G',
       env: {
-        DOTENV_CONFIG_PATH: 'env/sync-worker/.env',
+        DOTENV_CONFIG_PATH: 'env/sync-worker/.env.prod',
+      },
+    },
+    {
+      name: 'lock-tracker-service',
+      script: 'dist/apps/lock-tracker/main.js',
+      watch: false,
+      autorestart: true,
+      restart_delay: 3000,
+      exp_backoff_restart_delay: 1000,
+      max_memory_restart: '500M',
+      env: {
+        DOTENV_CONFIG_PATH: 'env/sync-worker/.env.prod',
       },
     },
   ],

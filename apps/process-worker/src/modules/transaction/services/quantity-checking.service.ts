@@ -20,6 +20,8 @@ import { MikroORM, RequestContext } from '@mikro-orm/core';
 import { MongoEntityManager, ObjectId } from '@mikro-orm/mongodb';
 import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 
+import { BatchLoadcellService } from '../../loadcell';
+
 const LOCK_POLLING_INTERVAL_MS = 1000;
 const NEED_INSTRUCTIONS = process.env.NEED_INSTRUCTIONS || false;
 
@@ -61,18 +63,14 @@ export class QuantityCheckingService implements OnModuleDestroy {
   private readonly _logger = new Logger(QuantityCheckingService.name);
   private _activePollingLockStatusLoops = new Map<string, LockPollingContext>();
 
+  private _closingTimers = new Map<string, NodeJS.Timeout>();
+  private readonly _finalizationDelayMs = 2000;
+
   constructor(
     private readonly _orm: MikroORM,
     private readonly _publisher: PublisherService,
+    private readonly _loadcellService: BatchLoadcellService,
   ) {}
-
-  public onModuleDestroy(): void {
-    this._activePollingLockStatusLoops.forEach((context, txId) => {
-      this._logger.warn(`[${txId}] Forcibly stopping lock polling loop due to module destruction.`);
-      clearInterval(context.intervalId);
-    });
-    this._activePollingLockStatusLoops.clear();
-  }
 
   public async handleBinOpened(event: { transactionId: string; binId: string }): Promise<void> {
     return RequestContext.create(this._orm.em, async () => {
@@ -112,26 +110,47 @@ export class QuantityCheckingService implements OnModuleDestroy {
     });
   }
 
-  public async handleBinClosed(event: { transactionId: string; binId: string }): Promise<void> {
+  private async _handleUserRequestCloseBin(event: { transactionId: string; binId: string }): Promise<void> {
+    const { transactionId, binId } = event;
+    this._logger.log(
+      `[${transactionId}] User requested to close bin ${binId}. Starting ${this._finalizationDelayMs}ms finalization countdown.`,
+    );
+
+    if (this._closingTimers.has(transactionId)) {
+      clearTimeout(this._closingTimers.get(transactionId)!);
+    }
+
+    const timer = setTimeout(() => {
+      this._logger.log(`[${transactionId}] Finalization delay ended. Proceeding to close bin ${binId}.`);
+      this._handleBinClosed({ transactionId, binId });
+      this._closingTimers.delete(transactionId);
+    }, this._finalizationDelayMs);
+
+    this._closingTimers.set(transactionId, timer);
+  }
+
+  private async _handleBinClosed(event: { transactionId: string; binId: string }): Promise<void> {
     return RequestContext.create(this._orm.em, async () => {
       const { transactionId, binId } = event;
       const em = RequestContext.getEntityManager()! as MongoEntityManager;
-      this._stopLockPolling(transactionId);
+      this._logger.log(`[${transactionId}] Finalizing step transaction for bin ${binId}.`);
 
-      this._logger.log(`[${transactionId}] Bin ${binId} closed. Persisting final results.`);
+      const relatedLoadcells = await em.find(LoadcellEntity, { bin: new ObjectId(binId) });
+
+      const hardwareIdsToFlush = relatedLoadcells.map((lc) => lc.hardwareId);
+
+      if (hardwareIdsToFlush.length > 0) {
+        this._logger.log(`[${transactionId}] Flushing pending loadcell events before closing bin.`);
+        await this._loadcellService.flushBufferFor(hardwareIdsToFlush);
+      }
 
       const tx = await em.findOneOrFail(TransactionEntity, new ObjectId(transactionId));
-
       const step = tx.currentStep(tx.currentStepId);
       if (!step || step.binId !== binId) {
         return;
       }
-      console.log(step);
-      const finalLoadcells = await em.find(LoadcellEntity, {
-        bin: new ObjectId(binId),
-        item: { $ne: null },
-      });
 
+      const finalLoadcells = await em.find(LoadcellEntity, { bin: new ObjectId(binId), item: { $ne: null } });
       const result = this._calculateFinalStepResult(em, step, finalLoadcells, tx.type);
 
       if (result.events.length > 0) {
@@ -152,7 +171,7 @@ export class QuantityCheckingService implements OnModuleDestroy {
         await em.getDriver().nativeInsertMany('transaction_events', events);
       }
 
-      const channel = result.isValid ? EVENT_TYPE.PROCESS.STEP_SUCCESS : EVENT_TYPE.PROCESS.STEP_ERROR;
+      const channel = result.isValid ? EVENT_TYPE.PROCESS.INTERNAL_STEP_SUCCESS : EVENT_TYPE.PROCESS.INTERNAL_STEP_ERROR;
 
       this._publisher
         .publish(
@@ -435,18 +454,26 @@ export class QuantityCheckingService implements OnModuleDestroy {
     );
 
     if (status.isSuccess && Object.values(status.lockStatuses).every((s) => s === LOCK_STATUS.CLOSED)) {
-      bin.state.isLocked = true;
+      this._stopLockPolling(transactionId);
       await em.nativeUpdate(BinEntity, { _id: bin._id }, { ['state.isLocked']: true });
-      await this._publisher.publish(
-        Transport.MQTT,
-        EVENT_TYPE.BIN.CLOSED,
-        {
-          transactionId,
-          binId: step.binId,
-        },
-        {},
-        { async: true },
-      );
+      return this._handleUserRequestCloseBin({
+        binId: bin.id,
+        transactionId: transactionId,
+      });
     }
+  }
+
+  public onModuleDestroy(): void {
+    this._activePollingLockStatusLoops.forEach((context, txId) => {
+      this._logger.warn(`[${txId}] Forcibly stopping lock polling loop due to module destruction.`);
+      clearInterval(context.intervalId);
+    });
+    this._activePollingLockStatusLoops.clear();
+
+    this._closingTimers.forEach((timer, txId) => {
+      this._logger.warn(`[${txId}] Clearing finalization timer due to module destruction.`);
+      clearTimeout(timer);
+    });
+    this._closingTimers.clear();
   }
 }

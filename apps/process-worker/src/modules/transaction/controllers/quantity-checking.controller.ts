@@ -15,12 +15,4 @@ export class QuantityCheckingController {
     }
     return this._quantityCheckingService.handleBinOpened(payload);
   }
-
-  @EventPattern(EVENT_TYPE.BIN.CLOSED)
-  public async onBinClosed(payload: { transactionId: string; binId: string }): Promise<void> {
-    if (!payload.transactionId) {
-      return;
-    }
-    return this._quantityCheckingService.handleBinClosed(payload);
-  }
 }

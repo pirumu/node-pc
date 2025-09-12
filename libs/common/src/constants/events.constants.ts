@@ -44,6 +44,9 @@ export const EVENT_TYPE = {
     STEP_ERROR: 'process/step-error',
     STEP_WARNING: 'process/step-warning',
 
+    INTERNAL_STEP_SUCCESS: 'process/internal-step-success',
+    INTERNAL_STEP_ERROR: 'process/internal-step-error',
+
     QTY_CHANGED: 'process/item-qty-changed',
 
     INSTRUCTION: 'process/instruction',

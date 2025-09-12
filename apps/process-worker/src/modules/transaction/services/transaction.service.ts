@@ -1,4 +1,4 @@
-import { BinItemType, ExecutionStep } from '@common/business/types';
+import { BinItemType } from '@common/business/types';
 import { CONDITION_TYPE, EVENT_TYPE } from '@common/constants';
 import { CuLockRequest } from '@culock/dto';
 import { LOCK_STATUS, ProtocolType } from '@culock/protocols';
@@ -23,6 +23,8 @@ import { sleep } from '@framework/time/sleep';
 import { EntityManager, ObjectId, Reference } from '@mikro-orm/mongodb';
 import { Injectable, Logger } from '@nestjs/common';
 
+import { BatchLoadcellService } from '../../loadcell';
+
 // Constants for retry logic
 const EXECUTION_CONFIG = {
   MAX_LOCK_OPEN_ATTEMPTS: 3,
@@ -37,6 +39,7 @@ export class TransactionService {
   constructor(
     private readonly _em: EntityManager,
     private readonly _publisher: PublisherService,
+    private readonly _loadcellService: BatchLoadcellService,
   ) {}
 
   public async process(transactionId: string): Promise<TransactionEntity> {
@@ -71,10 +74,18 @@ export class TransactionService {
     }
     const completedStep = tx.currentStep(payload.stepId);
     if (completedStep) {
-      await this._handleLockedBinUpdateByStep(em, tx.id, completedStep);
+      const allHardwareIds = tx.executionSteps.flatMap((step) => this._getHardwareIdsFromStep(step));
+      const uniqueHardwareIds = [...new Set(allHardwareIds)];
+      if (uniqueHardwareIds.length > 0) {
+        this._logger.log(`[${tx.id}] Performing final flush for ${uniqueHardwareIds.length} loadcells in transaction.`);
+        await this._loadcellService.flushBufferFor(uniqueHardwareIds);
+      }
     }
 
-    await this._advanceToNextStep(em, tx, payload.stepId, false);
+    await Promise.all([
+      this._publisher.publish(Transport.MQTT, EVENT_TYPE.PROCESS.STEP_SUCCESS, payload, {}, { async: true }),
+      this._advanceToNextStep(em, tx, payload.stepId, false),
+    ]);
   }
 
   public async handleTxComplete(em: EntityManager, payload: { transactionId: string }): Promise<void> {
@@ -88,136 +99,12 @@ export class TransactionService {
     } catch (error) {
       this._logger.warn('_stopRealtimeServices error', error);
     }
-    await this._handleLockedBinUpdate(em, tx);
-  }
 
-  /**
-   * Back up when loadcell stopped before commit pending change.
-   * @see apps/process-worker/src/modules/loadcell/loadcell.service.ts _handleLockedBinUpdate
-   */
-  private async _handleLockedBinUpdate(em: EntityManager, tx: TransactionEntity): Promise<void> {
-    const loadcellIdStrings = tx.executionSteps.flatMap((step) => [
-      ...step.itemsToIssue.map((i) => i.loadcellId),
-      ...step.itemsToReturn.map((i) => i.loadcellId),
-      ...step.itemsToReplenish.map((i) => i.loadcellId),
-      ...step.keepTrackItems.map((i) => i.loadcellId),
-    ]);
-    const uniqueLoadcellIds = [...new Set(loadcellIdStrings)].filter((id) => id !== 'N/A').map((id) => new ObjectId(id));
-
-    if (uniqueLoadcellIds.length === 0) {
-      this._logger.log(`[Tx ${tx.id}] No loadcells to update for transaction ${tx.id}.`);
-      return;
-    }
-
-    this._logger.log(`[Tx ${tx.id}]] Preparing bulk update for ${uniqueLoadcellIds.length} loadcells in transaction ${tx.id}.`);
-    const loadcellsToUpdate = await em.find(
-      LoadcellEntity,
-      {
-        _id: { $in: uniqueLoadcellIds },
-      },
-      { populate: ['bin'] },
-    );
-
-    const bulkOperations = [];
-
-    for (const loadcell of loadcellsToUpdate) {
-      const pendingChange = loadcell.liveReading.pendingChange;
-      if (pendingChange !== 0) {
-        bulkOperations.push({
-          updateOne: {
-            filter: { _id: loadcell._id },
-            update: {
-              $inc: { availableQuantity: pendingChange },
-              $set: {
-                ['liveReading.pendingChange']: 0,
-                ['synchronization.localToCloud.isSynced']: false,
-                updatedAt: new Date(),
-              },
-            },
-          },
-        });
-      }
-    }
-
-    if (bulkOperations.length === 0) {
-      Logger.log(`[Tx ${tx.id}]] No actual changes to apply to loadcells for transaction ${tx.id}.`);
-      return;
-    }
-    try {
-      const loadcellCollection = em.getCollection(LoadcellEntity);
-
-      const result = await loadcellCollection.bulkWrite(bulkOperations);
-
-      Logger.log(
-        `[Tx ${tx.id}]] Bulk update completed for transaction ${tx.id}. Matched: ${result.matchedCount}, Modified: ${result.modifiedCount}.`,
-      );
-    } catch (error) {
-      Logger.error(`[Tx ${tx.id}]] Failed to perform bulk update for transaction ${tx.id}.`, error);
-    }
-  }
-
-  /**
-   * Back up when loadcell stopped before commit pending change.
-   * @see apps/process-worker/src/modules/loadcell/loadcell.service.ts _handleLockedBinUpdate
-   */
-  private async _handleLockedBinUpdateByStep(em: EntityManager, txId: string, step: TxExecutionStep): Promise<void> {
-    const loadcellIdStrings = [
-      ...step.itemsToIssue.map((i) => i.loadcellId),
-      ...step.itemsToReturn.map((i) => i.loadcellId),
-      ...step.itemsToReplenish.map((i) => i.loadcellId),
-      ...step.keepTrackItems.map((i) => i.loadcellId),
-    ];
-    const uniqueLoadcellIds = [...new Set(loadcellIdStrings)].filter((id) => id !== 'N/A').map((id) => new ObjectId(id));
-
-    if (uniqueLoadcellIds.length === 0) {
-      this._logger.log(`[Tx ${txId}] No loadcells to update for transaction ${txId}.`);
-      return;
-    }
-
-    this._logger.log(`[Tx ${txId}]] Preparing bulk update for ${uniqueLoadcellIds.length} loadcells in transaction ${txId}.`);
-    const loadcellsToUpdate = await em.find(
-      LoadcellEntity,
-      {
-        _id: { $in: uniqueLoadcellIds },
-      },
-      { populate: ['bin'] },
-    );
-
-    const bulkOperations = [];
-
-    for (const loadcell of loadcellsToUpdate) {
-      const pendingChange = loadcell.liveReading.pendingChange;
-      if (pendingChange !== 0) {
-        bulkOperations.push({
-          updateOne: {
-            filter: { _id: loadcell._id },
-            update: {
-              $inc: { availableQuantity: pendingChange },
-              $set: {
-                ['liveReading.pendingChange']: 0,
-                ['synchronization.localToCloud.isSynced']: false,
-                updatedAt: new Date(),
-              },
-            },
-          },
-        });
-      }
-    }
-
-    if (bulkOperations.length === 0) {
-      Logger.log(`[Tx ${txId}]] No actual changes to apply to loadcells for transaction ${txId}.`);
-      return;
-    }
-    try {
-      const loadcellCollection = em.getCollection(LoadcellEntity);
-
-      const result = await loadcellCollection.bulkWrite(bulkOperations);
-
-      Logger.log(
-        `[Tx ${txId}]] Bulk update completed for transaction ${txId}. Matched: ${result.matchedCount}, Modified: ${result.modifiedCount}.`,
-      );
-    } catch (error) {
-      Logger.error(`[Tx ${txId}]] Failed to perform bulk update for transaction ${txId}.`, error);
+    const allHardwareIds = tx.executionSteps.flatMap((step) => this._getHardwareIdsFromStep(step));
+    const uniqueHardwareIds = [...new Set(allHardwareIds)];
+    if (uniqueHardwareIds.length > 0) {
+      this._logger.log(`[${tx.id}] Performing final flush for ${uniqueHardwareIds.length} loadcells in transaction.`);
+      await this._loadcellService.flushBufferFor(uniqueHardwareIds);
     }
   }
 
@@ -231,6 +118,16 @@ export class TransactionService {
     } catch (error) {
       this._logger.warn('_stopRealtimeServices error', error);
     }
+  }
+
+  private _getHardwareIdsFromStep(step: TxExecutionStep): number[] {
+    const hardwareIds = [
+      ...step.itemsToIssue.map((i) => i.loadcellHardwareId),
+      ...step.itemsToReturn.map((i) => i.loadcellHardwareId),
+      ...step.itemsToReplenish.map((i) => i.loadcellHardwareId),
+      ...step.keepTrackItems.map((i) => i.loadcellHardwareId),
+    ];
+    return [...new Set(hardwareIds)].filter((id): id is number => !!id);
   }
 
   private async _stopRealtimeServices(tx: TransactionEntity, stepId: string): Promise<void> {
@@ -248,20 +145,23 @@ export class TransactionService {
     await this._publisher.publish(Transport.MQTT, EVENT_TYPE.LOADCELL.STOP_READING, { hardwareIds: [...hardwareIds] }, {}, { async: true });
   }
 
-  public async handleStepFail(em: EntityManager, payload: { transactionId: string; stepId: string; errors: string[] }): Promise<void> {
+  public async handleStepFail(em: EntityManager, payload: { transactionId: string; stepId: string; errors: any[] }): Promise<void> {
     const tx = await em.findOneOrFail(TransactionEntity, new ObjectId(payload.transactionId));
     this._logger.error(`[${tx.id}] Step ${payload.stepId} failed.`, payload);
 
-    await em.nativeUpdate(
-      TransactionEntity,
-      {
-        _id: tx._id,
-      },
-      {
-        status: TransactionStatus.AWAITING_CORRECTION,
-        lastError: { stepId: payload.stepId, messages: payload.errors },
-      },
-    );
+    await Promise.all([
+      em.nativeUpdate(
+        TransactionEntity,
+        {
+          _id: tx._id,
+        },
+        {
+          status: TransactionStatus.AWAITING_CORRECTION,
+          lastError: { stepId: payload.stepId, messages: payload.errors },
+        },
+      ),
+      this._publisher.publish(Transport.MQTT, EVENT_TYPE.PROCESS.STEP_ERROR, payload, {}, { async: false }),
+    ]);
   }
 
   public async forceNextStep(em: EntityManager, transactionId: string, next: boolean): Promise<any> {
@@ -276,7 +176,7 @@ export class TransactionService {
     if (next) {
       const currentStepError = tx.lastError?.stepId;
       if (currentStepError) {
-        return this._advanceToNextStep(em, tx, currentStepError, true);
+        return this._advanceToNextStep(em, tx, currentStepError, next);
       }
     }
 
