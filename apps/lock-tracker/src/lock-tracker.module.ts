@@ -6,7 +6,6 @@ import { PublisherModule } from '@framework/publisher';
 import { snowflakeId } from '@framework/snowflake';
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { SerialportModule, SerialportModuleConfig } from '@serialport';
 import { Request } from 'express';
 import { ClsModule } from 'nestjs-cls';
 
@@ -59,12 +58,6 @@ import { LockTrackerService } from './lock-tracker.service';
             options: mqttConfig.publisher,
           },
         };
-      },
-      inject: [ConfigService],
-    }),
-    SerialportModule.forRootAsync({
-      useFactory: (configService: ConfigService) => {
-        return configService.getOrThrow<SerialportModuleConfig>(CONFIG_KEY.SERIALPORT);
       },
       inject: [ConfigService],
     }),
