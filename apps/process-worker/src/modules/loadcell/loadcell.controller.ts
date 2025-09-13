@@ -11,6 +11,7 @@ export class LoadcellController {
 
   @EventPattern(EVENT_TYPE.LOADCELL.WEIGHT_CALCULATED)
   public async onWeighCalculated(@Payload() event: WeightCalculatedEvent): Promise<any> {
+    event.weight = Number(event.weight);
     return this._loadcellService.onWeighCalculated([event]);
   }
 }

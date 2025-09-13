@@ -359,7 +359,7 @@ export class BinService {
 
   public async close(cuLockId: number, lockIds: number[], isClosed: boolean, error?: string): Promise<void> {
     const em = this._em.fork();
-    const binEntity = await em.findOneOrFail(
+    const binEntities = await em.find(
       BinEntity,
       {
         cuLockId: cuLockId,
@@ -369,23 +369,29 @@ export class BinService {
         populate: ['loadcells'],
       },
     );
-    binEntity.state.isLocked = isClosed;
-    await em.persistAndFlush(binEntity);
-    try {
-      if (binEntity.loadcells.length > 0) {
-        const loadcellHardwareIds = binEntity.loadcells.map((i) => i.hardwareId).filter((i) => i !== 0 || i !== undefined || i !== null);
-        if (loadcellHardwareIds.length > 0) {
-          this._publisherService.publish(
-            Transport.MQTT,
-            EVENT_TYPE.LOADCELL.STOP_READING,
-            { hardwareIds: [...new Set(loadcellHardwareIds)] },
-            {},
-            { async: true },
-          );
+
+    binEntities.forEach((binEntity) => {
+      binEntity.state.isLocked = isClosed;
+    });
+
+    await em.persistAndFlush(binEntities);
+    for (const binEntity of binEntities) {
+      try {
+        if (binEntity.loadcells.length > 0) {
+          const loadcellHardwareIds = binEntity.loadcells.map((i) => i.hardwareId).filter((i) => i !== 0 || i !== undefined || i !== null);
+          if (loadcellHardwareIds.length > 0) {
+            await this._publisherService.publish(
+              Transport.MQTT,
+              EVENT_TYPE.LOADCELL.STOP_READING,
+              { hardwareIds: [...new Set(loadcellHardwareIds)] },
+              {},
+              { async: true },
+            );
+          }
         }
+      } catch (error) {
+        //skip
       }
-    } catch (error) {
-      throw error;
     }
   }
 

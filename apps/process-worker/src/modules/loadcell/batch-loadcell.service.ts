@@ -222,16 +222,16 @@ export class BatchLoadcellService implements OnModuleInit, OnModuleDestroy {
       const updateOp: any = { $set: { ['liveReading.currentWeight']: payload.weight, heartbeat: Date.now() } };
 
       if (isBinLocked) {
-        this._logger.log(`Update locked bin pendingChange`, {
-          binId: entity.bin?.id,
-          pendingChange: entity.liveReading.pendingChange,
-        });
-        const pendingChange = entity.liveReading.pendingChange;
-        if (pendingChange !== 0) {
-          updateOp.$inc = { availableQuantity: pendingChange };
-          updateOp.$set['synchronization.localToCloud.isSynced'] = false;
-        }
-        updateOp.$set['liveReading.pendingChange'] = 0;
+        // this._logger.log(`Update locked bin pendingChange`, {
+        //   binId: entity.bin?.id,
+        //   pendingChange: entity.liveReading.pendingChange,
+        // });
+        // const pendingChange = entity.liveReading.pendingChange;
+        // if (pendingChange !== 0) {
+        //   updateOp.$inc = { availableQuantity: pendingChange };
+        //   updateOp.$set['synchronization.localToCloud.isSynced'] = false;
+        // }
+        // updateOp.$set['liveReading.pendingChange'] = 0;
       } else {
         if (!entity.state?.isCalibrated) {
           bulkOps.push({
@@ -244,14 +244,30 @@ export class BatchLoadcellService implements OnModuleInit, OnModuleDestroy {
         }
 
         const { zeroWeight, unitWeight } = entity.calibration;
+        this._logger.debug('<========================debug pending change start========================>');
         const oldWeight = entity.liveReading.currentWeight;
+        this._logger.log('oldWeight', { oldWeight });
         let changeInQuantity = 0;
+        this._logger.log('unitWeight', { unitWeight });
         if (unitWeight > 0) {
           const oldNetWeight = oldWeight - zeroWeight;
+
+          this._logger.log('oldNetWeight = oldWeight - zeroWeight', { oldNetWeight });
           const oldCalculatedQuantity = this._calculateRoundedQuantity(oldNetWeight / unitWeight);
+
+          this._logger.log('oldCalculatedQuantity', { oldCalculatedQuantity });
+
           const newNetWeight = payload.weight - zeroWeight;
+
+          this._logger.log('newNetWeight', { newNetWeight });
+
           const newCalculatedQuantity = this._calculateRoundedQuantity(newNetWeight / unitWeight);
+
+          this._logger.log('newCalculatedQuantity', { newCalculatedQuantity });
+
           changeInQuantity = newCalculatedQuantity - oldCalculatedQuantity;
+
+          this._logger.log('changeInQuantity', { changeInQuantity });
         }
 
         if (changeInQuantity !== 0) {
@@ -259,6 +275,7 @@ export class BatchLoadcellService implements OnModuleInit, OnModuleDestroy {
           updateOp.$inc = { ['liveReading.pendingChange']: changeInQuantity };
           updateOp.$set['synchronization.localToCloud.isSynced'] = false;
         }
+        this._logger.log('<========================debug pending change start========================>');
       }
 
       bulkOps.push({ updateOne: { filter: { _id: entity._id }, update: updateOp } });
