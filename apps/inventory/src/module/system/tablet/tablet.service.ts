@@ -1,7 +1,7 @@
 import { TabletEntity } from '@dals/mongo/entities';
 import { EntityRepository, ObjectId } from '@mikro-orm/mongodb';
 import { InjectRepository } from '@mikro-orm/nestjs';
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 
 import { RegisterTabletRequest } from './dtos/request';
 
@@ -15,6 +15,8 @@ export class TabletService {
   }
 
   public async register(dto: RegisterTabletRequest): Promise<boolean> {
+    const tablet = await this._tabletRepository.findOne({ clientId: dto.clientId });
+    const isCreated = tablet === null || tablet === undefined;
     await this._tabletRepository.upsert({
       clientId: dto.clientId,
       site: new ObjectId(dto.siteId),
@@ -24,24 +26,25 @@ export class TabletService {
       isMfaEnabled: dto.isMfaEnabled,
     });
 
-    try {
-      // todo: move to env.
-      await fetch('http://localhost:3005/sync/all', {
-        method: 'POST',
-        body: JSON.stringify({
-          host: dto.cloudUrl,
-          accessKey: dto.accessKey,
-          clusterId: dto.clusterId,
-        }),
-        headers: {
-          ['Content-Type']: 'application/json',
-          Accept: 'application/json',
-        },
-      });
-    } catch (e) {
-      console.error(e);
+    if (isCreated) {
+      try {
+        // todo: move to env.
+        await fetch('http://localhost:3005/sync/all', {
+          method: 'POST',
+          body: JSON.stringify({
+            host: dto.cloudUrl,
+            accessKey: dto.accessKey,
+            clusterId: dto.clusterId,
+          }),
+          headers: {
+            ['Content-Type']: 'application/json',
+            Accept: 'application/json',
+          },
+        });
+      } catch (e) {
+        Logger.warn(e, TabletService.name);
+      }
     }
-
     return true;
   }
 }

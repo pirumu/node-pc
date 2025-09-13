@@ -57,7 +57,7 @@ module.exports = {
       exp_backoff_restart_delay: 1000,
       max_memory_restart: '500M',
       env: {
-        DOTENV_CONFIG_PATH: 'env/sync-worker/.env.prod',
+        DOTENV_CONFIG_PATH: 'env/lock-tracker/.env.prod',
       },
     },
   ],
