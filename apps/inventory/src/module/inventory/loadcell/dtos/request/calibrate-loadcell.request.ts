@@ -8,6 +8,13 @@ export class CalibrateLoadcellRequest {
     example: '60d5ecb4b37a4a001f8e8c1c',
   })
   @IsMongoId()
+  binId: string;
+
+  @ApiProperty({
+    description: 'The id of the item being calibrated.',
+    example: '60d5ecb4b37a4a001f8e8c1c',
+  })
+  @IsMongoId()
   itemId: string;
 
   @ApiProperty({

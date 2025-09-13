@@ -225,6 +225,7 @@ export class BinMapper {
       loadcells: bin.loadcellIds.map((loadcellId) => new ObjectId(loadcellId)),
       cuLockId: bin.cuLockId,
       lockId: bin.lockId,
+      row: bin.row,
       x: bin.x,
       y: bin.y,
       width: bin.width,

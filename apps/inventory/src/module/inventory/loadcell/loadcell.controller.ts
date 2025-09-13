@@ -2,7 +2,7 @@ import { CLIENT_ID_KEY } from '@common/constants';
 import { PaginationResponse, StatusResponse } from '@common/dto';
 import { BaseController } from '@framework/controller';
 import { ApiDocs, ControllerDocs } from '@framework/swagger';
-import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query, Headers } from '@nestjs/common';
 
 import { CalibrateLoadcellRequest, GetLoadCellsRequest } from './dtos/request';
 import { GetLoadcellsResponse } from './dtos/response';
@@ -48,7 +48,11 @@ export class LoadcellController extends BaseController {
     responseSchema: StatusResponse,
   })
   @Post(LOADCELL_ROUTES.CALIBRATE_LOADCELL)
-  public async calibrate(@Param('id') loadCellId: string, @Body() body: CalibrateLoadcellRequest): Promise<StatusResponse> {
+  public async calibrate(
+    @Param('id')
+    loadCellId: string,
+    @Body() body: CalibrateLoadcellRequest,
+  ): Promise<StatusResponse> {
     const isSuccess = await this._loadcellService.calibrate(loadCellId, body);
     return this.toDto<StatusResponse>(StatusResponse, { status: isSuccess });
   }

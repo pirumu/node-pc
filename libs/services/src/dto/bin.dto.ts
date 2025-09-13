@@ -28,6 +28,7 @@ export type BinDto = {
   critical: number;
   min: number;
   max: number;
+  row: number;
   x: number;
   y: number;
   width: number;

@@ -116,7 +116,7 @@ export class LoadcellService {
    * before calibration. The service does not create new item data blocks.
    */
   public async calibrate(loadcellId: string, calibrateData: CalibrateLoadcellRequest): Promise<boolean> {
-    const { itemId, zeroWeight, measuredWeight, measuredQuantity } = calibrateData;
+    const { binId, itemId, zeroWeight, measuredWeight, measuredQuantity } = calibrateData;
 
     const targetLoadcell = await this._loadcellRepository.findOne(new ObjectId(loadcellId), { populate: ['item', 'bin'] });
 
@@ -148,7 +148,7 @@ export class LoadcellService {
       targetLoadcell.state.isUpdatedWeight = true;
     } else {
       const sourceLoadcell = await this._loadcellRepository.findOne(
-        { item: new ObjectId(itemId), state: { isCalibrated: false } },
+        { item: new ObjectId(itemId), state: { isCalibrated: false }, bin: new ObjectId(binId) },
         { populate: ['bin'] },
       );
 

@@ -118,6 +118,9 @@ export class BinEntity extends AbstractEntity {
 
   // Position properties
   @Property()
+  row: number;
+
+  @Property()
   x: number;
 
   @Property()

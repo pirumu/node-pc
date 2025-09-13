@@ -164,7 +164,6 @@ export class IssueItemRepository {
       { $unwind: '$item.itemType' },
       { $lookup: { from: 'cabinets', localField: 'cabinetId', foreignField: '_id', as: 'cabinet' } },
       { $unwind: '$cabinet' },
-
       {
         $addFields: {
           bin: '$$ROOT',
@@ -205,7 +204,7 @@ export class IssueItemRepository {
       {
         $addFields: {
           binName: {
-            $concat: ['$cabinet.name', ',', { $toString: '$bin.index' }, '-', { $toString: '$bin.x' }],
+            $concat: ['$cabinet.name', ',', { $toString: '$bin.row' }, '-', { $toString: '$bin.index' }],
           },
           canIssue: {
             $and: [

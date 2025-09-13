@@ -14,31 +14,30 @@ export class LockTrackerService implements OnModuleDestroy {
   private readonly _pollInterval = 1500; // 1s
   private readonly _timeoutDuration = 60 * 60 * 1000; // 1h
 
-  private readonly _activeMonitors = new Map<number, Subscription>();
+  private readonly _activeMonitors = new Map<string, Subscription>();
 
   constructor(private readonly _publisherService: PublisherService) {}
 
   public track(request: CuLockRequest): void {
-    const deviceId = request.deviceId;
-
-    if (this._activeMonitors.has(deviceId)) {
-      this._logger.log(`Stopping existing monitor for device ${deviceId} before starting a new one.`);
-      this._activeMonitors.get(deviceId)?.unsubscribe();
+    const key = `deviceId:${request.deviceId}-lockIds:${request.lockIds.join(',')}`;
+    if (this._activeMonitors.has(key)) {
+      this._logger.log(`Stopping existing monitor for device ${key} before starting a new one.`);
+      this._activeMonitors.get(key)?.unsubscribe();
     }
 
     const monitorSubscription = this._createLockPollingObservable(request).subscribe({
       next: (isClosed) => {
-        this._logger.log(`Lock for device ${deviceId} is now closed. Publishing status.`);
-        this._publishStatus(deviceId, request.lockIds, isClosed);
+        this._logger.log(`Lock for device ${key} is now closed. Publishing status.`);
+        this._publishStatus(request.deviceId, request.lockIds, isClosed);
       },
       error: (err) => {
-        this._logger.error(`Error during lock monitoring for device ${deviceId}:`, err.message);
+        this._logger.error(`Error during lock monitoring for device ${key}:`, err.message);
         if (err.name === 'TimeoutError') {
-          this._publishStatus(deviceId, request.lockIds, false, 'timeout');
+          this._publishStatus(request.deviceId, request.lockIds, false, 'timeout');
         }
       },
     });
-    this._activeMonitors.set(deviceId, monitorSubscription);
+    this._activeMonitors.set(key, monitorSubscription);
   }
 
   public onModuleDestroy(): void {
@@ -61,8 +60,10 @@ export class LockTrackerService implements OnModuleDestroy {
         throw error;
       }),
       finalize(() => {
-        this._logger.log(`Lock monitoring finished for device ${request.deviceId}.`);
-        this._activeMonitors.delete(request.deviceId);
+        const key = `deviceId:${request.deviceId}-lockIds:${request.lockIds.join(',')}`;
+
+        this._logger.log(`Lock monitoring finished for device ${key}.`);
+        this._activeMonitors.delete(key);
       }),
     );
   }
