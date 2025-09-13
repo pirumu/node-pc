@@ -1,6 +1,6 @@
 {
   "name": "node-pc",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Master node pc api supports authentication and integrate with hardware devices",
   "author": "thanthevanpm3@gmail.com",
   "private": true,

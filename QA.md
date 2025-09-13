@@ -1,38 +1,57 @@
-Nghiệp vụ
-- load-cell sẽ được tự động đăng ký -> device khi nào.
--  auto register.
+# Business Logic
 
-- khi chọn item cần issue/return cần những điều kiện gì và expect kết quả sao.
- - issue: 
-    - item type: 
-    - [consumable- issue+ rep]
-    - [non- issue + return + rep]: có thể.
-   
- - tìm bin gần nhất. open -> lấy item -> close -> next
- - tx log: 
-   - cluster: 
-     - bin
-     - <Cluster Name>-<Cabinet Name>, <row>-<bin>. 
-     - lưu lại input. state thực tế (lấy thừa / thiếu).
-     - lấy đủ show thành công, lấy thiếu show warning.
+- The load-cell will be automatically registered → linked to a device at a certain point.
+- Auto registration.
 
-- lấy item - link với bin. 
-- calibrationDue + expiryDate: quá hạn k show (issue list).
+## Issue / Return Flow
 
-- working-order có chức năng gì.
-   - wo: optional. không ảnh hưởng đến flow issue/return/reph.
-  
-- condition để làm gì. 
-   - apply cho nhóm [consumable,non-issue], đánh giấu trạng thái cho item.
+When selecting an item to issue/return, what conditions are required and what results are expected?
 
-Tech:
-- 1 hệ thống chạy có tối đa bao nhiêu item, bin, cabinet, device.
- 1 cabinet -> 20 bin. -> 20 loadcell. 4 port * 24 -> max 96 loadcells.
+- **Issue:**
+    - Item type:
+        - **Consumable** → issue + replenish
+        - **Non-consumable** → issue + return + replenish (possible)
 
-- client giao tiếp hết qua websocket có được không.
+## Bin Operation
 
+- Find the nearest bin → open → take item → close → move to next.
 
-expect:
- - issue.
- - return.
- - 
+## Transaction Log
+
+- **Cluster:**
+    - Bin
+    - `<Cluster Name>-<Cabinet Name>, <row>-<bin>`
+    - Save input and actual state (over-picked / under-picked).
+    - If exact → show **success**, if under-picked → show **warning**.
+
+## Item Linking
+
+- Taking an item → link it with the bin.
+- `calibrationDue` + `expiryDate`: if expired → do not show in issue list.
+
+## Working Order
+
+- Role: optional.
+- Does not affect issue/return/replenish flow.
+
+## Condition
+
+- Applied to group [consumable, non-issue].
+- Marks the item’s state.
+
+---
+
+# Technical
+
+- Maximum capacity of a system:
+    - 1 cabinet → 20 bins → 20 load-cells
+    - 4 ports × 24 → max **96 load-cells**
+- Can the client communicate entirely via **WebSocket**?
+
+---
+
+# Expectations
+
+- Issue
+- Return
+- Replenish

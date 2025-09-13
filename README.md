@@ -2,296 +2,158 @@
 
 ## 🏢 Project Overview
 
-This monorepo contains a suite of backend applications and libraries built with NestJS and TypeScript, designed for scalable, maintainable, and hardware-integrated enterprise solutions. The architecture is modular, supporting robust inventory management, real-time hardware integration, and background processing.
+This monorepo contains backend applications and libraries built with NestJS and TypeScript, designed for scalable, maintainable, and hardware-integrated enterprise solutions. The architecture is modular, supporting robust inventory management, real-time hardware integration, background processing, and data synchronization.
 
 ### Main Applications
 
-- **inventory**
-  - **Purpose:** The core business application for inventory and asset management, user authentication, authorization, and system configuration.
-  - **Key Features:**
-    - Modular architecture for inventory, system, and user management.
-    - Integrates with MongoDB for data storage.
-    - Real-time communication via MQTT and TCP.
-    - JWT-based authentication and role-based access control.
-    - Extensible with modules for devices, cabinets, bins, areas, transactions, and more.
+- **inventory**: Main business application for inventory and asset management, user authentication, authorization, and system configuration.
+- **hardware-bridge**: Microservice for hardware integration (serial, HID, fingerprint, card, smart locks, etc.).
+- **process-worker**: Background processing, scheduled jobs, data sync, and monitoring.
+- **sync-worker**: Data synchronization between local and cloud.
+- **lock-tracker**: Smart lock status tracking, MQTT integration.
 
-- **hardware-bridge**
-  - **Purpose:** A microservice dedicated to hardware integration, acting as a bridge between the backend and physical devices.
-  - **Key Features:**
-    - Serial port and HID (Human Interface Device) communication.
-    - Integrates with fingerprint scanners, card readers, and smart locks.
-    - Modular hardware support (loadcell, culock, fingerprint-scan, card-scan, etc.).
-    - Real-time event publishing via MQTT.
-    - Robust logging and tracing for hardware events.
+### Shared Libraries (libs)
 
-- **worker**
-  - **Purpose:** A background processing service for asynchronous and scheduled tasks.
-  - **Key Features:**
-    - Modules for data synchronization, data retention, monitoring and notification.
-    - Offloads heavy or periodic jobs from the main API.
-    - Designed for scalability and reliability in background operations.
-
-- **cli**
-  - **Purpose:** A command-line interface for administrative and maintenance tasks.
-  - **Key Features:**
-    - Provides commands for seeding, data migration, and system checks.
-    - Useful for developers and system administrators.
+- **common**: Shared DTOs, constants, decorators, types, and interfaces.
+- **config**: Core configuration, contracts, cloud, mongo, etc.
+- **control-unit-lock**: Smart lock integration.
+- **dals**: Data access layer, entities, mongo helpers.
+- **fingerprint-scanner**: Fingerprint scanner integration.
+- **framework**: Bootstrap, cache, logger, publisher, helpers, exceptions, swagger, etc.
+- **hid**: HID device integration.
+- **loadcells**: Loadcell sensor integration.
+- **serialport**: Serial port integration.
+- **services**: Cloud services, DTOs, and supporting services.
 
 ## 🚀 Tech Stack
 
-### Backend Framework
-- **NestJS** ^11.0.1 - Node.js framework
-- **TypeScript** ^5.7.3 - Programming language
-- **Node.js** v22.17.0 - Runtime environment
-
-### Database & Cache
-- **MongoDB** ^8.16.2 - NoSQL database
-- **Mongoose** ^8.16.2 - MongoDB object modeling
-- **Cache Manager** ^7.0.1 - Caching solution
-
-### Authentication & Security
-- **JWT** ^11.0.0 - JSON Web Token
-- **Pbkdf2** BuildIn - Password hashing
-- **Helmet** ^8.1.0 - Security middleware
-
-### Communication
-- **MQTT** ^5.13.2 - Message broker
-- **TCP** BuildIn - Message broker
-- **Socket.IO** ^11.1.3 - Real-time communication
-- **Fetch** BuildIn - HTTP client
-
-### Additional Libraries
-- **Class Transformer** ^0.5.1 - Object transformation
-- **Class Validator** ^0.14.2 - Validation decorators
-- **Swagger** ^11.2.0 - API documentation
-- **Pino** ^9.7.0 - High-performance logger
-- **Nest Commander** ^3.17.0 - CLI commands
-
-### Tools & Utilities
-- **pnpm** - Package manager
-- **Docker** - Containerization
-- **Husky** ^9.1.7 - Git hooks
-- **Jest** ^29.7.0 - Testing framework
-- **ESLint** ^9.18.0 - Code linting
-- **CommitLint** ^9.18.0 - Code linting
-- **Prettier** ^3.4.2 - Code formatting
-- **compodoc** ^3.4.2 - Project document overview
+- **NestJS** ^11.x
+- **TypeScript** ^5.x
+- **Node.js** v22.x
+- **MongoDB** ^6.x
+- **MikroORM** ^6.x
+- **MQTT** ^5.x
+- **Socket.IO** ^4.x
+- **Pino** ^9.x
+- **Swagger** ^11.x
+- **Jest** ^29.x
+- **ESLint/Prettier/Husky**
+- **pnpm** (package manager)
+- **Docker** (containerization, MongoDB, EMQX)
 
 ## 🛠️ Installation
 
 ### System Requirements
+- **Node.js**: v22.x (see `.nvmrc`)
+- **pnpm**: >=8.x
+- **Docker**: For MongoDB, EMQX
 
-- **Node.js**: v22.17.0 (use `.nvmrc` file)
-- **pnpm**: Recommended package manager
-- **Docker**: For running MongoDB and EMQX
+### Steps
+1. **Clone the repository & install Node.js**
+   ```bash
+   git clone <repository-url>
+   cd server
+   nvm install
+   nvm use
+   ```
+2. **Install pnpm**
+   ```bash
+   npm install -g pnpm
+   ```
+3. **Install dependencies**
+   ```bash
+   pnpm install
+   ```
+4. **Create environment files: Find in env folder**
 
-### Step 1: Install Node.js
-```bash
-# If using nvm
-nvm install v22.17.0
-nvm use v22.17.0
+5. **Start Docker services**
+   ```bash
+   docker-compose up -d
+   # Check: docker-compose ps
+   ```
 
-# Or install Node.js v22.17.0 directly
-```
-
-### Step 2: Install pnpm
-```bash
-npm install -g pnpm
-```
-
-### Step 3: Clone repository
-```bash
-git clone <repository-url>
-cd server
-```
-
-### Step 4: Install dependencies
-```bash
-pnpm install
-```
-
-### Step 5: Configure environment
-```bash
-# Create environment files
-cp env/cli/.env.example env/cli/.env
-cp env/hardware-bridge/.env.example env/hardware-bridge/.env
-cp env/inventory/.env.example env/inventory/.env
-cp env/worker/.env.example env/worker/.env
-
-# Edit configuration file
-```
-
-### Step 6: Start services (MongoDB, EMQX)
-```bash
-# Run Docker containers
-docker-compose up -d
-
-# Check running containers
-docker-compose ps
-```
-
-## 🎯 How to Start Project
+## 🎯 Development & Running
 
 ### Development Mode
 ```bash
-# Run Hardware bridge server in development mode
-pnpm run start:hardware-bridge:dev
-
-# Run inventory api server in development mode
 pnpm run start:inventory:dev
-
-# Run worker in development mode
-pnpm run start:worker:dev
-
+pnpm run start:hardware-bridge:dev
+pnpm run start:process-worker:dev
+pnpm run start:sync-worker:dev
+pnpm run start:lock-tracker:dev
 ```
 
 ### Production Mode
 ```bash
-# Build project
 pnpm run build
-
-# Run production mode
-pnpm run start:prod
+pnpm run start:inventory
+pnpm run start:hardware-bridge
+pnpm run start:process-worker
+pnpm run start:sync-worker
+pnpm run start:lock-tracker
 ```
 
-### Go-live (pm2)
-> [Pm2](https://pm2.keymetrics.io/docs/usage/quick-start) is a daemon process manager that will help you manage and keep your application online. Getting started with PM2 is straightforward,
-> it is offered as a simple and intuitive CLI, installable via NPM.
+### PM2 (Production Process Manager)
 ```bash
-# Build project
 pnpm run build
-
 npm i -g pm2
-
 pm2 start ecosystem.config.js
-
-```
-
-### Other Available Commands
-```bash
-# Generate project document
-pnpm run docs
-# Now you can see the project document definition in http://127.0.0.1:8080
-
-```
-
-### Code Generation Scripts
-```bash
-# Generate repository
-pnpm run generate:repository
-
-# Generate inventory module
-pnpm run generate:module
-```
-
-## 🔧 Lint & Format
-
-This project uses **ESLint & Prettier** for linting and formatting code.
-
-### Linting
-```bash
-# Run linter and auto-fix
-pnpm run lint
-```
-
-### Formatting
-```bash
-# Run format 
-pnpm run format
-```
-
-### Git Hooks
-This project uses Husky to run lint and format before commits:
-```bash
-# Install git hooks
-pnpm run prepare
 ```
 
 ## 🏗️ Project Structure
 
 ```
 server/
-├── apps/                   # Applications
-│   ├── inventory/          # Inventory application (main api)
-│   ├── hardware-bridge/    # Hardware bridge application
-│   ├── worker/             # Worker application
-│   └── cli/                # CLI application
-├── libs/                   # Shared libraries
-│   ├── common/             # Common utilities
-│   ├── config/             # Common Configuration
-│   ├── dals/               # Data access layer
-│   ├── entity/             # Entity definitions
-│   ├── framework/          # Custom framework
-│   ├── mapper/             # Data mappers
-│   ├── cache/              # Cache layer
-│   ├── control-unit-lock/  # Control unit lock
-│   ├── finger-scanner/     # Finger scanner
-│   ├── loadcells/          # Load cells
-│   ├── serialport/         # Serial port
-│   └── services/           # External Services (Cloud,etc.)
-├── bin/                    # Binary files
-├── cert/                   # SSL certificates
-├── docker/                 # Docker configuration
-├── env/                    # Environment files
-└── scripts/                # Utility scripts
+├── apps/
+│   ├── inventory/         # Main API
+│   ├── hardware-bridge/   # Hardware bridge
+│   ├── process-worker/    # Background jobs
+│   ├── sync-worker/       # Data sync
+│   └── lock-tracker/      # Lock tracking
+├── libs/
+│   ├── common/            # Common utilities
+│   ├── config/            # Config contracts/core
+│   ├── control-unit-lock/ # Smart lock integration
+│   ├── dals/              # Data access layer
+│   ├── fingerprint-scanner/
+│   ├── framework/         # Core framework
+│   ├── hid/               # HID integration
+│   ├── loadcells/         # Loadcell integration
+│   ├── serialport/        # Serial port
+│   └── services/          # Cloud & helpers
+├── bin/                   # Binary files
+├── cert/                  # SSL certificates
+├── docker/                # Docker configs
+├── env/                   # Environment files
+├── scripts/               # Utility scripts
 ```
 
 ## 🐳 Docker Services
 
-### MongoDB
-- **Port**: 27017
-- **Username**: admin
-- **Password**: admin
-- **Database**: ast
-- **Dashboard**: Use MongoDB Compass
+- **MongoDB**: 27017 ( db: ast)
+- **EMQX (MQTT Broker)**: 1883 (MQTT), 8083 (WebSocket), 18083 (Dashboard, user: admin, pass: public)
 
-### EMQX (MQTT Broker)
-- **MQTT Port**: 1883
-- **WebSocket**: 8083
-- **Dashboard**: http://localhost:18083
-- **Username**: admin
-- **Password**: public
-
-### Docker Services Commands
+### Docker Commands
 ```bash
-# Run all services
 docker-compose up -d
-
-# Run only MongoDB
-docker-compose up -d mongo
-
-# Run only EMQX
-docker-compose up -d emqx
-
-# View logs
 docker-compose logs -f
-
-# Stop services
 docker-compose down
 ```
 
-## 🚀 Deployment
+## 🗄️ Running MongoDB Replica Set with Docker
 
-### Build for production
-```bash
-pnpm run build
-```
+To run MongoDB in replica set mode for development or testing:
 
-### Run production server
-```bash
-pnpm run start:prod
-```
+1. **Start MongoDB Replica Set with Docker Compose**
+   ```bash
+   docker-compose -f docker-compose.mongo.replica_set.yaml up -d
+   ```
+2. **Initialize the Replica Set**
+   After the containers are up, run the replica set initialization script:
+   ```bash
+   bash scripts/setup-replica-set.sh
+   ```
+   This script will connect to the primary MongoDB container and initialize the replica set configuration.
+---
 
-## 📚 Development Tools
 
-### Code Quality
-- **ESLint**: Code linting with TypeScript support
-- **Prettier**: Code formatting
-- **Husky**: Git hooks for pre-commit checks
-
-### Additional Features
-- **Swagger**: Automatic API documentation
-- **Pino**: High-performance structured logging
-- **Compression**: Response compression middleware
-- **Helmet**: Security headers middleware
-- **Cookie Parser**: Cookie parsing middleware
